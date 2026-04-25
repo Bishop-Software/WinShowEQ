@@ -475,7 +475,7 @@ fn unix_to_date(secs: u64) -> String {
     let d   = doy - (153 * mp + 2) / 5 + 1;
     let m   = if mp < 10 { mp + 3 } else { mp - 9 };
     let y   = if m <= 2 { y + 1 } else { y };
-    format!("{}/{}/{}", m, d, y)
+    format!("{:02}/{:02}/{}", m, d, y)
 }
 
 #[cfg(test)]
@@ -541,12 +541,12 @@ mod tests {
 
     #[test]
     fn unix_to_date_epoch() {
-        assert_eq!(unix_to_date(0), "1/1/1970");
+        assert_eq!(unix_to_date(0), "01/01/1970");
     }
 
     #[test]
     fn unix_to_date_known_date() {
         // 2009-04-15 = 14_350 days from epoch = 1_239_753_600 seconds
-        assert_eq!(unix_to_date(1_239_753_600), "4/15/2009");
+        assert_eq!(unix_to_date(1_239_753_600), "04/15/2009");
     }
 }

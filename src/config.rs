@@ -29,7 +29,7 @@ fn to_wide(s: &str) -> Vec<u16> {
 
 /// Parses a string as an unsigned integer.
 /// Treats the value as hexadecimal when it starts with "0x", "0X", or "0"
-/// (matching C++ IniReader::readIntegerEntry behaviour).
+/// (matching C++ IniReader::readIntegerEntry behavior).
 fn parse_integer(s: &str) -> u64 {
     if s.is_empty() {
         return 0;
@@ -269,8 +269,7 @@ mod tests {
         let path_str = path.to_str().unwrap();
 
         let reader = IniReader::new();
-        assert!(reader.write_string_entry("TestSection", "TestKey", "HelloWorld", false) == false,
-            "write should fail when filename is empty");
+        assert_eq!(reader.write_string_entry("TestSection", "TestKey", "HelloWorld", false), false, "write should fail when filename is empty");
 
         let mut reader = IniReader::new();
         reader.filename = path_str.to_string();
