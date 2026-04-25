@@ -184,8 +184,8 @@ impl IniReader {
             Err(e) => { errors.push(e); 0 }
         };
 
-        let spawn_list = read_offset!("Memory Offsets", "SpawnHeaderAddr");
-        let self_addr   = read_offset!("Memory Offsets", "CharInfo");
+        let spawn_list   = read_offset!("Memory Offsets", "SpawnHeaderAddr");
+        let self_addr    = read_offset!("Memory Offsets", "CharInfo");
         let target       = read_offset!("Memory Offsets", "TargetAddr");
         let zone_name    = read_offset!("Memory Offsets", "ZoneAddr");
         let ground       = read_offset!("Memory Offsets", "ItemsAddr");
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn round_trip_string_entry() {
-        let path = temp_ini_path("winshowed_test_rtrip.ini");
+        let path = temp_ini_path("winshoweq_test_rtrip.ini");
         let path_str = path.to_str().unwrap();
 
         let reader = IniReader::new();

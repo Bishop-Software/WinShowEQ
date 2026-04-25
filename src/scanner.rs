@@ -67,7 +67,7 @@ struct SecondaryPatternEntry {
 
 /// Mirrors kPrimaryScans in EQGameScanner.cpp::ScanExecutable.
 static PRIMARY_SCANS: &[PrimaryPatternEntry] = &[
-    PrimaryPatternEntry { ini_section: "ZoneAddr",        ini_write_key: "ZoneAddr",        output_label: "ZoneAddr",        kind: OffsetKind::ZoneName  },
+    PrimaryPatternEntry { ini_section: "ZoneAddr",        ini_write_key: "ZoneAddr",         output_label: "ZoneAddr",        kind: OffsetKind::ZoneName  },
     PrimaryPatternEntry { ini_section: "SpawnHeaderAddr", ini_write_key: "SpawnHeaderAddr",  output_label: "SpawnHeaderAddr", kind: OffsetKind::SpawnList },
     PrimaryPatternEntry { ini_section: "CharInfo",        ini_write_key: "CharInfo",         output_label: "CharInfo",        kind: OffsetKind::SelfAddr  },
     PrimaryPatternEntry { ini_section: "ItemsAddr",       ini_write_key: "ItemsAddr",        output_label: "ItemsAddr",       kind: OffsetKind::Ground    },
