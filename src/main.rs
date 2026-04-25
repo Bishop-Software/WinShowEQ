@@ -1,3 +1,7 @@
+mod config;
+mod data;
+mod notifier;
+
 fn main() {
-    println!("Hello, world!");
+    println!("WinShowEQ starting...");
 }
