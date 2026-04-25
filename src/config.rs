@@ -1,6 +1,7 @@
-use windows_sys::Win32::System::WindowsProgramming::{
+use windows::Win32::System::WindowsProgramming::{
     GetPrivateProfileStringW, WritePrivateProfileStringW,
 };
+use windows::core::PCWSTR;
 
 /// Primary memory offsets read from [Memory Offsets] in myseqserver.ini.
 /// Mirrors PrimaryOffsets in IniReader.h.
@@ -144,12 +145,11 @@ impl IniReader {
         let mut buf = vec![0u16; 256];
         let len = unsafe {
             GetPrivateProfileStringW(
-                section_w.as_ptr(),
-                entry_w.as_ptr(),
-                default_w.as_ptr(),
-                buf.as_mut_ptr(),
-                buf.len() as u32,
-                file_w.as_ptr(),
+                PCWSTR(section_w.as_ptr()),
+                PCWSTR(entry_w.as_ptr()),
+                PCWSTR(default_w.as_ptr()),
+                Some(&mut buf),
+                PCWSTR(file_w.as_ptr()),
             )
         };
         if len == 0 {
@@ -222,13 +222,13 @@ impl IniReader {
 
         let result = unsafe {
             WritePrivateProfileStringW(
-                section_w.as_ptr(),
-                entry_w.as_ptr(),
-                value_w.as_ptr(),
-                file_w.as_ptr(),
+                PCWSTR(section_w.as_ptr()),
+                PCWSTR(entry_w.as_ptr()),
+                PCWSTR(value_w.as_ptr()),
+                PCWSTR(file_w.as_ptr()),
             )
         };
-        result != 0
+        result.is_ok()
     }
 
     /// Reads a value from config.ini and decodes `\xNN` hex escape sequences into raw bytes.
