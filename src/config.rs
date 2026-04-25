@@ -42,6 +42,37 @@ fn parse_integer(s: &str) -> u64 {
     }
 }
 
+/// Decodes `\xNN` hex escape sequences in `s` into raw bytes, discarding all other chars.
+/// Used to store binary pattern data as human-readable text in config.ini.
+pub fn parse_escape_bytes(s: &str) -> Vec<u8> {
+    let b = s.as_bytes();
+    let mut result = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'\\' && i + 1 < b.len() && b[i + 1] == b'x'
+            && i + 3 < b.len()
+            && b[i + 2].is_ascii_hexdigit()
+            && b[i + 3].is_ascii_hexdigit()
+        {
+            let val = (hex_nibble(b[i + 2]) << 4) | hex_nibble(b[i + 3]);
+            result.push(val);
+            i += 4;
+        } else {
+            i += 1;
+        }
+    }
+    result
+}
+
+fn hex_nibble(b: u8) -> u8 {
+    match b {
+        b'0'..=b'9' => b - b'0',
+        b'a'..=b'f' => b - b'a' + 10,
+        b'A'..=b'F' => b - b'A' + 10,
+        _ => 0,
+    }
+}
+
 /// Parses a string as hex/decimal u64, returning an error for missing or malformed values.
 /// Used by read_server_config_model; mirrors the anonymous parseUnsignedQword helper in
 /// IniReader.cpp.
@@ -188,6 +219,7 @@ impl IniReader {
         let entry_w   = to_wide(entry);
         let value_w   = to_wide(value);
         let file_w    = to_wide(file);
+
         let result = unsafe {
             WritePrivateProfileStringW(
                 section_w.as_ptr(),
@@ -197,6 +229,14 @@ impl IniReader {
             )
         };
         result != 0
+    }
+
+    /// Reads a value from config.ini and decodes `\xNN` hex escape sequences into raw bytes.
+    /// All non-escape characters are discarded; only decoded bytes are returned.
+    /// Mirrors IniReader::readEscapeStrings in IniReader.cpp.
+    pub fn read_escape_bytes(&self, section: &str, entry: &str) -> Vec<u8> {
+        let raw = self.read_string_entry(section, entry, true);
+        parse_escape_bytes(&raw)
     }
 
     pub fn toggle_start_minimized(&mut self) {
