@@ -4,6 +4,8 @@ mod mem_reader;
 mod network;
 mod notifier;
 mod scanner;
+mod server_logic;
+mod session;
 
 use std::sync::Arc;
 
@@ -12,6 +14,7 @@ use mem_reader::MemReader;
 use network::{NetworkServer, StubDataProvider};
 use notifier::{LoggingNotifier, UiNotifier};
 use scanner::EqGameScanner;
+use session::SessionRunner;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -32,12 +35,24 @@ fn main() {
                 run_serve_stub();
                 return;
             }
+            "console" => {
+                run_console();
+                return;
+            }
             _ => {}
         }
         i += 1;
     }
 
-    println!("WinShowEQ starting...");
+    // Default: console mode (GUI not yet implemented; falls back to console per plan).
+    run_console();
+}
+
+fn run_console() {
+    let ini_path        = resolve_ini_path("myseqserver.ini");
+    let config_ini_path = resolve_ini_path("config.ini");
+    let mut runner = SessionRunner::new(ini_path, config_ini_path);
+    runner.run_console_loop();
 }
 
 fn run_attach() {

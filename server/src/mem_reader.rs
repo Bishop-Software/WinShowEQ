@@ -20,6 +20,10 @@ use windows::Win32::System::Threading::{
 // This matches C++ MemReader behavior.
 const FALLBACK_BASE: u64 = 0x140000000;
 
+// SAFETY: Win32 HANDLE values referencing kernel objects are valid across thread
+// boundaries; the OS uses handle tables per-process, not per-thread.
+unsafe impl Send for MemReader {}
+
 #[derive(Debug)]
 pub enum MemError {
     NoProcess,
@@ -162,6 +166,13 @@ impl MemReader {
 
     pub fn base_address(&self) -> u64 {
         self.base_address
+    }
+
+    /// Remap a canonical EQ address (0x140000000-based) to the actual loaded base address.
+    /// Mirrors the `offset - 0x140000000 + getCurrentBaseAddress()` pattern used throughout
+    /// the C++ NetworkServer handlers.
+    pub fn canonical_to_actual(&self, addr: u64) -> u64 {
+        addr.wrapping_sub(FALLBACK_BASE).wrapping_add(self.base_address)
     }
 
     /// Read a `T`-sized value from the process at the given absolute virtual address.
