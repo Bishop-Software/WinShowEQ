@@ -5,25 +5,10 @@ use std::sync::Arc;
 use crate::data::spawn::SpawnRecord;
 use crate::data::world::WorldTime;
 use crate::notifier::{ConnectionEvent, StatusSnapshot, UiNotifier};
-
-// Request bitmask flags (client → server, 4-byte little-endian i32).
-pub const IPT_ZONE: i32    = 0x01;
-pub const IPT_SELF: i32    = 0x02;
-pub const IPT_TARGET: i32  = 0x04;
-pub const IPT_SPAWNS: i32  = 0x08;
-pub const IPT_GROUND: i32  = 0x10;
-pub const IPT_GETPROC: i32 = 0x20;
-pub const IPT_SETPROC: i32 = 0x40;
-pub const IPT_WORLD: i32   = 0x80;
-
-// Outgoing packet type stored in SpawnRecord::flags (mirrors OPT_* in NetworkServer.h).
-pub const OPT_SPAWNS: u32  = 0x00;
-pub const OPT_TARGET: u32  = 0x01;
-pub const OPT_ZONE: u32    = 0x04;
-pub const OPT_GROUND: u32  = 0x05;
-pub const OPT_PROCESS: u32 = 0x06;
-pub const OPT_WORLD: u32   = 0x08;
-pub const OPT_SELF: u32    = 0xFD;
+use common::{
+    IPT_ZONE, IPT_SELF, IPT_TARGET, IPT_SPAWNS, IPT_GROUND, IPT_GETPROC, IPT_SETPROC, IPT_WORLD,
+    OPT_SPAWNS, OPT_TARGET, OPT_ZONE, OPT_GROUND, OPT_PROCESS, OPT_WORLD, OPT_SELF,
+};
 
 /// Supplies data to the network layer without coupling it to MemReader.
 /// M4: implemented by StubDataProvider. M5: backed by live MemReader reads.

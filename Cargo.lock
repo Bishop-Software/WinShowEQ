@@ -3,11 +3,8 @@
 version = 4
 
 [[package]]
-name = "WinShowEQ"
+name = "common"
 version = "0.1.0"
-dependencies = [
- "windows",
-]
 
 [[package]]
 name = "proc-macro2"
@@ -152,4 +149,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3949bd5b99cafdf1c7ca86b43ca564028dfe27d66958f2470940f73d86d75b37"
 dependencies = [
  "windows-link",
+]
+
+[[package]]
+name = "winshoweq-client"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "winshoweq-server"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "windows",
 ]
