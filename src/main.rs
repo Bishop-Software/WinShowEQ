@@ -1,9 +1,11 @@
 mod config;
 mod data;
+mod mem_reader;
 mod notifier;
 mod scanner;
 
-use config::{IniReader, PrimaryOffsets};
+use config::IniReader;
+use mem_reader::MemReader;
 use scanner::EqGameScanner;
 
 fn main() {
@@ -17,12 +19,34 @@ fn main() {
                 run_scan(exe_path);
                 return;
             }
+            "--attach" => {
+                run_attach();
+                return;
+            }
             _ => {}
         }
         i += 1;
     }
 
     println!("WinShowEQ starting...");
+}
+
+fn run_attach() {
+    MemReader::enable_debug_privileges();
+    match MemReader::find_process("eqgame.exe") {
+        Some(pid) => {
+            let mut reader = MemReader::new();
+            match reader.open(pid) {
+                Ok(()) => println!(
+                    "Attached to eqgame.exe  PID: {}  Base: 0x{:X}",
+                    reader.pid(),
+                    reader.base_address()
+                ),
+                Err(e) => eprintln!("Failed to open process: {e}"),
+            }
+        }
+        None => eprintln!("eqgame.exe not found"),
+    }
 }
 
 fn resolve_ini_path(name: &str) -> String {
