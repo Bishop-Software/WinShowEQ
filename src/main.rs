@@ -1,11 +1,16 @@
 mod config;
 mod data;
 mod mem_reader;
+mod network;
 mod notifier;
 mod scanner;
 
+use std::sync::Arc;
+
 use config::IniReader;
 use mem_reader::MemReader;
+use network::{NetworkServer, StubDataProvider};
+use notifier::{LoggingNotifier, UiNotifier};
 use scanner::EqGameScanner;
 
 fn main() {
@@ -21,6 +26,10 @@ fn main() {
             }
             "--attach" => {
                 run_attach();
+                return;
+            }
+            "--serve-stub" => {
+                run_serve_stub();
                 return;
             }
             _ => {}
@@ -47,6 +56,14 @@ fn run_attach() {
         }
         None => eprintln!("eqgame.exe not found"),
     }
+}
+
+fn run_serve_stub() {
+    let notifier = Arc::new(LoggingNotifier::new(true));
+    let mut server = NetworkServer::new(5555);
+    server.set_notifier(Arc::clone(&notifier) as Arc<dyn UiNotifier>);
+    println!("WinShowEQ: Starting stub server on port 5555...");
+    server.serve(Arc::new(StubDataProvider));
 }
 
 fn resolve_ini_path(name: &str) -> String {

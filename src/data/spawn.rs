@@ -40,6 +40,18 @@ impl SpawnRecord {
     pub fn zeroed() -> Self {
         unsafe { std::mem::zeroed() }
     }
+
+    /// Returns the packed wire bytes for this record (100 bytes, no padding).
+    pub fn as_bytes(&self) -> &[u8] {
+        // SAFETY: SpawnRecord is #[repr(C, packed)] with alignment 1 and a
+        // statically asserted size of 100. Every byte is initialized by zeroed().
+        unsafe {
+            std::slice::from_raw_parts(
+                self as *const Self as *const u8,
+                std::mem::size_of::<Self>(),
+            )
+        }
+    }
 }
 
 #[cfg(test)]
