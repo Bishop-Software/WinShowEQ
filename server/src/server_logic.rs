@@ -13,32 +13,32 @@ use crate::network::DataProvider;
 // Mirrors the extractRaw* family in Spawn.h / Item.h / World.h.
 // --------------------------------------------------------------------------
 
-fn read_u8_at(buf: &[u8], off: usize) -> u8 {
+pub(crate) fn read_u8_at(buf: &[u8], off: usize) -> u8 {
     buf.get(off).copied().unwrap_or(0)
 }
 
-fn read_u16_at(buf: &[u8], off: usize) -> u16 {
+pub(crate) fn read_u16_at(buf: &[u8], off: usize) -> u16 {
     buf.get(off..off + 2)
         .and_then(|s| s.try_into().ok())
         .map(u16::from_le_bytes)
         .unwrap_or(0)
 }
 
-fn read_u32_at(buf: &[u8], off: usize) -> u32 {
+pub(crate) fn read_u32_at(buf: &[u8], off: usize) -> u32 {
     buf.get(off..off + 4)
         .and_then(|s| s.try_into().ok())
         .map(u32::from_le_bytes)
         .unwrap_or(0)
 }
 
-fn read_u64_at(buf: &[u8], off: usize) -> u64 {
+pub(crate) fn read_u64_at(buf: &[u8], off: usize) -> u64 {
     buf.get(off..off + 8)
         .and_then(|s| s.try_into().ok())
         .map(u64::from_le_bytes)
         .unwrap_or(0)
 }
 
-fn read_f32_at(buf: &[u8], off: usize) -> f32 {
+pub(crate) fn read_f32_at(buf: &[u8], off: usize) -> f32 {
     f32::from_bits(read_u32_at(buf, off))
 }
 
@@ -58,7 +58,7 @@ fn copy_str_into(buf: &[u8], off: usize, dest: &mut [u8]) {
 // Mirrors Spawn::packNetBufferRaw() in Spawn.cpp.
 // --------------------------------------------------------------------------
 
-fn extract_spawn_record(buf: &[u8], offs: &SpawnOffsets, flags: u32) -> SpawnRecord {
+pub(crate) fn extract_spawn_record(buf: &[u8], offs: &SpawnOffsets, flags: u32) -> SpawnRecord {
     let mut rec = SpawnRecord::zeroed();
     copy_str_into(buf, offs.name, &mut rec.name);
     copy_str_into(buf, offs.last_name, &mut rec.last_name);

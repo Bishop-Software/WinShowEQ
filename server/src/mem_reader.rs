@@ -175,6 +175,41 @@ impl MemReader {
         addr.wrapping_sub(FALLBACK_BASE).wrapping_add(self.base_address)
     }
 
+    /// Remap an actual address back to the canonical 0x140000000-based form for display.
+    pub fn actual_to_canonical(&self, addr: u64) -> u64 {
+        addr.wrapping_sub(self.base_address).wrapping_add(FALLBACK_BASE)
+    }
+
+    /// Find all processes whose exe name contains `name` (case-insensitive).
+    /// Returns a list of (pid, exe_name) pairs.
+    pub fn find_all_processes(name: &str) -> Vec<(u32, String)> {
+        let name_lower = name.to_lowercase();
+        let mut results = Vec::new();
+        let snap = match unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) } {
+            Ok(s) => s,
+            Err(_) => return results,
+        };
+        let mut pe = PROCESSENTRY32W {
+            dwSize: mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        unsafe {
+            if Process32FirstW(snap, &mut pe).is_ok() {
+                loop {
+                    let exe = wide_to_string(&pe.szExeFile);
+                    if exe.to_lowercase().contains(&name_lower) {
+                        results.push((pe.th32ProcessID, exe));
+                    }
+                    if Process32NextW(snap, &mut pe).is_err() {
+                        break;
+                    }
+                }
+            }
+            let _ = CloseHandle(snap);
+        }
+        results
+    }
+
     /// Read a `T`-sized value from the process at the given absolute virtual address.
     pub fn read<T: Copy>(&self, addr: u64) -> Result<T, MemError> {
         let h = self.handle.ok_or(MemError::NoProcess)?;

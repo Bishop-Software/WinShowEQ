@@ -64,6 +64,66 @@ impl SpawnOffsets {
             buf_size: largest + 30,
         }
     }
+
+    /// Returns (INI key name, current value) for each spawn offset, in index order.
+    /// The order matches the `set_by_index` mapping — index 0 = NameOffset, etc.
+    pub fn named_values(&self) -> Vec<(&'static str, usize)> {
+        vec![
+            ("NameOffset",     self.name),
+            ("LastNameOffset", self.last_name),
+            ("SpawnIDOffset",  self.id),
+            ("OwnerIDOffset",  self.owner),
+            ("LevelOffset",    self.level),
+            ("RaceOffset",     self.race),
+            ("ClassOffset",    self.class),
+            ("XOffset",        self.x),
+            ("YOffset",        self.y),
+            ("ZOffset",        self.z),
+            ("HeadingOffset",  self.heading),
+            ("SpeedOffset",    self.speed),
+            ("TypeOffset",     self.type_),
+            ("HideOffset",     self.hidden),
+            ("PrimaryOffset",  self.primary),
+            ("OffhandOffset",  self.offhand),
+            ("PrevOffset",     self.prev),
+            ("NextOffset",     self.next),
+        ]
+    }
+
+    /// Set a secondary spawn offset by numeric index. Updates buf_size.
+    /// Returns false if the index is out of range.
+    pub fn set_by_index(&mut self, i: usize, val: usize) -> bool {
+        match i {
+            0  => self.name      = val,
+            1  => self.last_name = val,
+            2  => self.id        = val,
+            3  => self.owner     = val,
+            4  => self.level     = val,
+            5  => self.race      = val,
+            6  => self.class     = val,
+            7  => self.x         = val,
+            8  => self.y         = val,
+            9  => self.z         = val,
+            10 => self.heading   = val,
+            11 => self.speed     = val,
+            12 => self.type_     = val,
+            13 => self.hidden    = val,
+            14 => self.primary   = val,
+            15 => self.offhand   = val,
+            16 => self.prev      = val,
+            17 => self.next      = val,
+            _  => return false,
+        }
+        let largest = self.named_values().iter().map(|(_, v)| *v).max().unwrap_or(0);
+        self.buf_size = largest + 30;
+        true
+    }
+
+    /// Set a secondary spawn offset by name (case-insensitive). Returns the index on success.
+    pub fn set_by_name(&mut self, name: &str, val: usize) -> Option<usize> {
+        let idx = self.named_values().iter().position(|(n, _)| n.eq_ignore_ascii_case(name))?;
+        self.set_by_index(idx, val).then_some(idx)
+    }
 }
 
 /// Byte-level offsets within EQ's ground item struct in memory.
@@ -100,6 +160,19 @@ impl ItemOffsets {
 
         Self { prev, next, id, drop_id, x, y, z, name, buf_size: largest + 30 }
     }
+
+    pub fn named_values(&self) -> Vec<(&'static str, usize)> {
+        vec![
+            ("PrevOffset",   self.prev),
+            ("NextOffset",   self.next),
+            ("IdOffset",     self.id),
+            ("DropIdOffset", self.drop_id),
+            ("XOffset",      self.x),
+            ("YOffset",      self.y),
+            ("ZOffset",      self.z),
+            ("NameOffset",   self.name),
+        ]
+    }
 }
 
 /// Byte-level offsets within EQ's world info struct in memory.
@@ -131,5 +204,15 @@ impl WorldOffsets {
         let largest = [hour, minute, day, month, year].iter().copied().max().unwrap_or(0);
 
         Self { hour, minute, day, month, year, race8, buf_size: largest + 30 }
+    }
+
+    pub fn named_values(&self) -> Vec<(&'static str, usize)> {
+        vec![
+            ("WorldHourOffset",   self.hour),
+            ("WorldMinuteOffset", self.minute),
+            ("WorldDayOffset",    self.day),
+            ("WorldMonthOffset",  self.month),
+            ("WorldYearOffset",   self.year),
+        ]
     }
 }
