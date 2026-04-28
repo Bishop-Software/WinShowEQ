@@ -32,9 +32,9 @@ pub enum SessionMode {
 /// Manages the server session lifecycle.
 /// Mirrors ServerSessionRunner in C++ — Start/Stop/Pause/Resume + per-mode loops.
 pub struct SessionRunner {
-    logic:      ServerLogic,
-    notifier:   Arc<dyn UiNotifier>,
-    state:      SessionState,
+    logic: ServerLogic,
+    notifier: Arc<dyn UiNotifier>,
+    state: SessionState,
     last_error: String,
 }
 
@@ -59,10 +59,19 @@ impl SessionRunner {
     fn transition_to(&mut self, new_state: SessionState) {
         self.state = new_state;
         let event = match new_state {
-            SessionState::Listening => ConnectionEvent { listening: true, ..Default::default() },
-            SessionState::Connected => ConnectionEvent { connected: true, ..Default::default() },
-            SessionState::Paused    => ConnectionEvent { paused: true,    ..Default::default() },
-            SessionState::Error     => ConnectionEvent {
+            SessionState::Listening => ConnectionEvent {
+                listening: true,
+                ..Default::default()
+            },
+            SessionState::Connected => ConnectionEvent {
+                connected: true,
+                ..Default::default()
+            },
+            SessionState::Paused => ConnectionEvent {
+                paused: true,
+                ..Default::default()
+            },
+            SessionState::Error => ConnectionEvent {
                 error: true,
                 error_message: self.last_error.clone(),
                 ..Default::default()
@@ -93,7 +102,7 @@ impl SessionRunner {
         println!("[INFO] Port: {}", config.port);
 
         let spawn_off = SpawnOffsets::from_ini(&ir);
-        let item_off  = ItemOffsets::from_ini(&ir);
+        let item_off = ItemOffsets::from_ini(&ir);
         let world_off = WorldOffsets::from_ini(&ir);
 
         if spawn_off.buf_size <= 30 {
@@ -106,7 +115,10 @@ impl SessionRunner {
         if let Some(pid) = MemReader::find_process("eqgame.exe") {
             let mut r = mem.lock().unwrap();
             match r.open(pid) {
-                Ok(()) => println!("[STATE] Attached to eqgame.exe PID={pid}  Base=0x{:X}", r.base_address()),
+                Ok(()) => println!(
+                    "[STATE] Attached to eqgame.exe PID={pid}  Base=0x{:X}",
+                    r.base_address()
+                ),
                 Err(e) => eprintln!("[WARN] Could not attach to eqgame.exe: {e}"),
             }
         } else {

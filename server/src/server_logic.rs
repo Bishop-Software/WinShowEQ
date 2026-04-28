@@ -62,25 +62,25 @@ pub(crate) fn extract_spawn_record(buf: &[u8], offs: &SpawnOffsets, flags: u32) 
     let mut rec = SpawnRecord::zeroed();
     copy_str_into(buf, offs.name, &mut rec.name);
     copy_str_into(buf, offs.last_name, &mut rec.last_name);
-    rec.x       = read_f32_at(buf, offs.x);
-    rec.y       = read_f32_at(buf, offs.y);
-    rec.z       = read_f32_at(buf, offs.z);
+    rec.x = read_f32_at(buf, offs.x);
+    rec.y = read_f32_at(buf, offs.y);
+    rec.z = read_f32_at(buf, offs.z);
     rec.heading = read_f32_at(buf, offs.heading);
-    rec.speed   = read_f32_at(buf, offs.speed);
+    rec.speed = read_f32_at(buf, offs.speed);
     rec.spawn_type = read_u8_at(buf, offs.type_);
-    rec.class      = read_u8_at(buf, offs.class);
-    rec.level      = read_u8_at(buf, offs.level);
-    rec.hidden     = read_u8_at(buf, offs.hidden);
+    rec.class = read_u8_at(buf, offs.class);
+    rec.level = read_u8_at(buf, offs.level);
+    rec.hidden = read_u8_at(buf, offs.hidden);
     if offs.race8 {
-        rec.race    = read_u8_at(buf, offs.race) as u32;
-        rec.id      = read_u16_at(buf, offs.id) as u32;
-        rec.owner   = read_u16_at(buf, offs.owner) as u32;
+        rec.race = read_u8_at(buf, offs.race) as u32;
+        rec.id = read_u16_at(buf, offs.id) as u32;
+        rec.owner = read_u16_at(buf, offs.owner) as u32;
         rec.primary = read_u16_at(buf, offs.primary) as u32;
         rec.offhand = read_u16_at(buf, offs.offhand) as u32;
     } else {
-        rec.race    = read_u32_at(buf, offs.race);
-        rec.id      = read_u32_at(buf, offs.id);
-        rec.owner   = read_u32_at(buf, offs.owner);
+        rec.race = read_u32_at(buf, offs.race);
+        rec.id = read_u32_at(buf, offs.id);
+        rec.owner = read_u32_at(buf, offs.owner);
         rec.primary = read_u32_at(buf, offs.primary);
         rec.offhand = read_u32_at(buf, offs.offhand);
     }
@@ -93,10 +93,10 @@ pub(crate) fn extract_spawn_record(buf: &[u8], offs: &SpawnOffsets, flags: u32) 
 fn pack_item_as_spawn(buf: &[u8], offs: &ItemOffsets) -> SpawnRecord {
     let mut rec = SpawnRecord::zeroed();
     copy_str_into(buf, offs.name, &mut rec.name);
-    rec.x    = read_f32_at(buf, offs.x);
-    rec.y    = read_f32_at(buf, offs.y);
-    rec.z    = read_f32_at(buf, offs.z);
-    rec.id   = read_u32_at(buf, offs.id);
+    rec.x = read_f32_at(buf, offs.x);
+    rec.y = read_f32_at(buf, offs.y);
+    rec.z = read_f32_at(buf, offs.z);
+    rec.id = read_u32_at(buf, offs.id);
     rec.flags = OPT_GROUND;
     rec
 }
@@ -105,11 +105,11 @@ fn pack_item_as_spawn(buf: &[u8], offs: &ItemOffsets) -> SpawnRecord {
 /// Mirrors World::packWorldBuffer() in World.cpp.
 fn extract_world_time(buf: &[u8], offs: &WorldOffsets) -> WorldTime {
     WorldTime {
-        hour:   read_u8_at(buf, offs.hour),
+        hour: read_u8_at(buf, offs.hour),
         minute: read_u8_at(buf, offs.minute),
-        day:    read_u8_at(buf, offs.day),
-        month:  read_u8_at(buf, offs.month),
-        year:   if offs.race8 {
+        day: read_u8_at(buf, offs.day),
+        month: read_u8_at(buf, offs.month),
+        year: if offs.race8 {
             read_u16_at(buf, offs.year) as u32
         } else {
             read_u32_at(buf, offs.year)
@@ -122,10 +122,10 @@ fn extract_world_time(buf: &[u8], offs: &WorldOffsets) -> WorldTime {
 // --------------------------------------------------------------------------
 
 pub struct MemDataProvider {
-    mem:       Arc<Mutex<MemReader>>,
-    primary:   PrimaryOffsets,
+    mem: Arc<Mutex<MemReader>>,
+    primary: PrimaryOffsets,
     spawn_off: SpawnOffsets,
-    item_off:  ItemOffsets,
+    item_off: ItemOffsets,
     world_off: WorldOffsets,
     /// Throttle counter for reattach attempts (retries on value % 10 == 2).
     check_ctr: AtomicU32,
@@ -161,7 +161,8 @@ impl DataProvider for MemDataProvider {
             return "StartUp".to_string();
         }
         let remapped = mem.canonical_to_actual(addr);
-        mem.read_string(remapped, 64).unwrap_or_else(|_| "StartUp".to_string())
+        mem.read_string(remapped, 64)
+            .unwrap_or_else(|_| "StartUp".to_string())
     }
 
     fn self_spawn(&self) -> Option<SpawnRecord> {
@@ -202,7 +203,9 @@ impl DataProvider for MemDataProvider {
         let buf_size = self.spawn_off.buf_size;
         let prev_off = self.spawn_off.prev;
         for _ in 0..2000 {
-            let Ok(buf) = mem.read_bytes(ptr, buf_size) else { break; };
+            let Ok(buf) = mem.read_bytes(ptr, buf_size) else {
+                break;
+            };
             let prev = read_u64_at(&buf, prev_off);
             if prev == 0 {
                 break;
@@ -217,7 +220,9 @@ impl DataProvider for MemDataProvider {
             if ptr == 0 {
                 break;
             }
-            let Ok(buf) = mem.read_bytes(ptr, buf_size) else { break; };
+            let Ok(buf) = mem.read_bytes(ptr, buf_size) else {
+                break;
+            };
             records.push(extract_spawn_record(&buf, &self.spawn_off, OPT_SPAWNS));
             let next = read_u64_at(&buf, next_off);
             if next == 0 || next == ptr {
@@ -280,7 +285,9 @@ impl DataProvider for MemDataProvider {
             if ptr == 0 || count >= 300 {
                 break;
             }
-            let Ok(buf) = mem.read_bytes(ptr, buf_size) else { break; };
+            let Ok(buf) = mem.read_bytes(ptr, buf_size) else {
+                break;
+            };
             records.push(pack_item_as_spawn(&buf, &self.item_off));
             let next = read_u64_at(&buf, next_off);
             if next == 0 || next == ptr {
@@ -339,13 +346,16 @@ fn try_attach(mem: &mut MemReader, counter: &AtomicU32) -> bool {
 // --------------------------------------------------------------------------
 
 pub struct ServerLogic {
-    ini_path:        String,
+    ini_path: String,
     config_ini_path: String,
 }
 
 impl ServerLogic {
     pub fn new(ini_path: String, config_ini_path: String) -> Self {
-        Self { ini_path, config_ini_path }
+        Self {
+            ini_path,
+            config_ini_path,
+        }
     }
 
     /// Load both INI files; return a configured IniReader and ServerConfigModel.

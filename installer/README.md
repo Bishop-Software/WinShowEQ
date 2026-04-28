@@ -10,19 +10,15 @@ This folder contains the first-pass Windows installer scaffold for `WinShowEQ`.
 - Preserves user-edited INI files on upgrade and uninstall
 - Optionally includes `WinShowEQClient.exe` as a custom component
 
-## Why the shortcut working directory matters
+## Config path behavior
 
-Today, `WinShowEQServer` resolves default INI paths from the current working directory.
-The installer compensates for that by pointing the server shortcuts at `%ProgramData%\WinShowEQ`.
+`WinShowEQServer` now resolves default INI paths in this order:
 
-That means:
+1. `%ProgramData%\WinShowEQ\<name>` when `%ProgramData%\WinShowEQ` exists
+2. current working directory fallback for local/dev runs
 
-- launching from the installed **Start Menu** shortcut uses the writable config directory
-- launching the EXE directly from `%ProgramFiles%` will not pick up the installed INIs unless you
-  also set the working directory or pass `-f` for `myseqserver.ini`
-
-A future code change can move default config resolution to `%ProgramData%\WinShowEQ` directly,
-which would remove this shortcut dependency.
+This lets installed launches work even when the EXE is started directly from `%ProgramFiles%`.
+Shortcuts still use `%ProgramData%\WinShowEQ` as their working directory for consistency.
 
 ## Prerequisites
 

@@ -50,7 +50,9 @@ pub fn parse_escape_bytes(s: &str) -> Vec<u8> {
     let mut result = Vec::new();
     let mut i = 0;
     while i < b.len() {
-        if b[i] == b'\\' && i + 1 < b.len() && b[i + 1] == b'x'
+        if b[i] == b'\\'
+            && i + 1 < b.len()
+            && b[i + 1] == b'x'
             && i + 3 < b.len()
             && b[i + 2].is_ascii_hexdigit()
             && b[i + 3].is_ascii_hexdigit()
@@ -88,8 +90,12 @@ fn parse_required_u64(raw: &str, section: &str, entry: &str) -> Result<u64, Stri
     } else {
         (raw, 10u32)
     };
-    u64::from_str_radix(hex_str, base)
-        .map_err(|_| format!("Invalid numeric value for [{}] {}: '{}'.", section, entry, raw))
+    u64::from_str_radix(hex_str, base).map_err(|_| {
+        format!(
+            "Invalid numeric value for [{}] {}: '{}'.",
+            section, entry, raw
+        )
+    })
 }
 
 /// INI file reader backed by GetPrivateProfileStringW / WritePrivateProfileStringW.
@@ -134,7 +140,11 @@ impl IniReader {
     }
 
     pub fn read_string_entry(&self, section: &str, entry: &str, config: bool) -> String {
-        let file = if config { &self.config_filename } else { &self.filename };
+        let file = if config {
+            &self.config_filename
+        } else {
+            &self.filename
+        };
         if file.is_empty() {
             return String::new();
         }
@@ -173,7 +183,10 @@ impl IniReader {
                 let raw = self.read_string_entry($section, $entry, false);
                 match parse_required_u64(&raw, $section, $entry) {
                     Ok(v) => v,
-                    Err(e) => { errors.push(e); 0 }
+                    Err(e) => {
+                        errors.push(e);
+                        0
+                    }
                 }
             }};
         }
@@ -181,15 +194,18 @@ impl IniReader {
         let port_raw = self.read_string_entry("Port", "Port", false);
         let port_val = match parse_required_u64(&port_raw, "Port", "Port") {
             Ok(v) => v,
-            Err(e) => { errors.push(e); 0 }
+            Err(e) => {
+                errors.push(e);
+                0
+            }
         };
 
-        let spawn_list   = read_offset!("Memory Offsets", "SpawnHeaderAddr");
-        let self_addr    = read_offset!("Memory Offsets", "CharInfo");
-        let target       = read_offset!("Memory Offsets", "TargetAddr");
-        let zone_name    = read_offset!("Memory Offsets", "ZoneAddr");
-        let ground       = read_offset!("Memory Offsets", "ItemsAddr");
-        let world        = read_offset!("Memory Offsets", "WorldAddr");
+        let spawn_list = read_offset!("Memory Offsets", "SpawnHeaderAddr");
+        let self_addr = read_offset!("Memory Offsets", "CharInfo");
+        let target = read_offset!("Memory Offsets", "TargetAddr");
+        let zone_name = read_offset!("Memory Offsets", "ZoneAddr");
+        let ground = read_offset!("Memory Offsets", "ItemsAddr");
+        let world = read_offset!("Memory Offsets", "WorldAddr");
 
         if port_val > u32::MAX as u64 {
             errors.push("Port value is out of range for u32.".to_string());
@@ -206,19 +222,36 @@ impl IniReader {
 
         Ok(ServerConfigModel {
             port: port_val as u32,
-            offsets: PrimaryOffsets { spawn_list, self_addr, target, zone_name, ground, world },
+            offsets: PrimaryOffsets {
+                spawn_list,
+                self_addr,
+                target,
+                zone_name,
+                ground,
+                world,
+            },
         })
     }
 
-    pub fn write_string_entry(&self, section: &str, entry: &str, value: &str, config: bool) -> bool {
-        let file = if config { &self.config_filename } else { &self.filename };
+    pub fn write_string_entry(
+        &self,
+        section: &str,
+        entry: &str,
+        value: &str,
+        config: bool,
+    ) -> bool {
+        let file = if config {
+            &self.config_filename
+        } else {
+            &self.filename
+        };
         if file.is_empty() {
             return false;
         }
         let section_w = to_wide(section);
-        let entry_w   = to_wide(entry);
-        let value_w   = to_wide(value);
-        let file_w    = to_wide(file);
+        let entry_w = to_wide(entry);
+        let value_w = to_wide(value);
+        let file_w = to_wide(file);
 
         let result = unsafe {
             WritePrivateProfileStringW(
@@ -269,7 +302,11 @@ mod tests {
         let path_str = path.to_str().unwrap();
 
         let reader = IniReader::new();
-        assert_eq!(reader.write_string_entry("TestSection", "TestKey", "HelloWorld", false), false, "write should fail when filename is empty");
+        assert_eq!(
+            reader.write_string_entry("TestSection", "TestKey", "HelloWorld", false),
+            false,
+            "write should fail when filename is empty"
+        );
 
         let mut reader = IniReader::new();
         reader.filename = path_str.to_string();

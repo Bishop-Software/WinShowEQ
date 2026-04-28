@@ -2,15 +2,15 @@ use std::mem;
 
 use windows::Win32::Foundation::{CloseHandle, HANDLE, LUID};
 use windows::Win32::Security::{
-    AdjustTokenPrivileges, LookupPrivilegeValueW, SE_DEBUG_NAME, SE_PRIVILEGE_ENABLED,
-    TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY, LUID_AND_ATTRIBUTES,
+    AdjustTokenPrivileges, LUID_AND_ATTRIBUTES, LookupPrivilegeValueW, SE_DEBUG_NAME,
+    SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
 };
 use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, MODULEENTRY32W, Module32FirstW, Module32NextW, PROCESSENTRY32W,
     Process32FirstW, Process32NextW, TH32CS_SNAPMODULE, TH32CS_SNAPPROCESS,
 };
-use windows::Win32::System::Memory::{VirtualQueryEx, MEMORY_BASIC_INFORMATION};
+use windows::Win32::System::Memory::{MEMORY_BASIC_INFORMATION, VirtualQueryEx};
 use windows::Win32::System::Threading::{
     GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
 };
@@ -147,7 +147,9 @@ impl MemReader {
 
     pub fn close(&mut self) {
         if let Some(h) = self.handle.take() {
-            unsafe { let _ = CloseHandle(h); }
+            unsafe {
+                let _ = CloseHandle(h);
+            }
         }
         self.reset();
     }
@@ -172,12 +174,14 @@ impl MemReader {
     /// Mirrors the `offset - 0x140000000 + getCurrentBaseAddress()` pattern used throughout
     /// the C++ NetworkServer handlers.
     pub fn canonical_to_actual(&self, addr: u64) -> u64 {
-        addr.wrapping_sub(FALLBACK_BASE).wrapping_add(self.base_address)
+        addr.wrapping_sub(FALLBACK_BASE)
+            .wrapping_add(self.base_address)
     }
 
     /// Remap an actual address back to the canonical 0x140000000-based form for display.
     pub fn actual_to_canonical(&self, addr: u64) -> u64 {
-        addr.wrapping_sub(self.base_address).wrapping_add(FALLBACK_BASE)
+        addr.wrapping_sub(self.base_address)
+            .wrapping_add(FALLBACK_BASE)
     }
 
     /// Find all processes whose exe name contains `name` (case-insensitive).
@@ -268,8 +272,14 @@ impl MemReader {
         }
         let mut buf = vec![0u8; clamped];
         let ok = unsafe {
-            ReadProcessMemory(h, addr as *const _, buf.as_mut_ptr() as *mut _, clamped, None)
-                .is_ok()
+            ReadProcessMemory(
+                h,
+                addr as *const _,
+                buf.as_mut_ptr() as *mut _,
+                clamped,
+                None,
+            )
+            .is_ok()
         };
         if !ok {
             buf.fill(0);

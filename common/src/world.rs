@@ -3,9 +3,9 @@
 /// spawn_type=hour, class=minute, level=day, hidden=month, race=year.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WorldTime {
-    pub hour:   u8,
+    pub hour: u8,
     pub minute: u8,
-    pub day:    u8,
-    pub month:  u8,
-    pub year:   u32,
+    pub day: u8,
+    pub month: u8,
+    pub year: u32,
 }

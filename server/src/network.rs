@@ -6,8 +6,8 @@ use crate::data::spawn::SpawnRecord;
 use crate::data::world::WorldTime;
 use crate::notifier::{ConnectionEvent, StatusSnapshot, UiNotifier};
 use common::{
-    IPT_ZONE, IPT_SELF, IPT_TARGET, IPT_SPAWNS, IPT_GROUND, IPT_GETPROC, IPT_SETPROC, IPT_WORLD,
-    OPT_SPAWNS, OPT_TARGET, OPT_ZONE, OPT_GROUND, OPT_PROCESS, OPT_WORLD, OPT_SELF,
+    IPT_GETPROC, IPT_GROUND, IPT_SELF, IPT_SETPROC, IPT_SPAWNS, IPT_TARGET, IPT_WORLD, IPT_ZONE,
+    OPT_GROUND, OPT_PROCESS, OPT_SELF, OPT_SPAWNS, OPT_TARGET, OPT_WORLD, OPT_ZONE,
 };
 
 /// Supplies data to the network layer without coupling it to MemReader.
@@ -29,7 +29,10 @@ pub struct NetworkServer {
 
 impl NetworkServer {
     pub fn new(port: u16) -> Self {
-        Self { port, notifier: None }
+        Self {
+            port,
+            notifier: None,
+        }
     }
 
     pub fn set_notifier(&mut self, n: Arc<dyn UiNotifier>) {
@@ -59,7 +62,10 @@ impl NetworkServer {
             let mut snap = StatusSnapshot::default();
             snap.port = self.port as u32;
             n.on_status_update(&snap);
-            n.on_connection_changed(&ConnectionEvent { listening: true, ..Default::default() });
+            n.on_connection_changed(&ConnectionEvent {
+                listening: true,
+                ..Default::default()
+            });
         }
 
         for stream in listener.incoming() {
@@ -195,11 +201,11 @@ impl NetworkServer {
 fn world_time_to_record(wt: WorldTime) -> SpawnRecord {
     let mut rec = SpawnRecord::zeroed();
     rec.spawn_type = wt.hour;
-    rec.class      = wt.minute;
-    rec.level      = wt.day;
-    rec.hidden     = wt.month;
-    rec.race       = wt.year;
-    rec.flags      = OPT_WORLD;
+    rec.class = wt.minute;
+    rec.level = wt.day;
+    rec.hidden = wt.month;
+    rec.race = wt.year;
+    rec.flags = OPT_WORLD;
     rec
 }
 
@@ -264,7 +270,13 @@ impl DataProvider for StubDataProvider {
     }
 
     fn world_time(&self) -> Option<WorldTime> {
-        Some(WorldTime { hour: 8, minute: 0, day: 1, month: 1, year: 3100 })
+        Some(WorldTime {
+            hour: 8,
+            minute: 0,
+            day: 1,
+            month: 1,
+            year: 3100,
+        })
     }
 
     fn processes(&self) -> Vec<u32> {
@@ -278,12 +290,27 @@ mod tests {
 
     #[test]
     fn world_time_record_fields() {
-        let wt = WorldTime { hour: 14, minute: 30, day: 15, month: 6, year: 3210 };
+        let wt = WorldTime {
+            hour: 14,
+            minute: 30,
+            day: 15,
+            month: 6,
+            year: 3210,
+        };
         let rec = world_time_to_record(wt);
         // Copy fields to locals before comparing — packed struct fields cannot be
         // referenced directly (potential misalignment on multi-byte types).
         let (spawn_type, class, level, hidden) = (rec.spawn_type, rec.class, rec.level, rec.hidden);
-        let (race, flags) = ({ let r = rec.race; r }, { let f = rec.flags; f });
+        let (race, flags) = (
+            {
+                let r = rec.race;
+                r
+            },
+            {
+                let f = rec.flags;
+                f
+            },
+        );
         assert_eq!(spawn_type, 14);
         assert_eq!(class, 30);
         assert_eq!(level, 15);

@@ -20,7 +20,10 @@ use scanner::EqGameScanner;
 use session::SessionRunner;
 
 #[derive(Parser)]
-#[command(name = "WinShowEQServer", about = "WinShowEQ — EverQuest map overlay server")]
+#[command(
+    name = "WinShowEQServer",
+    about = "WinShowEQ — EverQuest map overlay server"
+)]
 struct Cli {
     /// Use an alternate INI file path instead of myseqserver.ini
     #[arg(short = 'f', value_name = "FILE")]
@@ -147,9 +150,104 @@ fn run_scan(exe_path: &str, ini_override: Option<&str>) {
 }
 
 fn resolve_ini_path(name: &str) -> String {
+    resolve_ini_path_with(
+        name,
+        std::env::var_os("PROGRAMDATA"),
+        std::env::current_dir().ok(),
+    )
+}
+
+fn resolve_ini_path_with(
+    name: &str,
+    program_data: Option<std::ffi::OsString>,
+    current_dir: Option<std::path::PathBuf>,
+) -> String {
+    if let Some(program_data) = program_data {
+        let winshoweq_dir = std::path::PathBuf::from(program_data).join("WinShowEQ");
+        let program_data_path = winshoweq_dir.join(name);
+        if winshoweq_dir.exists() {
+            return program_data_path.to_string_lossy().into_owned();
+        }
+    }
+
     // GetPrivateProfileStringW requires an absolute path — relative paths resolve to
     // C:\Windows, not the current working directory.
-    std::env::current_dir()
+    current_dir
         .map(|d| d.join(name).to_string_lossy().into_owned())
-        .unwrap_or_else(|_| name.to_string())
+        .unwrap_or_else(|| name.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_ini_path_with;
+
+    fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        let nonce = format!(
+            "{}-{}-{}",
+            prefix,
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        path.push(nonce);
+        path
+    }
+
+    #[test]
+    fn resolve_ini_prefers_programdata_winshoweq_dir_when_present() {
+        let base = unique_temp_dir("winshoweq-main-programdata");
+        let program_data = base.join("program-data");
+        let winshoweq_dir = program_data.join("WinShowEQ");
+        let cwd = base.join("cwd");
+
+        std::fs::create_dir_all(&winshoweq_dir).expect("create ProgramData WinShowEQ dir");
+        std::fs::create_dir_all(&cwd).expect("create cwd");
+
+        let resolved = resolve_ini_path_with(
+            "myseqserver.ini",
+            Some(program_data.into_os_string()),
+            Some(cwd),
+        );
+
+        assert_eq!(
+            resolved,
+            winshoweq_dir
+                .join("myseqserver.ini")
+                .to_string_lossy()
+                .into_owned()
+        );
+
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn resolve_ini_falls_back_to_current_dir_when_programdata_not_ready() {
+        let base = unique_temp_dir("winshoweq-main-cwd");
+        let program_data = base.join("program-data");
+        let cwd = base.join("cwd");
+
+        std::fs::create_dir_all(&cwd).expect("create cwd");
+
+        let resolved = resolve_ini_path_with(
+            "config.ini",
+            Some(program_data.into_os_string()),
+            Some(cwd.clone()),
+        );
+
+        assert_eq!(
+            resolved,
+            cwd.join("config.ini").to_string_lossy().into_owned()
+        );
+
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn resolve_ini_falls_back_to_bare_name_without_known_dirs() {
+        let resolved = resolve_ini_path_with("config.ini", None, None);
+        assert_eq!(resolved, "config.ini");
+    }
 }

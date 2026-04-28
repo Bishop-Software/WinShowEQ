@@ -66,7 +66,7 @@ WinShowEQ/
 # Build everything
 cargo build
 
-# Run the server (console mode — requires myseqserver.ini next to the binary)
+# Run the server (console mode)
 cargo run -p winshoweq-server
 
 # Run the server with an explicit mode
@@ -91,7 +91,10 @@ cargo build --release -p winshoweq-server
 
 ## Configuration
 
-Two INI files are expected next to the binary:
+By default, the server resolves INI files from `%ProgramData%\WinShowEQ` when that directory
+exists (installer layout). For local development, it falls back to the current working directory.
+
+Two INI files are expected in that resolved config location:
 
 **`myseqserver.ini`** — runtime offsets and port:
 ```ini

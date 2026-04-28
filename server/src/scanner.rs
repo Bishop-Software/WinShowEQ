@@ -6,9 +6,9 @@ use crate::config::{IniReader, PrimaryOffsets};
 
 pub const SCAN_WINDOW: usize = 0x20000;
 
-const DOS_SIGNATURE: u16 = 0x5A4D;    // "MZ"
+const DOS_SIGNATURE: u16 = 0x5A4D; // "MZ"
 const PE_SIGNATURE: u32 = 0x0000_4550; // "PE\0\0"
-const OPT_HDR64_MAGIC: u16 = 0x020B;  // PE32+
+const OPT_HDR64_MAGIC: u16 = 0x020B; // PE32+
 
 pub struct PeSectionInfo {
     pub name: [u8; 9],
@@ -43,58 +43,142 @@ enum OffsetKind {
 impl OffsetKind {
     fn get(self, o: &PrimaryOffsets) -> u64 {
         match self {
-            OffsetKind::ZoneName  => o.zone_name,
+            OffsetKind::ZoneName => o.zone_name,
             OffsetKind::SpawnList => o.spawn_list,
-            OffsetKind::SelfAddr  => o.self_addr,
-            OffsetKind::Target    => o.target,
-            OffsetKind::Ground    => o.ground,
-            OffsetKind::World     => o.world,
+            OffsetKind::SelfAddr => o.self_addr,
+            OffsetKind::Target => o.target,
+            OffsetKind::Ground => o.ground,
+            OffsetKind::World => o.world,
         }
     }
 }
 
 struct PrimaryPatternEntry {
-    ini_section:   &'static str,
+    ini_section: &'static str,
     ini_write_key: &'static str,
-    output_label:  &'static str,
-    kind:          OffsetKind,
+    output_label: &'static str,
+    kind: OffsetKind,
 }
 
 struct SecondaryPatternEntry {
-    ini_section:  &'static str,
+    ini_section: &'static str,
     output_label: &'static str,
 }
 
 /// Mirrors kPrimaryScans in EQGameScanner.cpp::ScanExecutable.
 static PRIMARY_SCANS: &[PrimaryPatternEntry] = &[
-    PrimaryPatternEntry { ini_section: "ZoneAddr",        ini_write_key: "ZoneAddr",         output_label: "ZoneAddr",        kind: OffsetKind::ZoneName  },
-    PrimaryPatternEntry { ini_section: "SpawnHeaderAddr", ini_write_key: "SpawnHeaderAddr",  output_label: "SpawnHeaderAddr", kind: OffsetKind::SpawnList },
-    PrimaryPatternEntry { ini_section: "CharInfo",        ini_write_key: "CharInfo",         output_label: "CharInfo",        kind: OffsetKind::SelfAddr  },
-    PrimaryPatternEntry { ini_section: "ItemsAddr",       ini_write_key: "ItemsAddr",        output_label: "ItemsAddr",       kind: OffsetKind::Ground    },
-    PrimaryPatternEntry { ini_section: "TargetAddr",      ini_write_key: "TargetAddr",       output_label: "TargetAddr",      kind: OffsetKind::Target    },
-    PrimaryPatternEntry { ini_section: "WorldAddr",       ini_write_key: "WorldAddr",        output_label: "WorldAddr",       kind: OffsetKind::World     },
+    PrimaryPatternEntry {
+        ini_section: "ZoneAddr",
+        ini_write_key: "ZoneAddr",
+        output_label: "ZoneAddr",
+        kind: OffsetKind::ZoneName,
+    },
+    PrimaryPatternEntry {
+        ini_section: "SpawnHeaderAddr",
+        ini_write_key: "SpawnHeaderAddr",
+        output_label: "SpawnHeaderAddr",
+        kind: OffsetKind::SpawnList,
+    },
+    PrimaryPatternEntry {
+        ini_section: "CharInfo",
+        ini_write_key: "CharInfo",
+        output_label: "CharInfo",
+        kind: OffsetKind::SelfAddr,
+    },
+    PrimaryPatternEntry {
+        ini_section: "ItemsAddr",
+        ini_write_key: "ItemsAddr",
+        output_label: "ItemsAddr",
+        kind: OffsetKind::Ground,
+    },
+    PrimaryPatternEntry {
+        ini_section: "TargetAddr",
+        ini_write_key: "TargetAddr",
+        output_label: "TargetAddr",
+        kind: OffsetKind::Target,
+    },
+    PrimaryPatternEntry {
+        ini_section: "WorldAddr",
+        ini_write_key: "WorldAddr",
+        output_label: "WorldAddr",
+        kind: OffsetKind::World,
+    },
 ];
 
 /// Mirrors kSecondaryScans in EQGameScanner.cpp::ScanSecondary.
 static SECONDARY_SCANS: &[SecondaryPatternEntry] = &[
-    SecondaryPatternEntry { ini_section: "SpawnInfoNextOffset",     output_label: "NextOffset"     },
-    SecondaryPatternEntry { ini_section: "SpawnInfoPrevOffset",     output_label: "PrevOffset"     },
-    SecondaryPatternEntry { ini_section: "SpawnInfoLastnameOffset", output_label: "LastnameOffset" },
-    SecondaryPatternEntry { ini_section: "SpawnInfoXOffset",        output_label: "XOffset"        },
-    SecondaryPatternEntry { ini_section: "SpawnInfoYOffset",        output_label: "YOffset"        },
-    SecondaryPatternEntry { ini_section: "SpawnInfoZOffset",        output_label: "ZOffset"        },
-    SecondaryPatternEntry { ini_section: "SpawnInfoSpeedOffset",    output_label: "SpeedOffset"    },
-    SecondaryPatternEntry { ini_section: "SpawnInfoHeadingOffset",  output_label: "HeadingOffset"  },
-    SecondaryPatternEntry { ini_section: "SpawnInfoNameOffset",     output_label: "NameOffset"     },
-    SecondaryPatternEntry { ini_section: "SpawnInfoTypeOffset",     output_label: "TypeOffset"     },
-    SecondaryPatternEntry { ini_section: "SpawnInfoSpawnIDOffset",  output_label: "SpawnIDOffset"  },
-    SecondaryPatternEntry { ini_section: "SpawnInfoOwnerIDOffset",  output_label: "OwnerIDOffset"  },
-    SecondaryPatternEntry { ini_section: "SpawnInfoHideOffset",     output_label: "HideOffset"     },
-    SecondaryPatternEntry { ini_section: "SpawnInfoLevelOffset",    output_label: "LevelOffset"    },
-    SecondaryPatternEntry { ini_section: "SpawnInfoRaceOffset",     output_label: "RaceOffset"     },
-    SecondaryPatternEntry { ini_section: "SpawnInfoClassOffset",    output_label: "ClassOffset"    },
-    SecondaryPatternEntry { ini_section: "SpawnInfoPrimaryOffset",  output_label: "PrimaryOffset"  },
-    SecondaryPatternEntry { ini_section: "SpawnInfoOffhandOffset",  output_label: "OffhandOffset"  },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoNextOffset",
+        output_label: "NextOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoPrevOffset",
+        output_label: "PrevOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoLastnameOffset",
+        output_label: "LastnameOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoXOffset",
+        output_label: "XOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoYOffset",
+        output_label: "YOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoZOffset",
+        output_label: "ZOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoSpeedOffset",
+        output_label: "SpeedOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoHeadingOffset",
+        output_label: "HeadingOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoNameOffset",
+        output_label: "NameOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoTypeOffset",
+        output_label: "TypeOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoSpawnIDOffset",
+        output_label: "SpawnIDOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoOwnerIDOffset",
+        output_label: "OwnerIDOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoHideOffset",
+        output_label: "HideOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoLevelOffset",
+        output_label: "LevelOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoRaceOffset",
+        output_label: "RaceOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoClassOffset",
+        output_label: "ClassOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoPrimaryOffset",
+        output_label: "PrimaryOffset",
+    },
+    SecondaryPatternEntry {
+        ini_section: "SpawnInfoOffhandOffset",
+        output_label: "OffhandOffset",
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -121,7 +205,7 @@ fn file_offset_to_va(file_offset: u64, pe: &PeImageInfo) -> u64 {
             continue;
         }
         let start = s.pointer_to_raw_data as u64;
-        let end   = start + s.size_of_raw_data as u64;
+        let end = start + s.size_of_raw_data as u64;
         if file_offset >= start && file_offset < end {
             return pe.image_base + s.virtual_address as u64 + (file_offset - start);
         }
@@ -132,16 +216,22 @@ fn file_offset_to_va(file_offset: u64, pe: &PeImageInfo) -> u64 {
 fn read_extracted(buffer: &[u8], base: usize, t_offset: usize, type_len: usize) -> u32 {
     let pos = base + t_offset;
     match type_len {
-        1 => buffer.get(pos).copied().map(|b| b as u32).unwrap_or(0xFFFF_FFFF),
-        2 => buffer.get(pos..pos + 2)
-                .and_then(|s| s.try_into().ok())
-                .map(u16::from_le_bytes)
-                .map(|v| v as u32)
-                .unwrap_or(0xFFFF_FFFF),
-        _ => buffer.get(pos..pos + 4)
-                .and_then(|s| s.try_into().ok())
-                .map(u32::from_le_bytes)
-                .unwrap_or(0xFFFF_FFFF),
+        1 => buffer
+            .get(pos)
+            .copied()
+            .map(|b| b as u32)
+            .unwrap_or(0xFFFF_FFFF),
+        2 => buffer
+            .get(pos..pos + 2)
+            .and_then(|s| s.try_into().ok())
+            .map(u16::from_le_bytes)
+            .map(|v| v as u32)
+            .unwrap_or(0xFFFF_FFFF),
+        _ => buffer
+            .get(pos..pos + 4)
+            .and_then(|s| s.try_into().ok())
+            .map(u32::from_le_bytes)
+            .unwrap_or(0xFFFF_FFFF),
     }
 }
 
@@ -168,7 +258,7 @@ pub fn scan_buffer_for_pointer(
 
     // Locate the 't' run which defines the value field to extract.
     let t_first = char_mask.iter().position(|&c| c == b't');
-    let t_last  = char_mask.iter().rposition(|&c| c == b't');
+    let t_last = char_mask.iter().rposition(|&c| c == b't');
     let type_len = match (t_first, t_last) {
         (Some(f), Some(l)) => (l - f + 1).max(1),
         _ => 4,
@@ -184,13 +274,19 @@ pub fn scan_buffer_for_pointer(
 
         if rip_relative {
             let Some(pe) = pe_info else { return 0 };
-            if type_len != 4 { return 0; }
+            if type_len != 4 {
+                return 0;
+            }
             // RIP points to the byte immediately after the 4-byte displacement field.
             let next_file_offset = file_start + i as u64 + t_offset as u64 + 4;
             let next_va = file_offset_to_va(next_file_offset, pe);
-            if next_va == 0 { return 0; }
+            if next_va == 0 {
+                return 0;
+            }
             let resolved = next_va as i64 + extracted as i32 as i64;
-            if resolved < 0 { return 0; }
+            if resolved < 0 {
+                return 0;
+            }
             return resolved as u64;
         }
 
@@ -208,16 +304,24 @@ pub fn scan_buffer_for_pointer(
 // ---------------------------------------------------------------------------
 
 fn read_u16_le(b: &[u8], off: usize) -> Option<u16> {
-    b.get(off..off + 2).and_then(|s| s.try_into().ok()).map(u16::from_le_bytes)
+    b.get(off..off + 2)
+        .and_then(|s| s.try_into().ok())
+        .map(u16::from_le_bytes)
 }
 fn read_u32_le(b: &[u8], off: usize) -> Option<u32> {
-    b.get(off..off + 4).and_then(|s| s.try_into().ok()).map(u32::from_le_bytes)
+    b.get(off..off + 4)
+        .and_then(|s| s.try_into().ok())
+        .map(u32::from_le_bytes)
 }
 fn read_u64_le(b: &[u8], off: usize) -> Option<u64> {
-    b.get(off..off + 8).and_then(|s| s.try_into().ok()).map(u64::from_le_bytes)
+    b.get(off..off + 8)
+        .and_then(|s| s.try_into().ok())
+        .map(u64::from_le_bytes)
 }
 fn read_i32_le(b: &[u8], off: usize) -> Option<i32> {
-    b.get(off..off + 4).and_then(|s| s.try_into().ok()).map(i32::from_le_bytes)
+    b.get(off..off + 4)
+        .and_then(|s| s.try_into().ok())
+        .map(i32::from_le_bytes)
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +334,9 @@ pub struct EqGameScanner {
 
 impl EqGameScanner {
     pub fn new(exe_path: impl Into<String>) -> Self {
-        Self { exe_path: exe_path.into() }
+        Self {
+            exe_path: exe_path.into(),
+        }
     }
 
     pub fn executable_exists(&self) -> bool {
@@ -257,19 +363,25 @@ impl EqGameScanner {
         bytes.truncate(n);
         let b = &bytes;
 
-        if read_u16_le(b, 0)? != DOS_SIGNATURE { return None; }
+        if read_u16_le(b, 0)? != DOS_SIGNATURE {
+            return None;
+        }
         let e_lfanew = read_i32_le(b, 60)? as usize;
 
-        if read_u32_le(b, e_lfanew)? != PE_SIGNATURE { return None; }
+        if read_u32_le(b, e_lfanew)? != PE_SIGNATURE {
+            return None;
+        }
 
         // IMAGE_FILE_HEADER at e_lfanew + 4
         let fh = e_lfanew + 4;
-        let num_sections      = read_u16_le(b, fh + 2)?  as usize;
-        let opt_header_size   = read_u16_le(b, fh + 16)? as usize;
+        let num_sections = read_u16_le(b, fh + 2)? as usize;
+        let opt_header_size = read_u16_le(b, fh + 16)? as usize;
 
         // IMAGE_OPTIONAL_HEADER64 at fh + 20
         let oh = fh + 20;
-        if read_u16_le(b, oh)? != OPT_HDR64_MAGIC { return None; }
+        if read_u16_le(b, oh)? != OPT_HDR64_MAGIC {
+            return None;
+        }
         let image_base = read_u64_le(b, oh + 24)?;
 
         // Section table follows the optional header
@@ -277,16 +389,26 @@ impl EqGameScanner {
         let mut sections = Vec::with_capacity(num_sections);
         for i in 0..num_sections {
             let sh = st + i * 40;
-            if sh + 40 > b.len() { break; }
+            if sh + 40 > b.len() {
+                break;
+            }
             let mut name = [0u8; 9];
             name[..8].copy_from_slice(&b[sh..sh + 8]);
-            let virtual_address     = read_u32_le(b, sh + 12)?;
-            let size_of_raw_data    = read_u32_le(b, sh + 16)?;
+            let virtual_address = read_u32_le(b, sh + 12)?;
+            let size_of_raw_data = read_u32_le(b, sh + 16)?;
             let pointer_to_raw_data = read_u32_le(b, sh + 20)?;
-            sections.push(PeSectionInfo { name, virtual_address, pointer_to_raw_data, size_of_raw_data });
+            sections.push(PeSectionInfo {
+                name,
+                virtual_address,
+                pointer_to_raw_data,
+                size_of_raw_data,
+            });
         }
 
-        Some(PeImageInfo { image_base, sections })
+        Some(PeImageInfo {
+            image_base,
+            sections,
+        })
     }
 
     /// Scan the exe for a pointer/address using a byte+char mask.
@@ -298,7 +420,11 @@ impl EqGameScanner {
         byte_mask: &[u8],
         char_mask: &[u8],
     ) -> u64 {
-        let pe_info = if char_mask.contains(&b'r') { self.parse_pe_headers() } else { None };
+        let pe_info = if char_mask.contains(&b'r') {
+            self.parse_pe_headers()
+        } else {
+            None
+        };
         let buffer = match self.read_scan_window(start_addr, block_size) {
             Ok(b) => b,
             Err(_) => return 0,
@@ -320,7 +446,10 @@ impl EqGameScanner {
         let Some(o_pos) = o_pos else {
             return self.find_eq_pointer_offset(start_addr, block_size, byte_mask, char_mask);
         };
-        let o_len = char_mask[o_pos..].iter().take_while(|&&c| c == b'o').count();
+        let o_len = char_mask[o_pos..]
+            .iter()
+            .take_while(|&&c| c == b'o')
+            .count();
 
         let mut patched = byte_mask.to_vec();
         if o_len == 4 && o_pos + 4 <= patched.len() {
@@ -343,11 +472,12 @@ impl EqGameScanner {
         reload: &mut bool,
         has_mismatch: &mut bool,
     ) -> String {
-        let start     = ir.read_integer_entry(entry.ini_section, "Start", true);
-        let pattern   = ir.read_escape_bytes(entry.ini_section, "Pattern");
-        let mask_str  = ir.read_string_entry(entry.ini_section, "Mask", true);
+        let start = ir.read_integer_entry(entry.ini_section, "Start", true);
+        let pattern = ir.read_escape_bytes(entry.ini_section, "Pattern");
+        let mask_str = ir.read_string_entry(entry.ini_section, "Mask", true);
 
-        let match_addr = self.find_eq_pointer_offset(start, SCAN_WINDOW, &pattern, mask_str.as_bytes());
+        let match_addr =
+            self.find_eq_pointer_offset(start, SCAN_WINDOW, &pattern, mask_str.as_bytes());
 
         let suffix = if match_addr != 0 {
             let current = entry.kind.get(current_offsets);
@@ -378,12 +508,16 @@ impl EqGameScanner {
         entry: &SecondaryPatternEntry,
         base_addr: u64,
     ) -> String {
-        let start     = ir.read_integer_entry(entry.ini_section, "Start", true);
-        let pattern   = ir.read_escape_bytes(entry.ini_section, "Pattern");
-        let mask_str  = ir.read_string_entry(entry.ini_section, "Mask", true);
+        let start = ir.read_integer_entry(entry.ini_section, "Start", true);
+        let pattern = ir.read_escape_bytes(entry.ini_section, "Pattern");
+        let mask_str = ir.read_string_entry(entry.ini_section, "Mask", true);
 
         let match_addr = self.find_eq_structure_offset(
-            start, SCAN_WINDOW, &pattern, mask_str.as_bytes(), base_addr,
+            start,
+            SCAN_WINDOW,
+            &pattern,
+            mask_str.as_bytes(),
+            base_addr,
         );
 
         format!(
@@ -402,7 +536,11 @@ impl EqGameScanner {
         current_offsets: &PrimaryOffsets,
         write_out: bool,
     ) -> ScanResult {
-        let mut result = ScanResult { reload: false, has_address_mismatch: false, output: String::new() };
+        let mut result = ScanResult {
+            reload: false,
+            has_address_mismatch: false,
+            output: String::new(),
+        };
 
         if !self.executable_exists() {
             result.output = "Error: Could not locate the specified executable file.".to_string();
@@ -430,8 +568,12 @@ impl EqGameScanner {
 
         for entry in PRIMARY_SCANS {
             let line = self.run_primary_scan(
-                ir, current_offsets, entry, write_out,
-                &mut result.reload, &mut result.has_address_mismatch,
+                ir,
+                current_offsets,
+                entry,
+                write_out,
+                &mut result.reload,
+                &mut result.has_address_mismatch,
             );
             out.push_str(&line);
         }
@@ -448,11 +590,15 @@ impl EqGameScanner {
         }
 
         let char_info_base = {
-            let start   = ir.read_integer_entry("CharInfo", "Start", true);
+            let start = ir.read_integer_entry("CharInfo", "Start", true);
             let pattern = ir.read_escape_bytes("CharInfo", "Pattern");
-            let mask    = ir.read_string_entry("CharInfo", "Mask", true);
-            let found   = self.find_eq_pointer_offset(start, SCAN_WINDOW, &pattern, mask.as_bytes());
-            if found != 0 { found } else { fallback_char_info }
+            let mask = ir.read_string_entry("CharInfo", "Mask", true);
+            let found = self.find_eq_pointer_offset(start, SCAN_WINDOW, &pattern, mask.as_bytes());
+            if found != 0 {
+                found
+            } else {
+                fallback_char_info
+            }
         };
 
         let mut out = String::from("SpawnInfo Offsets\r\n");
@@ -469,12 +615,12 @@ fn unix_to_date(secs: u64) -> String {
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
     let doe = (z - era * 146_097) as u64;
     let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let y   = yoe as i64 + era * 400;
+    let y = yoe as i64 + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp  = (5 * doy + 2) / 153;
-    let d   = doy - (153 * mp + 2) / 5 + 1;
-    let m   = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y   = if m <= 2 { y + 1 } else { y };
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
     format!("{:02}/{:02}/{}", m, d, y)
 }
 
@@ -503,27 +649,36 @@ mod tests {
     fn scan_buffer_finds_4byte_value() {
         // Pattern at offset 2: [0x8B, _, _, _, _, 0xFF]
         // char_mask "xttttx" -> extract 4 bytes at t_offset=1 -> [0x78,0x56,0x34,0x12] = 0x12345678
-        let buffer    = &[0x00u8, 0x00, 0x8B, 0x78, 0x56, 0x34, 0x12, 0xFF, 0x00];
+        let buffer = &[0x00u8, 0x00, 0x8B, 0x78, 0x56, 0x34, 0x12, 0xFF, 0x00];
         let byte_mask = &[0x8Bu8, 0xAA, 0xBB, 0xCC, 0xDD, 0xFF];
         let char_mask = b"xttttx";
-        assert_eq!(scan_buffer_for_pointer(buffer, byte_mask, char_mask, 0, None), 0x12345678);
+        assert_eq!(
+            scan_buffer_for_pointer(buffer, byte_mask, char_mask, 0, None),
+            0x12345678
+        );
     }
 
     #[test]
     fn scan_buffer_threshold_rejects_large_value() {
         // Extracted 0x30000000 > 0x20000000 -> not returned
-        let buffer    = &[0x8Bu8, 0x00, 0x00, 0x00, 0x30, 0xFF];
+        let buffer = &[0x8Bu8, 0x00, 0x00, 0x00, 0x30, 0xFF];
         let byte_mask = &[0x8Bu8, 0xAA, 0xBB, 0xCC, 0xDD, 0xFF];
         let char_mask = b"xttttx";
-        assert_eq!(scan_buffer_for_pointer(buffer, byte_mask, char_mask, 0, None), 0);
+        assert_eq!(
+            scan_buffer_for_pointer(buffer, byte_mask, char_mask, 0, None),
+            0
+        );
     }
 
     #[test]
     fn scan_buffer_no_match_returns_zero() {
-        let buffer    = &[0x00u8; 16];
+        let buffer = &[0x00u8; 16];
         let byte_mask = &[0xFFu8, 0xFF];
         let char_mask = b"xx";
-        assert_eq!(scan_buffer_for_pointer(buffer, byte_mask, char_mask, 0, None), 0);
+        assert_eq!(
+            scan_buffer_for_pointer(buffer, byte_mask, char_mask, 0, None),
+            0
+        );
     }
 
     #[test]

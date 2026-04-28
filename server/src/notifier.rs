@@ -11,7 +11,7 @@ pub struct StatusSnapshot {
     /// When true, the UI should blank zone and character name controls.
     pub clear_zone_and_name: bool,
     pub port: u32,
-    pub npc_count: i32,     // -1 = not set
+    pub npc_count: i32, // -1 = not set
     pub pc_count: i32,
     pub corpse_count: i32,
     pub item_count: i32,
@@ -92,7 +92,10 @@ impl UiNotifier for LoggingNotifier {
             println!("[Char] {}", snapshot.character_name);
         }
         if snapshot.npc_count >= 0 || snapshot.pc_count >= 0 {
-            println!("[Counts] NPCs={} PCs={}", snapshot.npc_count, snapshot.pc_count);
+            println!(
+                "[Counts] NPCs={} PCs={}",
+                snapshot.npc_count, snapshot.pc_count
+            );
         }
     }
 
