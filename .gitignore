@@ -25,6 +25,7 @@ target
 /target
 
 # Claude
+.claude
 CLAUDE.md
 
 # Design docs

@@ -73,6 +73,7 @@ fn run_gui(ini_override: Option<&str>) {
     let gui_state = Arc::new(Mutex::new(gui::GuiState::default()));
     let notifier = Arc::new(gui::EguiNotifier::new(Arc::clone(&gui_state)));
 
+    let ini_path_for_gui = ini_path.clone();
     let mut runner = SessionRunner::new(ini_path, config_ini_path);
     runner.set_notifier(notifier as Arc<dyn UiNotifier>);
 
@@ -87,7 +88,7 @@ fn run_gui(ini_override: Option<&str>) {
     eframe::run_native(
         "WinShowEQ",
         options,
-        Box::new(|cc| Ok(Box::new(gui::WinShowEQApp::new(cc, gui_state)))),
+        Box::new(|cc| Ok(Box::new(gui::WinShowEQApp::new(cc, gui_state, ini_path_for_gui)))),
     )
     .expect("eframe failed to start");
 }
@@ -185,6 +186,7 @@ fn resolve_ini_path(name: &str) -> String {
         name,
         std::env::var_os("PROGRAMDATA"),
         std::env::current_dir().ok(),
+        std::env::current_exe().ok(),
     )
 }
 
@@ -192,7 +194,19 @@ fn resolve_ini_path_with(
     name: &str,
     program_data: Option<std::ffi::OsString>,
     current_dir: Option<std::path::PathBuf>,
+    current_exe: Option<std::path::PathBuf>,
 ) -> String {
+    if let Some(workspace_ini_path) = current_exe
+        .as_deref()
+        .and_then(|path| resolve_workspace_ini_path(name, path.parent()))
+    {
+        return workspace_ini_path.to_string_lossy().into_owned();
+    }
+
+    if let Some(workspace_ini_path) = resolve_workspace_ini_path(name, current_dir.as_deref()) {
+        return workspace_ini_path.to_string_lossy().into_owned();
+    }
+
     if let Some(program_data) = program_data {
         let winshoweq_dir = std::path::PathBuf::from(program_data).join("WinShowEQ");
         let program_data_path = winshoweq_dir.join(name);
@@ -206,6 +220,19 @@ fn resolve_ini_path_with(
     current_dir
         .map(|d| d.join(name).to_string_lossy().into_owned())
         .unwrap_or_else(|| name.to_string())
+}
+
+fn resolve_workspace_ini_path(
+    name: &str,
+    start_dir: Option<&std::path::Path>,
+) -> Option<std::path::PathBuf> {
+    for ancestor in start_dir?.ancestors() {
+        let candidate = ancestor.join("server").join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -241,6 +268,7 @@ mod tests {
             "myseqserver.ini",
             Some(program_data.into_os_string()),
             Some(cwd),
+            None,
         );
 
         assert_eq!(
@@ -266,6 +294,7 @@ mod tests {
             "config.ini",
             Some(program_data.into_os_string()),
             Some(cwd.clone()),
+            None,
         );
 
         assert_eq!(
@@ -278,7 +307,62 @@ mod tests {
 
     #[test]
     fn resolve_ini_falls_back_to_bare_name_without_known_dirs() {
-        let resolved = resolve_ini_path_with("config.ini", None, None);
+        let resolved = resolve_ini_path_with("config.ini", None, None, None);
         assert_eq!(resolved, "config.ini");
+    }
+
+    #[test]
+    fn resolve_ini_prefers_workspace_server_ini_from_current_exe() {
+        let base = unique_temp_dir("winshoweq-main-exe-workspace");
+        let workspace = base.join("workspace");
+        let server_dir = workspace.join("server");
+        let target_dir = workspace.join("target").join("debug");
+        let program_data = base.join("program-data");
+        let winshoweq_dir = program_data.join("WinShowEQ");
+
+        std::fs::create_dir_all(&server_dir).expect("create workspace server dir");
+        std::fs::create_dir_all(&target_dir).expect("create target dir");
+        std::fs::create_dir_all(&winshoweq_dir).expect("create ProgramData WinShowEQ dir");
+        std::fs::write(server_dir.join("myseqserver.ini"), "[File Info]\nPatchDate=01/01/2000\n")
+            .expect("write workspace ini");
+
+        let resolved = resolve_ini_path_with(
+            "myseqserver.ini",
+            Some(program_data.into_os_string()),
+            Some(base.join("other-cwd")),
+            Some(target_dir.join("WinShowEQServer.exe")),
+        );
+
+        assert_eq!(
+            resolved,
+            server_dir
+                .join("myseqserver.ini")
+                .to_string_lossy()
+                .into_owned()
+        );
+
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn resolve_ini_prefers_workspace_server_ini_from_current_dir() {
+        let base = unique_temp_dir("winshoweq-main-cwd-workspace");
+        let workspace = base.join("workspace");
+        let server_dir = workspace.join("server");
+        let cwd = workspace.join("tools");
+
+        std::fs::create_dir_all(&server_dir).expect("create workspace server dir");
+        std::fs::create_dir_all(&cwd).expect("create cwd");
+        std::fs::write(server_dir.join("config.ini"), "[Server]\nStartMinimized=0\n")
+            .expect("write workspace config ini");
+
+        let resolved = resolve_ini_path_with("config.ini", None, Some(cwd), None);
+
+        assert_eq!(
+            resolved,
+            server_dir.join("config.ini").to_string_lossy().into_owned()
+        );
+
+        let _ = std::fs::remove_dir_all(base);
     }
 }

@@ -29,6 +29,25 @@ impl Default for GuiState {
     }
 }
 
+impl GuiState {
+    pub fn push_log(&mut self, message: &str) {
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let ts = format!(
+            "{:02}:{:02}:{:02}",
+            (secs / 3600) % 24,
+            (secs / 60) % 60,
+            secs % 60
+        );
+        self.log.push_back(format!("[{ts}] {message}"));
+        while self.log.len() > LOG_CAP {
+            self.log.pop_front();
+        }
+    }
+}
+
 /// UiNotifier implementation that writes into a shared GuiState behind a Mutex.
 pub struct EguiNotifier {
     state: Arc<Mutex<GuiState>>,
@@ -41,20 +60,7 @@ impl EguiNotifier {
 
     fn append_log(&self, message: &str) {
         if let Ok(mut s) = self.state.lock() {
-            let secs = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
-            let ts = format!(
-                "{:02}:{:02}:{:02}",
-                (secs / 3600) % 24,
-                (secs / 60) % 60,
-                secs % 60
-            );
-            s.log.push_back(format!("[{ts}] {message}"));
-            while s.log.len() > LOG_CAP {
-                s.log.pop_front();
-            }
+            s.push_log(message);
         }
     }
 }

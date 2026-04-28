@@ -14,8 +14,9 @@ This folder contains the first-pass Windows installer scaffold for `WinShowEQ`.
 
 `WinShowEQServer` now resolves default INI paths in this order:
 
-1. `%ProgramData%\WinShowEQ\<name>` when `%ProgramData%\WinShowEQ` exists
-2. current working directory fallback for local/dev runs
+1. workspace-local `server\<name>` when running from a source checkout
+2. `%ProgramData%\WinShowEQ\<name>` when `%ProgramData%\WinShowEQ` exists
+3. current working directory fallback for ad-hoc local/dev runs
 
 This lets installed launches work even when the EXE is started directly from `%ProgramFiles%`.
 Shortcuts still use `%ProgramData%\WinShowEQ` as their working directory for consistency.

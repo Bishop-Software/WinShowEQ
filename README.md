@@ -15,7 +15,7 @@ and C# WinForms client with a single pure-Rust workspace.
 | Server    | M4 — Network server + binary protocol         | Complete    |
 | Server    | M5 — Server logic + console mode (end-to-end) | Complete    |
 | Server    | M6 — Debug loop, full CLI (`clap`)            | Complete    |
-| Server    | M7 — GUI (`egui` + `eframe`)                  | Not started |
+| Server    | M7 — GUI (`egui` + `eframe`)                  | In progress |
 | Client    | Prereq — Cargo workspace restructure          | Complete    |
 | Client    | C1 — Common crate + client foundation         | Not started |
 | Client    | C2–C8 — Network, map, rendering, filters…     | Not started |
@@ -50,6 +50,9 @@ WinShowEQ/
       server_logic.rs # MemDataProvider (live memory reads), ServerLogic
       session.rs      # SessionRunner state machine, run_console_loop
       notifier.rs     # UiNotifier trait, LoggingNotifier
+      gui/
+        mod.rs        # GuiState, EguiNotifier (UiNotifier → Arc<Mutex<GuiState>>)
+        app.rs        # WinShowEQApp: eframe::App — main window layout
       data/
         spawn.rs      # re-exports SpawnRecord from common
         item.rs       # GroundItem
@@ -90,8 +93,12 @@ cargo build --release -p winshoweq-server
 
 ## Configuration
 
-By default, the server resolves INI files from `%ProgramData%\WinShowEQ` when that directory
-exists (installer layout). For local development, it falls back to the current working directory.
+By default, the server resolves INI files in this order:
+
+1. workspace-local `server\<name>` when running from a checkout (for example via `cargo run`
+   or `target\debug\WinShowEQServer.exe`)
+2. `%ProgramData%\WinShowEQ\<name>` when that directory exists (installer layout)
+3. current working directory fallback for ad-hoc local runs
 
 Two INI files are expected in that resolved config location:
 
