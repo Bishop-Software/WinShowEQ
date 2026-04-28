@@ -14,7 +14,7 @@ and C# WinForms client with a single pure-Rust workspace.
 | Server    | M3 — Memory reader (Win32 unsafe)             | Complete    |
 | Server    | M4 — Network server + binary protocol         | Complete    |
 | Server    | M5 — Server logic + console mode (end-to-end) | Complete    |
-| Server    | M6 — Debug loop, full CLI (`clap`)            | Not started |
+| Server    | M6 — Debug loop, full CLI (`clap`)            | Complete    |
 | Server    | M7 — GUI (`egui` + `eframe`)                  | Not started |
 | Client    | Prereq — Cargo workspace restructure          | Complete    |
 | Client    | C1 — Common crate + client foundation         | Not started |
@@ -71,16 +71,15 @@ cargo run -p winshoweq-server
 
 # Run the server with an explicit mode
 cargo run -p winshoweq-server -- console
-cargo run -p winshoweq-server -- debug       # (M6 — not yet implemented)
+cargo run -p winshoweq-server -- debug
 
-# Scan an EQ executable for memory offsets
-cargo run -p winshoweq-server -- --scan path\to\eqgame.exe
+# Use an alternate INI file
+cargo run -p winshoweq-server -- -f path\to\myseqserver.ini
 
-# Attach to a running EQ process and print PID + base address
-cargo run -p winshoweq-server -- --attach
-
-# Serve stub data for client testing (no EQ required)
-cargo run -p winshoweq-server -- --serve-stub
+# Dev/diagnostic subcommands (hidden from --help)
+cargo run -p winshoweq-server -- scan path\to\eqgame.exe   # scan for memory offsets
+cargo run -p winshoweq-server -- attach                     # print PID + base address
+cargo run -p winshoweq-server -- serve-stub                 # stub server (no EQ required)
 
 # Run tests
 cargo test
@@ -142,6 +141,23 @@ The server speaks a simple binary protocol compatible with the original C# MySEQ
 
 `SpawnRecord` is a 100-byte `#[repr(C, packed)]` struct (`netBuffer_t` in the C++ source).
 The `flags` field carries the `OPT_*` packet type (zone, self, spawn, target, ground, world).
+
+## Installer
+
+A Windows installer is available via [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+It installs `WinShowEQServer.exe` to `%ProgramFiles%\WinShowEQ\bin` and seeds the default
+INI files into `%ProgramData%\WinShowEQ` (preserved across upgrades and uninstalls).
+
+```powershell
+# Build release and package installer
+pwsh -File .\installer\build-installer.ps1
+
+# Stage files only (skip Inno Setup compilation)
+pwsh -File .\installer\build-installer.ps1 -StageOnly
+```
+
+Output lands in `target/installer-output/`. See [`installer/README.md`](installer/README.md)
+for full options including `-SkipBuild`, `-IncludeClient`, and `-InnoSetupCompilerPath`.
 
 ## License
 

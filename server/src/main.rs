@@ -1,6 +1,7 @@
 mod config;
 mod data;
 mod debug;
+mod gui;
 mod mem_reader;
 mod network;
 mod notifier;
@@ -8,10 +9,11 @@ mod scanner;
 mod server_logic;
 mod session;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use clap::{Parser, Subcommand};
 use config::IniReader;
+use eframe::egui;
 use debug::DebugLoop;
 use mem_reader::MemReader;
 use network::{NetworkServer, StubDataProvider};
@@ -53,12 +55,41 @@ fn main() {
     let ini = cli.ini_file.as_deref();
 
     match cli.command {
-        None | Some(Command::Console) => run_console(ini),
+        None => run_gui(ini),
+        Some(Command::Console) => run_console(ini),
         Some(Command::Debug) => run_debug(ini),
         Some(Command::Scan { exe_path }) => run_scan(&exe_path, ini),
         Some(Command::Attach) => run_attach(),
         Some(Command::ServeStub) => run_serve_stub(),
     }
+}
+
+fn run_gui(ini_override: Option<&str>) {
+    let ini_path = ini_override
+        .map(str::to_owned)
+        .unwrap_or_else(|| resolve_ini_path("myseqserver.ini"));
+    let config_ini_path = resolve_ini_path("config.ini");
+
+    let gui_state = Arc::new(Mutex::new(gui::GuiState::default()));
+    let notifier = Arc::new(gui::EguiNotifier::new(Arc::clone(&gui_state)));
+
+    let mut runner = SessionRunner::new(ini_path, config_ini_path);
+    runner.set_notifier(notifier as Arc<dyn UiNotifier>);
+
+    std::thread::spawn(move || {
+        runner.run_console_loop();
+    });
+
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([660.0, 460.0]),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "WinShowEQ",
+        options,
+        Box::new(|cc| Ok(Box::new(gui::WinShowEQApp::new(cc, gui_state)))),
+    )
+    .expect("eframe failed to start");
 }
 
 fn run_console(ini_override: Option<&str>) {

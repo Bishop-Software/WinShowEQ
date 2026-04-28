@@ -59,8 +59,8 @@ pub struct ConnectionEvent {
 }
 
 /// UI notification interface — Rust equivalent of IServerUiNotifier.
-/// Implementations must be Send so the server can hold an Arc<dyn UiNotifier>.
-pub trait UiNotifier: Send {
+/// Send + Sync required so Arc<dyn UiNotifier> is Send (needed for the server background thread).
+pub trait UiNotifier: Send + Sync {
     fn on_status_update(&self, snapshot: &StatusSnapshot);
     fn on_info(&self, title: &str, message: &str);
     fn on_error(&self, title: &str, message: &str);

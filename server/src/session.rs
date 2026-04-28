@@ -48,6 +48,10 @@ impl SessionRunner {
         }
     }
 
+    pub fn set_notifier(&mut self, notifier: Arc<dyn UiNotifier>) {
+        self.notifier = notifier;
+    }
+
     pub fn state(&self) -> SessionState {
         self.state
     }
