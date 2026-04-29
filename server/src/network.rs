@@ -39,6 +39,22 @@ impl NetworkServer {
         self.notifier = Some(n);
     }
 
+    fn log_info(&self, message: &str) {
+        if let Some(n) = &self.notifier {
+            n.on_log_event(message);
+        } else {
+            println!("{message}");
+        }
+    }
+
+    fn log_error(&self, title: &str, message: &str) {
+        if let Some(n) = &self.notifier {
+            n.on_error(title, message);
+        } else {
+            eprintln!("{title}: {message}");
+        }
+    }
+
     /// Blocking accept loop. Handles one client at a time (matches C++ model).
     /// Call from a dedicated thread if the caller needs to stay responsive.
     pub fn serve(&self, provider: Arc<dyn DataProvider>) {
@@ -46,17 +62,15 @@ impl NetworkServer {
         let listener = match TcpListener::bind(&addr) {
             Ok(l) => l,
             Err(e) => {
-                if let Some(n) = &self.notifier {
-                    n.on_error(
-                        "NetworkServer",
-                        &format!("Failed to bind to port {}: {}", self.port, e),
-                    );
-                }
+                self.log_error(
+                    "NetworkServer",
+                    &format!("Failed to bind to port {}: {}", self.port, e),
+                );
                 return;
             }
         };
 
-        println!("MySEQServer: Listening on 0.0.0.0:{}", self.port);
+        self.log_info(&format!("MySEQServer: Listening on 0.0.0.0:{}", self.port));
 
         if let Some(n) = &self.notifier {
             n.on_connection_changed(&ConnectionEvent {
@@ -72,7 +86,7 @@ impl NetworkServer {
                         .peer_addr()
                         .map(|a| a.to_string())
                         .unwrap_or_else(|_| "unknown".into());
-                    println!("MySEQServer: New connection from: {}", peer);
+                    self.log_info(&format!("MySEQServer: New connection from: {}", peer));
 
                     if let Some(n) = &self.notifier {
                         n.on_connection_changed(&ConnectionEvent {
@@ -83,7 +97,7 @@ impl NetworkServer {
 
                     self.handle_client(client, Arc::clone(&provider));
 
-                    println!("MySEQServer: Client disconnected.");
+                    self.log_info("MySEQServer: Client disconnected.");
 
                     if let Some(n) = &self.notifier {
                         n.on_connection_changed(&ConnectionEvent {
@@ -92,7 +106,7 @@ impl NetworkServer {
                         });
                     }
                 }
-                Err(e) => eprintln!("MySEQServer: Accept error: {}", e),
+                Err(e) => self.log_error("NetworkServer", &format!("Accept error: {}", e)),
             }
         }
     }

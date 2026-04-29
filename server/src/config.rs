@@ -124,9 +124,6 @@ impl IniReader {
         if self.patch_date.is_empty() {
             return Err(format!("Error: IniReader: Invalid INI file {}", filename));
         }
-        println!("IniReader: Reading INI file");
-        println!("IniFile: {}", filename);
-        println!("Patch Date: {}", self.patch_date);
         Ok(())
     }
 
@@ -135,8 +132,6 @@ impl IniReader {
         self.config_filename = filename.to_string();
         let val = self.read_string_entry("Server", "StartMinimized", true);
         self.start_minimized = val.trim() == "1";
-        println!("IniReader: Reading Config INI file");
-        println!("ConfigIniFile: {}", filename);
     }
 
     pub fn read_string_entry(&self, section: &str, entry: &str, config: bool) -> String {

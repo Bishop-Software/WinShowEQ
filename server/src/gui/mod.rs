@@ -96,6 +96,12 @@ impl UiNotifier for EguiNotifier {
         }
         if event.error && !event.error_message.is_empty() {
             self.append_log(&format!("[ERROR] {}", event.error_message));
+        } else if event.connected {
+            self.append_log("[STATE] Connected");
+        } else if event.listening {
+            self.append_log("[STATE] Listening");
+        } else if event.paused {
+            self.append_log("[STATE] Paused");
         }
     }
 

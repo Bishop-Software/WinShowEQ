@@ -7,6 +7,7 @@ use crate::config::{IniReader, PrimaryOffsets, ServerConfigModel};
 use crate::data::spawn_offsets::{ItemOffsets, SpawnOffsets, WorldOffsets};
 use crate::mem_reader::MemReader;
 use crate::network::DataProvider;
+use crate::notifier::UiNotifier;
 
 // --------------------------------------------------------------------------
 // Raw-byte field extraction helpers
@@ -129,6 +130,7 @@ pub struct MemDataProvider {
     world_off: WorldOffsets,
     /// Throttle counter for reattach attempts (retries on value % 10 == 2).
     check_ctr: AtomicU32,
+    notifier: Option<Arc<dyn UiNotifier>>,
 }
 
 impl MemDataProvider {
@@ -138,6 +140,7 @@ impl MemDataProvider {
         spawn_off: SpawnOffsets,
         item_off: ItemOffsets,
         world_off: WorldOffsets,
+        notifier: Option<Arc<dyn UiNotifier>>,
     ) -> Self {
         Self {
             mem,
@@ -146,6 +149,7 @@ impl MemDataProvider {
             item_off,
             world_off,
             check_ctr: AtomicU32::new(0),
+            notifier,
         }
     }
 }
@@ -153,7 +157,7 @@ impl MemDataProvider {
 impl DataProvider for MemDataProvider {
     fn zone_name(&self) -> String {
         let mut mem = self.mem.lock().unwrap();
-        if !try_attach(&mut mem, &self.check_ctr) {
+        if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return "StartUp".to_string();
         }
         let addr = self.primary.zone_name;
@@ -167,7 +171,7 @@ impl DataProvider for MemDataProvider {
 
     fn self_spawn(&self) -> Option<SpawnRecord> {
         let mut mem = self.mem.lock().unwrap();
-        if !try_attach(&mut mem, &self.check_ctr) {
+        if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return None;
         }
         let addr = self.primary.self_addr;
@@ -184,7 +188,7 @@ impl DataProvider for MemDataProvider {
 
     fn spawn_list(&self) -> Vec<SpawnRecord> {
         let mut mem = self.mem.lock().unwrap();
-        if !try_attach(&mut mem, &self.check_ctr) {
+        if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return Vec::new();
         }
         let addr = self.primary.spawn_list;
@@ -235,7 +239,7 @@ impl DataProvider for MemDataProvider {
 
     fn target(&self) -> Option<SpawnRecord> {
         let mut mem = self.mem.lock().unwrap();
-        if !try_attach(&mut mem, &self.check_ctr) {
+        if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return None;
         }
         let addr = self.primary.target;
@@ -252,7 +256,7 @@ impl DataProvider for MemDataProvider {
 
     fn ground_items(&self) -> Vec<SpawnRecord> {
         let mut mem = self.mem.lock().unwrap();
-        if !try_attach(&mut mem, &self.check_ctr) {
+        if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return Vec::new();
         }
         let addr = self.primary.ground;
@@ -301,7 +305,7 @@ impl DataProvider for MemDataProvider {
 
     fn world_time(&self) -> Option<WorldTime> {
         let mut mem = self.mem.lock().unwrap();
-        if !try_attach(&mut mem, &self.check_ctr) {
+        if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return None;
         }
         let addr = self.primary.world;
@@ -326,7 +330,11 @@ impl DataProvider for MemDataProvider {
 /// Check if MemReader is attached; try to reattach if not.
 /// Retries every ~10th call to avoid hammering the process list.
 /// Mirrors the check_delay logic in ServerLogic::onDataReceived().
-fn try_attach(mem: &mut MemReader, counter: &AtomicU32) -> bool {
+fn try_attach(
+    mem: &mut MemReader,
+    counter: &AtomicU32,
+    notifier: Option<&Arc<dyn UiNotifier>>,
+) -> bool {
     if mem.is_valid() {
         return true;
     }
@@ -334,7 +342,11 @@ fn try_attach(mem: &mut MemReader, counter: &AtomicU32) -> bool {
     if n % 10 == 2 {
         if let Some(pid) = MemReader::find_process("eqgame.exe") {
             if mem.open(pid).is_ok() {
-                println!("[STATE] Attached to eqgame.exe PID={pid}");
+                if let Some(notifier) = notifier {
+                    notifier.on_log_event(&format!("Attached to eqgame.exe PID={pid}"));
+                } else {
+                    println!("[STATE] Attached to eqgame.exe PID={pid}");
+                }
             }
         }
     }

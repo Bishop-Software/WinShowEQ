@@ -96,15 +96,17 @@ impl SessionRunner {
         let (ir, config) = match self.logic.load_config() {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("[ERROR] {e}");
+                self.notifier.on_error("SessionRunner", &e);
                 self.last_error = e;
                 self.transition_to(SessionState::Error);
                 return;
             }
         };
 
-        println!("[INFO] Patch date: {}", ir.patch_date);
-        println!("[INFO] Port: {}", config.port);
+        self.notifier
+            .on_info("SessionRunner", &format!("Patch date: {}", ir.patch_date));
+        self.notifier
+            .on_info("SessionRunner", &format!("Port: {}", config.port));
 
         self.notifier.on_status_update(&build_initial_snapshot(&ir, &config));
 
@@ -113,7 +115,8 @@ impl SessionRunner {
         let world_off = WorldOffsets::from_ini(&ir);
 
         if spawn_off.buf_size <= 30 {
-            eprintln!("[WARN] SpawnInfo Offsets are all zero — check myseqserver.ini");
+            self.notifier
+                .on_log_event("WARN: SpawnInfo Offsets are all zero — check myseqserver.ini");
         }
 
         let mem = Arc::new(Mutex::new(MemReader::new()));
@@ -122,14 +125,17 @@ impl SessionRunner {
         if let Some(pid) = MemReader::find_process("eqgame.exe") {
             let mut r = mem.lock().unwrap();
             match r.open(pid) {
-                Ok(()) => println!(
-                    "[STATE] Attached to eqgame.exe PID={pid}  Base=0x{:X}",
+                Ok(()) => self.notifier.on_log_event(&format!(
+                    "Attached to eqgame.exe PID={pid} Base=0x{:X}",
                     r.base_address()
-                ),
-                Err(e) => eprintln!("[WARN] Could not attach to eqgame.exe: {e}"),
+                )),
+                Err(e) => self
+                    .notifier
+                    .on_log_event(&format!("WARN: Could not attach to eqgame.exe: {e}")),
             }
         } else {
-            println!("[WARN] eqgame.exe not running — will attach when found");
+            self.notifier
+                .on_log_event("WARN: eqgame.exe not running — will attach when found");
         }
 
         let provider = Arc::new(MemDataProvider::new(
@@ -138,6 +144,7 @@ impl SessionRunner {
             spawn_off,
             item_off,
             world_off,
+            Some(Arc::clone(&self.notifier)),
         ));
 
         let mut server = NetworkServer::new(config.port as u16);
