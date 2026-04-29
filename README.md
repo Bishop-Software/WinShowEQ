@@ -1,9 +1,8 @@
 # WinShowEQ
 
 Rust rewrite of the [MySEQ](https://sourceforge.net/projects/seq/) EverQuest map overlay tool.
-This repo contains both the **server** (reads EQ memory, streams data over TCP) and the
-**client** (receives data, renders a live map overlay) — replacing the original C++ server
-and C# WinForms client with a single pure-Rust workspace.
+This repo contains both the **server** (reads EQ memory and streams data over TCP) and the
+future **client** (planned Rust overlay) in a single workspace.
 
 ## Status
 
@@ -15,21 +14,22 @@ and C# WinForms client with a single pure-Rust workspace.
 | Server    | M4 — Network server + binary protocol         | Complete    |
 | Server    | M5 — Server logic + console mode (end-to-end) | Complete    |
 | Server    | M6 — Debug loop, full CLI (`clap`)            | Complete    |
-| Server    | M7 — GUI (`egui` + `eframe`)                  | In progress |
+| Server    | M7 — GUI (`egui` + `eframe`)                  | Partial     |
 | Client    | Prereq — Cargo workspace restructure          | Complete    |
-| Client    | C1 — Common crate + client foundation         | Not started |
+| Client    | C1 — Common crate + client foundation         | Scaffold only |
 | Client    | C2–C8 — Network, map, rendering, filters…     | Not started |
 
 ## What it does
 
-MySEQ is a map overlay tool for EverQuest. The server component:
+MySEQ is a map overlay tool for EverQuest. The server component today:
 - Attaches to a running `eqgame.exe` via `ReadProcessMemory`
 - Reads spawn positions, zone info, ground items, and player state from EQ memory
 - Streams packed binary records over TCP (default port 5555) to a connected client
+- Supports GUI mode (default), console mode, and debug mode
 
-The client component (in progress):
-- Connects to the server and receives live spawn data
-- Renders a 2D map overlay with spawn dots, player position, zone lines, and labels
+The Rust client component currently:
+- Is scaffolded only (`client/src/main.rs` placeholder)
+- Does not yet implement map rendering or server connectivity
 
 ## Workspace layout
 
@@ -65,11 +65,11 @@ WinShowEQ/
 
 ## Building and running
 
-```bash
+```powershell
 # Build everything
 cargo build
 
-# Run the server (console mode)
+# Run the server (default: GUI mode)
 cargo run -p winshoweq-server
 
 # Run the server with an explicit mode
@@ -90,6 +90,8 @@ cargo test
 # Build release binary
 cargo build --release -p winshoweq-server
 ```
+
+Automated/manual server test docs live in `server/scripts/README.md`.
 
 ## Configuration
 
@@ -148,6 +150,9 @@ The server speaks a simple binary protocol compatible with the original C# MySEQ
 
 `SpawnRecord` is a 100-byte `#[repr(C, packed)]` struct (`netBuffer_t` in the C++ source).
 The `flags` field carries the `OPT_*` packet type (zone, self, spawn, target, ground, world).
+
+See `common/src/protocol.rs` and `server/src/network.rs` for the source-of-truth constants and
+encoding behavior.
 
 ## Installer
 
