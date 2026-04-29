@@ -1,9 +1,10 @@
 use std::sync::{Arc, Mutex};
 
+use crate::config::{IniReader, ServerConfigModel};
 use crate::data::spawn_offsets::{ItemOffsets, SpawnOffsets, WorldOffsets};
 use crate::mem_reader::MemReader;
 use crate::network::NetworkServer;
-use crate::notifier::{ConnectionEvent, LoggingNotifier, UiNotifier};
+use crate::notifier::{ConnectionEvent, LoggingNotifier, StatusSnapshot, UiNotifier};
 use crate::server_logic::{MemDataProvider, ServerLogic};
 
 /// Server session state machine.
@@ -105,6 +106,8 @@ impl SessionRunner {
         println!("[INFO] Patch date: {}", ir.patch_date);
         println!("[INFO] Port: {}", config.port);
 
+        self.notifier.on_status_update(&build_initial_snapshot(&ir, &config));
+
         let spawn_off = SpawnOffsets::from_ini(&ir);
         let item_off = ItemOffsets::from_ini(&ir);
         let world_off = WorldOffsets::from_ini(&ir);
@@ -147,4 +150,39 @@ impl SessionRunner {
 
         self.transition_to(SessionState::Idle);
     }
+}
+
+fn build_initial_snapshot(ir: &IniReader, config: &ServerConfigModel) -> StatusSnapshot {
+    let o = &config.offsets;
+    StatusSnapshot {
+        patch_date: ir.patch_date.clone(),
+        port: config.port,
+        primary_address: primary_ip(),
+        spawn_list_addr: fmt_addr(o.spawn_list),
+        self_addr: fmt_addr(o.self_addr),
+        target_addr: fmt_addr(o.target),
+        zone_name_addr: fmt_addr(o.zone_name),
+        ground_addr: fmt_addr(o.ground),
+        world_addr: fmt_addr(o.world),
+        npc_count: -1,
+        pc_count: -1,
+        corpse_count: -1,
+        item_count: -1,
+        ..StatusSnapshot::default()
+    }
+}
+
+fn fmt_addr(addr: u64) -> String {
+    if addr != 0 { format!("0x{addr:X}") } else { String::new() }
+}
+
+fn primary_ip() -> String {
+    use std::net::ToSocketAddrs;
+    let hostname = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "localhost".into());
+    (hostname.as_str(), 0u16)
+        .to_socket_addrs()
+        .ok()
+        .and_then(|mut addrs| addrs.find(|a| !a.ip().is_loopback()))
+        .map(|a| a.ip().to_string())
+        .unwrap_or_default()
 }

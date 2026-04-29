@@ -47,6 +47,35 @@ impl Default for StatusSnapshot {
     }
 }
 
+impl StatusSnapshot {
+    /// Merge `other` into `self`, updating only fields that carry non-default values.
+    pub fn merge_from(&mut self, other: &StatusSnapshot) {
+        if !other.patch_date.is_empty()      { self.patch_date      = other.patch_date.clone(); }
+        if !other.status_text.is_empty()     { self.status_text     = other.status_text.clone(); }
+        if !other.primary_address.is_empty() { self.primary_address = other.primary_address.clone(); }
+        if other.port != 0                   { self.port            = other.port; }
+        if !other.spawn_list_addr.is_empty() { self.spawn_list_addr = other.spawn_list_addr.clone(); }
+        if !other.self_addr.is_empty()       { self.self_addr       = other.self_addr.clone(); }
+        if !other.target_addr.is_empty()     { self.target_addr     = other.target_addr.clone(); }
+        if !other.zone_name_addr.is_empty()  { self.zone_name_addr  = other.zone_name_addr.clone(); }
+        if !other.ground_addr.is_empty()     { self.ground_addr     = other.ground_addr.clone(); }
+        if !other.world_addr.is_empty()      { self.world_addr      = other.world_addr.clone(); }
+        if other.npc_count    >= 0           { self.npc_count       = other.npc_count; }
+        if other.pc_count     >= 0           { self.pc_count        = other.pc_count; }
+        if other.corpse_count >= 0           { self.corpse_count    = other.corpse_count; }
+        if other.item_count   >= 0           { self.item_count      = other.item_count; }
+        if other.clear_zone_and_name {
+            self.clear_zone_and_name = true;
+            self.zone           = String::new();
+            self.character_name = String::new();
+        } else {
+            self.clear_zone_and_name = false;
+            if !other.zone.is_empty()           { self.zone           = other.zone.clone(); }
+            if !other.character_name.is_empty() { self.character_name = other.character_name.clone(); }
+        }
+    }
+}
+
 /// Connection state change event delivered to the UI layer.
 /// Mirrors ServerConnectionEvent in IServerUiNotifier.h.
 #[derive(Debug, Clone, Default)]

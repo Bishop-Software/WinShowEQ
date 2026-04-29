@@ -5,3 +5,18 @@ members = [
     "client",
 ]
 resolver = "2"
+
+[workspace.package]
+exclude = [
+    "installer/*",
+    "dist/*",
+    "build/*",
+    "maps/generated/*",
+    "maps/cache/*",
+    "maps/tiles/*",
+    "icons/exported/*",
+    "branding/renders/*",
+    "branding/previews/*",
+    "*.pcap",
+    "*.pcapng",
+]

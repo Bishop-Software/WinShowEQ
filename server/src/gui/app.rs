@@ -1,19 +1,86 @@
 use std::sync::{Arc, Mutex};
 
-use eframe::egui::{self, Color32};
+use eframe::egui::{self, Color32, RichText};
+use tray_icon::{
+    menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem},
+    Icon, MouseButton, TrayIcon, TrayIconBuilder, TrayIconEvent,
+};
 
+use crate::config::IniReader;
 use crate::session::SessionState;
 use super::GuiState;
 
 pub struct WinShowEQApp {
     state: Arc<Mutex<GuiState>>,
     ini_path: String,
+    config_ini_path: String,
+    _tray: TrayIcon,
+    menu_open: MenuItem,
+    menu_start_min: CheckMenuItem,
+    menu_exit: MenuItem,
+    window_visible: bool,
 }
 
 impl WinShowEQApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>, state: Arc<Mutex<GuiState>>, ini_path: String) -> Self {
-        Self { state, ini_path }
+    pub fn new(
+        _cc: &eframe::CreationContext<'_>,
+        state: Arc<Mutex<GuiState>>,
+        ini_path: String,
+        config_ini_path: String,
+        start_minimized: bool,
+    ) -> Self {
+        let menu_open = MenuItem::new("Open", true, None);
+        let menu_start_min = CheckMenuItem::new("Start Minimized", true, start_minimized, None);
+        let menu_exit = MenuItem::new("Exit", true, None);
+
+        let menu = Menu::new();
+        menu.append_items(&[
+            &menu_open,
+            &PredefinedMenuItem::separator(),
+            &menu_start_min,
+            &PredefinedMenuItem::separator(),
+            &menu_exit,
+        ])
+        .expect("tray menu build");
+
+        let tray = TrayIconBuilder::new()
+            .with_menu(Box::new(menu))
+            .with_tooltip("WinShowEQ")
+            .with_icon(make_placeholder_icon())
+            .build()
+            .expect("tray icon creation");
+
+        Self {
+            state,
+            ini_path,
+            config_ini_path,
+            _tray: tray,
+            menu_open,
+            menu_start_min,
+            menu_exit,
+            window_visible: !start_minimized,
+        }
     }
+
+    fn show_window(&mut self, ctx: &egui::Context) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        self.window_visible = true;
+    }
+
+    fn toggle_start_minimized(&mut self) {
+        let mut ir = IniReader::new();
+        ir.open_config_file(&self.config_ini_path);
+        ir.toggle_start_minimized();
+        self.menu_start_min.set_checked(ir.start_minimized);
+    }
+}
+
+fn make_placeholder_icon() -> Icon {
+    let size = 16u32;
+    let rgba: Vec<u8> = (0..size * size).flat_map(|_| [50u8, 160, 50, 255]).collect();
+    Icon::from_rgba(rgba, size, size).expect("valid tray icon")
 }
 
 fn status_color(state: SessionState) -> Color32 {
@@ -42,21 +109,39 @@ fn list_local_ips() -> Vec<String> {
     }
 }
 
-// Two-column label/value grid with a fixed minimum label column width.
-fn status_grid<'a>(id: &'static str, label_min_width: f32) -> egui::Grid {
-    egui::Grid::new(id)
-        .num_columns(2)
-        .min_col_width(label_min_width)
-        .spacing([8.0, 4.0])
-}
-
 impl eframe::App for WinShowEQApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Keep polling even when the window is hidden.
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
 
-        let (snapshot, session_state) = {
+        // X button closes the app. Exit via tray menu also closes.
+        if ctx.input(|i| i.viewport().close_requested()) {
+            // Let eframe close naturally — no CancelClose intercept.
+        }
+
+        // Tray icon clicks — double-click restores if window is hidden.
+        while let Ok(event) = TrayIconEvent::receiver().try_recv() {
+            if let TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } = event {
+                self.show_window(ctx);
+            }
+        }
+
+        // Tray context menu selections.
+        while let Ok(event) = MenuEvent::receiver().try_recv() {
+            if event.id == *self.menu_open.id() {
+                self.show_window(ctx);
+            } else if event.id == *self.menu_start_min.id() {
+                self.toggle_start_minimized();
+            } else if event.id == *self.menu_exit.id() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let (snapshot, session_state, log) = {
             let Ok(s) = self.state.lock() else { return };
-            (s.snapshot.clone(), s.session_state)
+            (s.snapshot.clone(), s.session_state, s.log.clone())
         };
 
         let status_text = if snapshot.status_text.is_empty() {
@@ -77,69 +162,89 @@ impl eframe::App for WinShowEQApp {
         let character = if snapshot.clear_zone_and_name { "" } else { snapshot.character_name.as_str() };
         let port_str = if snapshot.port > 0 { snapshot.port.to_string() } else { String::new() };
 
-        // ── Status / connection info — two side-by-side grids ─────────────────
-        ui.columns(2, |cols| {
-            status_grid("status_left", 80.0).show(&mut cols[0], |ui| {
-                ui.label("Status:");
-                ui.colored_label(status_color(session_state), &status_text);
-                ui.end_row();
-                ui.label("Port:");
-                ui.label(&port_str);
+        // ── Status info block ─────────────────────────────────────────────────
+        ui.horizontal(|ui| {
+            egui::Grid::new("status_port")
+                .num_columns(4)
+                .min_col_width(70.0)
+                .spacing([8.0, 0.0])
+                .show(ui, |ui| {
+                    ui.label("Status:");
+                    ui.colored_label(status_color(session_state), &status_text);
+                    ui.label("Port:");
+                    ui.label(&port_str);
+                    ui.end_row();
+                });
+        });
+
+        egui::Grid::new("status_details")
+            .num_columns(2)
+            .min_col_width(80.0)
+            .spacing([8.0, 4.0])
+            .show(ui, |ui| {
+                ui.label("Patch:");
+                ui.label(&snapshot.patch_date);
                 ui.end_row();
                 ui.label("Zone:");
                 ui.label(zone);
-                ui.end_row();
-            });
-
-            status_grid("status_right", 80.0).show(&mut cols[1], |ui| {
-                ui.label("Primary:");
-                ui.label(&snapshot.primary_address);
-                ui.end_row();
-                ui.label("Patch Date:");
-                ui.label(&snapshot.patch_date);
                 ui.end_row();
                 ui.label("Character:");
                 ui.label(character);
                 ui.end_row();
             });
+
+        // IP Address + List IPs inline (mirrors C++ layout)
+        ui.horizontal(|ui| {
+            ui.label("IP Address:");
+            ui.label(&snapshot.primary_address);
+            if ui.button("List IPs").clicked() {
+                let ips = list_local_ips();
+                if let Ok(mut s) = self.state.lock() {
+                    if ips.is_empty() {
+                        s.push_log("List IPs: no non-loopback addresses found");
+                    } else {
+                        for ip in &ips {
+                            s.push_log(&format!("Local IP: {ip}"));
+                        }
+                    }
+                }
+            }
         });
 
         ui.separator();
 
-        // ── Spawn counts ──────────────────────────────────────────────────────
-        ui.columns(4, |cols| {
-            count_col(&mut cols[0], "NPCs", snapshot.npc_count);
-            count_col(&mut cols[1], "PCs", snapshot.pc_count);
-            count_col(&mut cols[2], "Corpses", snapshot.corpse_count);
-            count_col(&mut cols[3], "Items", snapshot.item_count);
-        });
-
-        ui.separator();
-
-        // ── Memory addresses — two side-by-side grids ─────────────────────────
+        // ── Primary Offsets (left) + Spawns (right) ───────────────────────────
         ui.columns(2, |cols| {
-            status_grid("addr_left", 100.0).show(&mut cols[0], |ui| {
-                ui.label("SpawnHeader:");
-                ui.monospace(&snapshot.spawn_list_addr);
-                ui.end_row();
-                ui.label("Target:");
-                ui.monospace(&snapshot.target_addr);
-                ui.end_row();
-                ui.label("Items Addr:");
-                ui.monospace(&snapshot.ground_addr);
-                ui.end_row();
+            cols[0].group(|ui| {
+                ui.label(RichText::new("Primary Offsets").strong());
+                ui.add_space(2.0);
+                egui::Grid::new("offsets_grid")
+                    .num_columns(2)
+                    .min_col_width(90.0)
+                    .spacing([8.0, 4.0])
+                    .show(ui, |ui| {
+                        addr_row(ui, "ZoneAddr:", &snapshot.zone_name_addr);
+                        addr_row(ui, "TargetAddr:", &snapshot.target_addr);
+                        addr_row(ui, "SpawnHeader:", &snapshot.spawn_list_addr);
+                        addr_row(ui, "CharInfo:", &snapshot.self_addr);
+                        addr_row(ui, "ItemsAddr:", &snapshot.ground_addr);
+                        addr_row(ui, "WorldAddr:", &snapshot.world_addr);
+                    });
             });
 
-            status_grid("addr_right", 80.0).show(&mut cols[1], |ui| {
-                ui.label("CharInfo:");
-                ui.monospace(&snapshot.self_addr);
-                ui.end_row();
-                ui.label("Zone Addr:");
-                ui.monospace(&snapshot.zone_name_addr);
-                ui.end_row();
-                ui.label("World:");
-                ui.monospace(&snapshot.world_addr);
-                ui.end_row();
+            cols[1].group(|ui| {
+                ui.label(RichText::new("Spawns").strong());
+                ui.add_space(2.0);
+                egui::Grid::new("spawns_grid")
+                    .num_columns(2)
+                    .min_col_width(60.0)
+                    .spacing([8.0, 4.0])
+                    .show(ui, |ui| {
+                        count_row(ui, "NPC:", snapshot.npc_count);
+                        count_row(ui, "PC:", snapshot.pc_count);
+                        count_row(ui, "Corpse:", snapshot.corpse_count);
+                        count_row(ui, "Ground:", snapshot.item_count);
+                    });
             });
         });
 
@@ -153,40 +258,37 @@ impl eframe::App for WinShowEQApp {
                     .spawn()
                     .ok();
             }
-
             if ui.button("Reload Offsets").clicked() {
                 if let Ok(mut s) = self.state.lock() {
                     s.push_log("Reload Offsets: not yet wired to server thread");
                 }
             }
-
-            if ui.button("List IPs").clicked() {
-                let ips = list_local_ips();
-                if let Ok(mut s) = self.state.lock() {
-                    if ips.is_empty() {
-                        s.push_log("List IPs: no non-loopback addresses found");
-                    } else {
-                        for ip in &ips {
-                            s.push_log(&format!("Local IP: {ip}"));
-                        }
-                    }
-                }
-            }
-
             // Offset Finder — implemented in M7-6.
             ui.add_enabled(false, egui::Button::new("Offset Finder"));
         });
 
         ui.separator();
 
-        // ── Log pane (M7-4) ───────────────────────────────────────────────────
-        ui.label("(log — M7-4)");
+        // ── Log pane ──────────────────────────────────────────────────────────
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .stick_to_bottom(true)
+            .show(ui, |ui| {
+                for line in &log {
+                    ui.label(RichText::new(line).monospace());
+                }
+            });
     }
 }
 
-fn count_col(ui: &mut egui::Ui, label: &str, count: i32) {
-    ui.vertical_centered(|ui| {
-        ui.label(label);
-        ui.label(if count < 0 { "—".into() } else { count.to_string() });
-    });
+fn addr_row(ui: &mut egui::Ui, label: &str, value: &str) {
+    ui.label(label);
+    ui.monospace(value);
+    ui.end_row();
+}
+
+fn count_row(ui: &mut egui::Ui, label: &str, count: i32) {
+    ui.label(label);
+    ui.label(if count < 0 { "—".into() } else { count.to_string() });
+    ui.end_row();
 }

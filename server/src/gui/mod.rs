@@ -68,7 +68,7 @@ impl EguiNotifier {
 impl UiNotifier for EguiNotifier {
     fn on_status_update(&self, snapshot: &StatusSnapshot) {
         if let Ok(mut s) = self.state.lock() {
-            s.snapshot = snapshot.clone();
+            s.snapshot.merge_from(snapshot);
         }
     }
 

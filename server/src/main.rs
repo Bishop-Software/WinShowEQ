@@ -70,10 +70,17 @@ fn run_gui(ini_override: Option<&str>) {
         .unwrap_or_else(|| resolve_ini_path("myseqserver.ini"));
     let config_ini_path = resolve_ini_path("config.ini");
 
+    let start_minimized = {
+        let mut ir = IniReader::new();
+        ir.open_config_file(&config_ini_path);
+        ir.start_minimized
+    };
+
     let gui_state = Arc::new(Mutex::new(gui::GuiState::default()));
     let notifier = Arc::new(gui::EguiNotifier::new(Arc::clone(&gui_state)));
 
     let ini_path_for_gui = ini_path.clone();
+    let config_ini_path_for_gui = config_ini_path.clone();
     let mut runner = SessionRunner::new(ini_path, config_ini_path);
     runner.set_notifier(notifier as Arc<dyn UiNotifier>);
 
@@ -82,13 +89,23 @@ fn run_gui(ini_override: Option<&str>) {
     });
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([660.0, 460.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([660.0, 460.0])
+            .with_visible(!start_minimized),
         ..Default::default()
     };
     eframe::run_native(
         "WinShowEQ",
         options,
-        Box::new(|cc| Ok(Box::new(gui::WinShowEQApp::new(cc, gui_state, ini_path_for_gui)))),
+        Box::new(move |cc| {
+            Ok(Box::new(gui::WinShowEQApp::new(
+                cc,
+                gui_state,
+                ini_path_for_gui,
+                config_ini_path_for_gui,
+                start_minimized,
+            )))
+        }),
     )
     .expect("eframe failed to start");
 }

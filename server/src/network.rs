@@ -59,9 +59,6 @@ impl NetworkServer {
         println!("MySEQServer: Listening on 0.0.0.0:{}", self.port);
 
         if let Some(n) = &self.notifier {
-            let mut snap = StatusSnapshot::default();
-            snap.port = self.port as u32;
-            n.on_status_update(&snap);
             n.on_connection_changed(&ConnectionEvent {
                 listening: true,
                 ..Default::default()
@@ -105,6 +102,7 @@ impl NetworkServer {
         let mut zone_name = String::from("StartUp");
         // When true, next 4-byte recv is the target PID from an IPT_SETPROC request.
         let mut change_process = false;
+        let mut ui_char_name = String::new();
 
         loop {
             let mut buf = [0u8; 4];
@@ -120,6 +118,8 @@ impl NetworkServer {
             }
 
             let mut records: Vec<SpawnRecord> = Vec::new();
+            let mut ui_snap = StatusSnapshot::default();
+            let mut ui_dirty = false;
 
             if request & IPT_GETPROC != 0 {
                 for pid in provider.processes() {
@@ -145,20 +145,38 @@ impl NetworkServer {
                     rec.flags = OPT_ZONE;
                     records.push(rec);
                 }
+                ui_snap.zone = zone_name.clone();
+                ui_dirty = true;
             }
 
             if request & IPT_SELF != 0 {
                 if let Some(mut rec) = provider.self_spawn() {
                     rec.flags = OPT_SELF;
+                    let len = rec.name.iter().position(|&b| b == 0).unwrap_or(rec.name.len());
+                    ui_char_name = String::from_utf8_lossy(&rec.name[..len]).into_owned();
+                    ui_snap.character_name = ui_char_name.clone();
+                    ui_dirty = true;
                     records.push(rec);
                 }
             }
 
             if request & IPT_SPAWNS != 0 {
+                let mut npc = 0i32;
+                let mut pc = 0i32;
+                let mut corpse = 0i32;
                 for mut rec in provider.spawn_list() {
+                    match rec.spawn_type {
+                        1 => pc += 1,
+                        2 => corpse += 1,
+                        _ => npc += 1,
+                    }
                     rec.flags = OPT_SPAWNS;
                     records.push(rec);
                 }
+                ui_snap.npc_count    = npc;
+                ui_snap.pc_count     = pc;
+                ui_snap.corpse_count = corpse;
+                ui_dirty = true;
             }
 
             if request & IPT_TARGET != 0 {
@@ -178,7 +196,10 @@ impl NetworkServer {
             }
 
             if request & IPT_GROUND != 0 {
-                for mut rec in provider.ground_items() {
+                let items = provider.ground_items();
+                ui_snap.item_count = items.len() as i32;
+                ui_dirty = true;
+                for mut rec in items {
                     rec.flags = OPT_GROUND;
                     records.push(rec);
                 }
@@ -187,6 +208,12 @@ impl NetworkServer {
             if request & IPT_WORLD != 0 {
                 if let Some(wt) = provider.world_time() {
                     records.push(world_time_to_record(wt));
+                }
+            }
+
+            if ui_dirty {
+                if let Some(n) = &self.notifier {
+                    n.on_status_update(&ui_snap);
                 }
             }
 
