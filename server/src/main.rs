@@ -21,6 +21,11 @@ use notifier::{LoggingNotifier, UiNotifier};
 use scanner::EqGameScanner;
 use session::SessionRunner;
 
+const GUI_DEFAULT_WIDTH: f32 = 660.0;
+const GUI_DEFAULT_HEIGHT: f32 = 560.0;
+const GUI_MIN_WIDTH: f32 = 660.0;
+const GUI_MIN_HEIGHT: f32 = 560.0;
+
 #[derive(Parser)]
 #[command(
     name = "WinShowEQServer",
@@ -90,7 +95,8 @@ fn run_gui(ini_override: Option<&str>) {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([660.0, 460.0])
+            .with_inner_size([GUI_DEFAULT_WIDTH, GUI_DEFAULT_HEIGHT])
+            .with_min_inner_size([GUI_MIN_WIDTH, GUI_MIN_HEIGHT])
             .with_visible(!start_minimized),
         ..Default::default()
     };

@@ -10,6 +10,9 @@ use crate::config::IniReader;
 use crate::session::SessionState;
 use super::GuiState;
 
+const WINDOW_PADDING: i8 = 10;
+const SIDE_BY_SIDE_MIN_WIDTH: f32 = 560.0;
+
 pub struct WinShowEQApp {
     state: Arc<Mutex<GuiState>>,
     ini_path: String,
@@ -139,144 +142,128 @@ impl eframe::App for WinShowEQApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let (snapshot, session_state, log) = {
-            let Ok(s) = self.state.lock() else { return };
-            (s.snapshot.clone(), s.session_state, s.log.clone())
-        };
-
-        let status_text = if snapshot.status_text.is_empty() {
-            match session_state {
-                SessionState::Idle | SessionState::Stopping => "Idle",
-                SessionState::Starting => "Starting",
-                SessionState::Listening => "Listening",
-                SessionState::Connected => "Connected",
-                SessionState::Error => "Error",
-                SessionState::Paused => "Paused",
-            }
-            .to_owned()
-        } else {
-            snapshot.status_text.clone()
-        };
-
-        let zone = if snapshot.clear_zone_and_name { "" } else { snapshot.zone.as_str() };
-        let character = if snapshot.clear_zone_and_name { "" } else { snapshot.character_name.as_str() };
-        let port_str = if snapshot.port > 0 { snapshot.port.to_string() } else { String::new() };
-
-        // ── Status info block ─────────────────────────────────────────────────
-        ui.horizontal(|ui| {
-            egui::Grid::new("status_port")
-                .num_columns(4)
-                .min_col_width(70.0)
-                .spacing([8.0, 0.0])
-                .show(ui, |ui| {
-                    ui.label("Status:");
-                    ui.colored_label(status_color(session_state), &status_text);
-                    ui.label("Port:");
-                    ui.label(&port_str);
-                    ui.end_row();
-                });
-        });
-
-        egui::Grid::new("status_details")
-            .num_columns(2)
-            .min_col_width(80.0)
-            .spacing([8.0, 4.0])
+        egui::Frame::NONE
+            .inner_margin(egui::Margin::same(WINDOW_PADDING))
             .show(ui, |ui| {
-                ui.label("Patch:");
-                ui.label(&snapshot.patch_date);
-                ui.end_row();
-                ui.label("Zone:");
-                ui.label(zone);
-                ui.end_row();
-                ui.label("Character:");
-                ui.label(character);
-                ui.end_row();
-            });
+                let (snapshot, session_state, log) = {
+                    let Ok(s) = self.state.lock() else { return };
+                    (s.snapshot.clone(), s.session_state, s.log.clone())
+                };
 
-        // IP Address + List IPs inline (mirrors C++ layout)
-        ui.horizontal(|ui| {
-            ui.label("IP Address:");
-            ui.label(&snapshot.primary_address);
-            if ui.button("List IPs").clicked() {
-                let ips = list_local_ips();
-                if let Ok(mut s) = self.state.lock() {
-                    if ips.is_empty() {
-                        s.push_log("List IPs: no non-loopback addresses found");
-                    } else {
-                        for ip in &ips {
-                            s.push_log(&format!("Local IP: {ip}"));
+                let status_text = if snapshot.status_text.is_empty() {
+                    match session_state {
+                        SessionState::Idle | SessionState::Stopping => "Idle",
+                        SessionState::Starting => "Starting",
+                        SessionState::Listening => "Listening",
+                        SessionState::Connected => "Connected",
+                        SessionState::Error => "Error",
+                        SessionState::Paused => "Paused",
+                    }
+                    .to_owned()
+                } else {
+                    snapshot.status_text.clone()
+                };
+
+                let zone = if snapshot.clear_zone_and_name { "" } else { snapshot.zone.as_str() };
+                let character = if snapshot.clear_zone_and_name { "" } else { snapshot.character_name.as_str() };
+                let port_str = if snapshot.port > 0 { snapshot.port.to_string() } else { String::new() };
+
+                // ── Status info block ─────────────────────────────────────────────────
+                ui.horizontal(|ui| {
+                    egui::Grid::new("status_port")
+                        .num_columns(4)
+                        .min_col_width(70.0)
+                        .spacing([8.0, 0.0])
+                        .show(ui, |ui| {
+                            ui.label("Status:");
+                            ui.colored_label(status_color(session_state), &status_text);
+                            ui.label("Port:");
+                            ui.label(&port_str);
+                            ui.end_row();
+                        });
+                });
+
+                egui::Grid::new("status_details")
+                    .num_columns(2)
+                    .min_col_width(80.0)
+                    .spacing([8.0, 4.0])
+                    .show(ui, |ui| {
+                        ui.label("Patch:");
+                        ui.label(&snapshot.patch_date);
+                        ui.end_row();
+                        ui.label("Zone:");
+                        ui.label(zone);
+                        ui.end_row();
+                        ui.label("Character:");
+                        ui.label(character);
+                        ui.end_row();
+                    });
+
+                // IP Address + List IPs inline (mirrors C++ layout)
+                ui.horizontal(|ui| {
+                    ui.label("IP Address:");
+                    ui.label(&snapshot.primary_address);
+                    if ui.button("List IPs").clicked() {
+                        let ips = list_local_ips();
+                        if let Ok(mut s) = self.state.lock() {
+                            if ips.is_empty() {
+                                s.push_log("List IPs: no non-loopback addresses found");
+                            } else {
+                                for ip in &ips {
+                                    s.push_log(&format!("Local IP: {ip}"));
+                                }
+                            }
                         }
                     }
-                }
-            }
-        });
+                });
 
-        ui.separator();
+                ui.separator();
 
-        // ── Primary Offsets (left) + Spawns (right) ───────────────────────────
-        ui.columns(2, |cols| {
-            cols[0].group(|ui| {
-                ui.label(RichText::new("Primary Offsets").strong());
-                ui.add_space(2.0);
-                egui::Grid::new("offsets_grid")
-                    .num_columns(2)
-                    .min_col_width(90.0)
-                    .spacing([8.0, 4.0])
-                    .show(ui, |ui| {
-                        addr_row(ui, "ZoneAddr:", &snapshot.zone_name_addr);
-                        addr_row(ui, "TargetAddr:", &snapshot.target_addr);
-                        addr_row(ui, "SpawnHeader:", &snapshot.spawn_list_addr);
-                        addr_row(ui, "CharInfo:", &snapshot.self_addr);
-                        addr_row(ui, "ItemsAddr:", &snapshot.ground_addr);
-                        addr_row(ui, "WorldAddr:", &snapshot.world_addr);
+                // ── Primary Offsets + Spawns (responsive layout) ───────────────────────
+                let show_side_by_side = ui.available_width() >= SIDE_BY_SIDE_MIN_WIDTH;
+                if show_side_by_side {
+                    ui.columns(2, |cols| {
+                        render_primary_offsets_group(&mut cols[0], &snapshot);
+                        render_spawns_group(&mut cols[1], &snapshot);
                     });
-            });
+                } else {
+                    render_primary_offsets_group(ui, &snapshot);
 
-            cols[1].group(|ui| {
-                ui.label(RichText::new("Spawns").strong());
-                ui.add_space(2.0);
-                egui::Grid::new("spawns_grid")
-                    .num_columns(2)
-                    .min_col_width(60.0)
-                    .spacing([8.0, 4.0])
+                    ui.add_space(6.0);
+
+                    render_spawns_group(ui, &snapshot);
+                }
+
+                ui.separator();
+
+                // ── Buttons ───────────────────────────────────────────────────────────
+                ui.horizontal(|ui| {
+                    if ui.button("Edit INI").clicked() {
+                        std::process::Command::new("notepad.exe")
+                            .arg(&self.ini_path)
+                            .spawn()
+                            .ok();
+                    }
+                    if ui.button("Reload Offsets").clicked() {
+                        if let Ok(mut s) = self.state.lock() {
+                            s.push_log("Reload Offsets: not yet wired to server thread");
+                        }
+                    }
+                    // Offset Finder — implemented in M7-6.
+                    ui.add_enabled(false, egui::Button::new("Offset Finder"));
+                });
+
+                ui.separator();
+
+                // ── Log pane ──────────────────────────────────────────────────────────
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .stick_to_bottom(true)
                     .show(ui, |ui| {
-                        count_row(ui, "NPC:", snapshot.npc_count);
-                        count_row(ui, "PC:", snapshot.pc_count);
-                        count_row(ui, "Corpse:", snapshot.corpse_count);
-                        count_row(ui, "Ground:", snapshot.item_count);
+                        for line in &log {
+                            ui.label(RichText::new(line).monospace());
+                        }
                     });
-            });
-        });
-
-        ui.separator();
-
-        // ── Buttons ───────────────────────────────────────────────────────────
-        ui.horizontal(|ui| {
-            if ui.button("Edit INI").clicked() {
-                std::process::Command::new("notepad.exe")
-                    .arg(&self.ini_path)
-                    .spawn()
-                    .ok();
-            }
-            if ui.button("Reload Offsets").clicked() {
-                if let Ok(mut s) = self.state.lock() {
-                    s.push_log("Reload Offsets: not yet wired to server thread");
-                }
-            }
-            // Offset Finder — implemented in M7-6.
-            ui.add_enabled(false, egui::Button::new("Offset Finder"));
-        });
-
-        ui.separator();
-
-        // ── Log pane ──────────────────────────────────────────────────────────
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .stick_to_bottom(true)
-            .show(ui, |ui| {
-                for line in &log {
-                    ui.label(RichText::new(line).monospace());
-                }
             });
     }
 }
@@ -285,6 +272,42 @@ fn addr_row(ui: &mut egui::Ui, label: &str, value: &str) {
     ui.label(label);
     ui.monospace(value);
     ui.end_row();
+}
+
+fn render_primary_offsets_group(ui: &mut egui::Ui, snapshot: &crate::notifier::StatusSnapshot) {
+    ui.group(|ui| {
+        ui.label(RichText::new("Primary Offsets").strong());
+        ui.add_space(2.0);
+        egui::Grid::new("offsets_grid")
+            .num_columns(2)
+            .min_col_width(90.0)
+            .spacing([8.0, 4.0])
+            .show(ui, |ui| {
+                addr_row(ui, "ZoneAddr:", &snapshot.zone_name_addr);
+                addr_row(ui, "TargetAddr:", &snapshot.target_addr);
+                addr_row(ui, "SpawnHeader:", &snapshot.spawn_list_addr);
+                addr_row(ui, "CharInfo:", &snapshot.self_addr);
+                addr_row(ui, "ItemsAddr:", &snapshot.ground_addr);
+                addr_row(ui, "WorldAddr:", &snapshot.world_addr);
+            });
+    });
+}
+
+fn render_spawns_group(ui: &mut egui::Ui, snapshot: &crate::notifier::StatusSnapshot) {
+    ui.group(|ui| {
+        ui.label(RichText::new("Spawns").strong());
+        ui.add_space(2.0);
+        egui::Grid::new("spawns_grid")
+            .num_columns(2)
+            .min_col_width(60.0)
+            .spacing([8.0, 4.0])
+            .show(ui, |ui| {
+                count_row(ui, "NPC:", snapshot.npc_count);
+                count_row(ui, "PC:", snapshot.pc_count);
+                count_row(ui, "Corpse:", snapshot.corpse_count);
+                count_row(ui, "Ground:", snapshot.item_count);
+            });
+    });
 }
 
 fn count_row(ui: &mut egui::Ui, label: &str, count: i32) {
