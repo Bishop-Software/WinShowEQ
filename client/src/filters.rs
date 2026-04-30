@@ -1,0 +1,209 @@
+use std::collections::HashMap;
+use std::path::Path;
+
+use quick_xml::events::Event;
+use quick_xml::Reader;
+
+/// Filter category. Priority for overlapping matches: Danger > Caution > Hunt > Alert.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FilterCategory {
+    Hunt,
+    Caution,
+    Danger,
+    Alert,
+}
+
+impl FilterCategory {
+    fn priority(self) -> u8 {
+        match self {
+            Self::Danger => 3,
+            Self::Caution => 2,
+            Self::Hunt => 1,
+            Self::Alert => 0,
+        }
+    }
+}
+
+/// A set of named spawn filters organized by category.
+/// Load from `seqfilters` XML files (global and/or zone-specific).
+#[derive(Debug, Default)]
+pub struct FilterSet {
+    /// Lowercase name → highest-priority matching category.
+    entries: HashMap<String, FilterCategory>,
+}
+
+impl FilterSet {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Load from a `seqfilters` XML file. Missing files return an empty set.
+    ///
+    /// Expected format:
+    /// ```xml
+    /// <seqfilters>
+    ///   <hunt><item name="Fippy Darkpaw" /></hunt>
+    ///   <danger><item name="Nagafen" /></danger>
+    /// </seqfilters>
+    /// ```
+    pub fn load(path: &Path) -> Self {
+        let mut set = Self::new();
+        if !path.exists() {
+            return set;
+        }
+        if let Err(e) = set.load_file(path) {
+            eprintln!("FilterSet: failed to load {:?}: {e}", path);
+        }
+        set
+    }
+
+    fn load_file(&mut self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        let mut reader = Reader::from_file(path)?;
+        reader.config_mut().trim_text(true);
+        let mut buf = Vec::new();
+        let mut current: Option<FilterCategory> = None;
+
+        loop {
+            match reader.read_event_into(&mut buf)? {
+                Event::Start(e) => match e.name().as_ref() {
+                    b"hunt" => current = Some(FilterCategory::Hunt),
+                    b"caution" => current = Some(FilterCategory::Caution),
+                    b"danger" => current = Some(FilterCategory::Danger),
+                    b"alert" => current = Some(FilterCategory::Alert),
+                    b"item" => self.insert_from_element(&e, current),
+                    _ => {}
+                },
+                Event::Empty(e) => match e.name().as_ref() {
+                    b"item" => self.insert_from_element(&e, current),
+                    _ => {}
+                },
+                Event::End(e) => match e.name().as_ref() {
+                    b"hunt" | b"caution" | b"danger" | b"alert" => current = None,
+                    _ => {}
+                },
+                Event::Eof => break,
+                _ => {}
+            }
+            buf.clear();
+        }
+        Ok(())
+    }
+
+    fn insert_from_element(
+        &mut self,
+        e: &quick_xml::events::BytesStart<'_>,
+        category: Option<FilterCategory>,
+    ) {
+        let Some(cat) = category else { return };
+        for attr in e.attributes().flatten() {
+            if attr.key.as_ref() == b"name" {
+                let name = std::str::from_utf8(&attr.value)
+                    .unwrap_or("")
+                    .trim()
+                    .to_lowercase();
+                if !name.is_empty() {
+                    self.add(cat, name);
+                }
+                break;
+            }
+        }
+    }
+
+    /// Add a named entry to the set (case-insensitive). Higher-priority categories
+    /// overwrite lower-priority ones for the same name.
+    pub fn add(&mut self, category: FilterCategory, name: impl Into<String>) {
+        let key = name.into().to_lowercase();
+        let entry = self.entries.entry(key).or_insert(category);
+        if category.priority() > entry.priority() {
+            *entry = category;
+        }
+    }
+
+    /// Merge another FilterSet into this one (higher-priority wins on conflict).
+    pub fn merge(&mut self, other: FilterSet) {
+        for (name, cat) in other.entries {
+            self.add(cat, name);
+        }
+    }
+
+    /// Return the filter category for `name` (case-insensitive), or None if unfilitered.
+    pub fn classify(&self, name: &str) -> Option<FilterCategory> {
+        self.entries.get(&name.to_lowercase()).copied()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write as _;
+
+    fn write_temp_xml(content: &str) -> tempfile::NamedTempFile {
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        f.write_all(content.as_bytes()).unwrap();
+        f
+    }
+
+    const SAMPLE_XML: &str = r#"<seqfilters>
+  <hunt><item name="Fippy Darkpaw" /></hunt>
+  <caution><item name="a gnoll scout" /></caution>
+  <danger><item name="Lord Nagafen" /></danger>
+  <alert><item name="Lockjaw" /></alert>
+</seqfilters>"#;
+
+    #[test]
+    fn classify_loaded_entries() {
+        let f = write_temp_xml(SAMPLE_XML);
+        let set = FilterSet::load(f.path());
+        assert_eq!(set.classify("Fippy Darkpaw"), Some(FilterCategory::Hunt));
+        assert_eq!(set.classify("a gnoll scout"), Some(FilterCategory::Caution));
+        assert_eq!(set.classify("Lord Nagafen"), Some(FilterCategory::Danger));
+        assert_eq!(set.classify("Lockjaw"), Some(FilterCategory::Alert));
+    }
+
+    #[test]
+    fn classify_is_case_insensitive() {
+        let f = write_temp_xml(SAMPLE_XML);
+        let set = FilterSet::load(f.path());
+        assert_eq!(set.classify("fippy darkpaw"), Some(FilterCategory::Hunt));
+        assert_eq!(set.classify("LORD NAGAFEN"), Some(FilterCategory::Danger));
+    }
+
+    #[test]
+    fn classify_returns_none_for_unknown() {
+        let f = write_temp_xml(SAMPLE_XML);
+        let set = FilterSet::load(f.path());
+        assert_eq!(set.classify("Xygoz"), None);
+    }
+
+    #[test]
+    fn higher_priority_wins_on_merge() {
+        let mut base = FilterSet::new();
+        base.add(FilterCategory::Hunt, "Pox");
+        let mut overlay = FilterSet::new();
+        overlay.add(FilterCategory::Danger, "Pox");
+        base.merge(overlay);
+        assert_eq!(base.classify("Pox"), Some(FilterCategory::Danger));
+    }
+
+    #[test]
+    fn lower_priority_does_not_overwrite() {
+        let mut set = FilterSet::new();
+        set.add(FilterCategory::Danger, "Boss");
+        set.add(FilterCategory::Hunt, "Boss");
+        assert_eq!(set.classify("Boss"), Some(FilterCategory::Danger));
+    }
+
+    #[test]
+    fn missing_file_returns_empty_set() {
+        let set = FilterSet::load(Path::new("does_not_exist.xml"));
+        assert!(set.is_empty());
+    }
+}

@@ -16,7 +16,7 @@ future **client** (planned Rust overlay) in a single workspace.
 | Server    | M6 — Debug loop, full CLI (`clap`)            | Complete      |
 | Server    | M7 — GUI (`egui` + `eframe`)                  | Partial       |
 | Client    | Prereq — Cargo workspace restructure          | Complete      |
-| Client    | C1 — Common crate + client foundation         | Scaffold only |
+| Client    | C1 — Common crate + client foundation         | Complete      |
 | Client    | C2–C8 — Network, map, rendering, filters…     | Not started   |
 
 ## What it does
