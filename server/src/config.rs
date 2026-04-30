@@ -103,6 +103,7 @@ fn parse_required_u64(raw: &str, section: &str, entry: &str) -> Result<u64, Stri
 pub struct IniReader {
     filename: String,
     config_filename: String,
+    patterns_filename: String,
     pub patch_date: String,
     pub start_minimized: bool,
 }
@@ -112,6 +113,7 @@ impl IniReader {
         Self {
             filename: String::new(),
             config_filename: String::new(),
+            patterns_filename: String::new(),
             patch_date: String::new(),
             start_minimized: false,
         }
@@ -127,6 +129,26 @@ impl IniReader {
         Ok(())
     }
 
+    /// Loads patterns.ini (scanner byte patterns).
+    pub fn open_patterns_file(&mut self, filename: &str) {
+        self.patterns_filename = filename.to_string();
+    }
+
+    /// Reads a string value from patterns.ini.
+    pub fn read_pattern_string(&self, section: &str, entry: &str) -> String {
+        self.read_string_entry_from(&self.patterns_filename, section, entry)
+    }
+
+    /// Reads a u64 from patterns.ini (hex or decimal).
+    pub fn read_pattern_int(&self, section: &str, entry: &str) -> u64 {
+        parse_integer(&self.read_pattern_string(section, entry))
+    }
+
+    /// Reads and unescapes a byte pattern from patterns.ini.
+    pub fn read_pattern_bytes(&self, section: &str, entry: &str) -> Vec<u8> {
+        parse_escape_bytes(&self.read_pattern_string(section, entry))
+    }
+
     /// Loads config.ini and reads [Server] StartMinimized.
     pub fn open_config_file(&mut self, filename: &str) {
         self.config_filename = filename.to_string();
@@ -135,11 +157,11 @@ impl IniReader {
     }
 
     pub fn read_string_entry(&self, section: &str, entry: &str, config: bool) -> String {
-        let file = if config {
-            &self.config_filename
-        } else {
-            &self.filename
-        };
+        let file = if config { &self.config_filename } else { &self.filename };
+        self.read_string_entry_from(file, section, entry)
+    }
+
+    fn read_string_entry_from(&self, file: &str, section: &str, entry: &str) -> String {
         if file.is_empty() {
             return String::new();
         }
@@ -271,6 +293,14 @@ impl IniReader {
         self.start_minimized = !self.start_minimized;
         let val = if self.start_minimized { "1" } else { "0" };
         self.write_string_entry("Server", "StartMinimized", val, true);
+    }
+
+    pub fn read_eq_game_path(&self) -> String {
+        self.read_string_entry("Server", "EQGamePath", true)
+    }
+
+    pub fn save_eq_game_path(&self, path: &str) {
+        self.write_string_entry("Server", "EQGamePath", path, true);
     }
 }
 

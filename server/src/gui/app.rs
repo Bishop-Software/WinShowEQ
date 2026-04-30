@@ -7,21 +7,63 @@ use tray_icon::{
 };
 
 use crate::config::IniReader;
+use crate::scanner::EqGameScanner;
 use crate::session::SessionState;
 use super::GuiState;
 
 const WINDOW_PADDING: i8 = 10;
 const SIDE_BY_SIDE_MIN_WIDTH: f32 = 560.0;
 
+// ── Offset Finder ────────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq)]
+enum ScanKind {
+    Primary,
+    Secondary,
+    Both,
+}
+
+struct OffsetFinderState {
+    open: bool,
+    exe_path: String,
+    scanning: bool,
+    last_kind: Option<ScanKind>,
+    pending: Arc<Mutex<Option<String>>>,
+    display_text: String,
+}
+
+impl Default for OffsetFinderState {
+    fn default() -> Self {
+        Self {
+            open: false,
+            exe_path: String::new(),
+            scanning: false,
+            last_kind: None,
+            pending: Arc::new(Mutex::new(None)),
+            display_text: String::new(),
+        }
+    }
+}
+
+impl OffsetFinderState {
+    fn with_exe_path(exe_path: String) -> Self {
+        Self { exe_path, ..Self::default() }
+    }
+}
+
+// ── Main app ─────────────────────────────────────────────────────────────────
+
 pub struct WinShowEQApp {
     state: Arc<Mutex<GuiState>>,
     ini_path: String,
     config_ini_path: String,
+    patterns_ini_path: String,
     _tray: TrayIcon,
     menu_open: MenuItem,
     menu_start_min: CheckMenuItem,
     menu_exit: MenuItem,
     window_visible: bool,
+    offset_finder: OffsetFinderState,
 }
 
 impl WinShowEQApp {
@@ -30,6 +72,7 @@ impl WinShowEQApp {
         state: Arc<Mutex<GuiState>>,
         ini_path: String,
         config_ini_path: String,
+        patterns_ini_path: String,
         start_minimized: bool,
     ) -> Self {
         let menu_open = MenuItem::new("Open", true, None);
@@ -53,15 +96,21 @@ impl WinShowEQApp {
             .build()
             .expect("tray icon creation");
 
+        let mut ir = IniReader::new();
+        ir.open_config_file(&config_ini_path);
+        let saved_exe_path = ir.read_eq_game_path();
+
         Self {
             state,
             ini_path,
             config_ini_path,
+            patterns_ini_path,
             _tray: tray,
             menu_open,
             menu_start_min,
             menu_exit,
             window_visible: !start_minimized,
+            offset_finder: OffsetFinderState::with_exe_path(saved_exe_path),
         }
     }
 
@@ -72,13 +121,257 @@ impl WinShowEQApp {
         self.window_visible = true;
     }
 
+    fn save_exe_path(&self) {
+        let mut ir = IniReader::new();
+        ir.open_config_file(&self.config_ini_path);
+        ir.save_eq_game_path(&self.offset_finder.exe_path);
+    }
+
     fn toggle_start_minimized(&mut self) {
         let mut ir = IniReader::new();
         ir.open_config_file(&self.config_ini_path);
         ir.toggle_start_minimized();
         self.menu_start_min.set_checked(ir.start_minimized);
     }
+
+    fn start_scan(&mut self, kind: ScanKind, write_out: bool) {
+        self.offset_finder.scanning = true;
+        self.offset_finder.last_kind = Some(kind);
+
+        let exe_path = self.offset_finder.exe_path.clone();
+        let ini_path = self.ini_path.clone();
+        let config_ini_path = self.config_ini_path.clone();
+        let patterns_ini_path = self.patterns_ini_path.clone();
+        let pending = Arc::clone(&self.offset_finder.pending);
+
+        std::thread::spawn(move || {
+            let mut ir = IniReader::new();
+            ir.open_config_file(&config_ini_path);
+            ir.open_patterns_file(&patterns_ini_path);
+            let _ = ir.open_file(&ini_path);
+
+            let current_offsets = ir
+                .read_server_config_model()
+                .map(|m| m.offsets)
+                .unwrap_or_default();
+
+            let scanner = EqGameScanner::new(&exe_path);
+
+            let mut output = match kind {
+                ScanKind::Primary => {
+                    scanner.scan_executable(&ir, &current_offsets, write_out).output
+                }
+                ScanKind::Secondary => {
+                    scanner.scan_secondary(&ir, current_offsets.self_addr)
+                }
+                ScanKind::Both => {
+                    let primary = scanner.scan_executable(&ir, &current_offsets, write_out);
+                    let secondary = scanner.scan_secondary(&ir, current_offsets.self_addr);
+                    format!("{}\n{}", primary.output, secondary)
+                }
+            };
+
+            if write_out {
+                output.push_str("\n[Written to INI]");
+            }
+
+            if let Ok(mut guard) = pending.lock() {
+                *guard = Some(output);
+            }
+        });
+    }
+
+    fn render_offset_finder(&mut self, ctx: &egui::Context) {
+        if !self.offset_finder.open {
+            return;
+        }
+
+        // Poll for a completed background scan each frame.
+        if self.offset_finder.scanning {
+            if let Ok(mut guard) = self.offset_finder.pending.lock() {
+                if let Some(result) = guard.take() {
+                    self.offset_finder.display_text = result;
+                    self.offset_finder.scanning = false;
+                }
+            }
+        }
+
+        let mut open = true;
+        let mut start_scan: Option<(ScanKind, bool)> = None;
+        let mut do_browse = false;
+        let scanning = self.offset_finder.scanning;
+        let has_path = !self.offset_finder.exe_path.trim().is_empty();
+        let last_kind = self.offset_finder.last_kind;
+        let display_empty = self.offset_finder.display_text.is_empty();
+        // Take exe_path out so we can move it into the closure without a borrow conflict.
+        let mut exe_path = std::mem::take(&mut self.offset_finder.exe_path);
+        let mut display_text = self.offset_finder.display_text.clone();
+
+        ctx.show_viewport_immediate(
+            egui::ViewportId::from_hash_of("offset_finder"),
+            egui::ViewportBuilder::default()
+                .with_title("Offset Finder")
+                .with_inner_size(egui::vec2(700.0, 600.0))
+                .with_min_inner_size(egui::vec2(700.0, 400.0))
+                .with_resizable(true),
+            |ctx, _class| {
+                if ctx.input(|i| i.viewport().close_requested()) {
+                    open = false;
+                }
+
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let can_write = !scanning
+                        && !display_empty
+                        && matches!(last_kind, Some(ScanKind::Primary) | Some(ScanKind::Both));
+
+                    // Footer — declared first, claims space from the bottom.
+                    // Panel::bottom draws its own separator; no explicit one needed.
+                    egui::Panel::bottom("offset_finder_footer")
+                        .resizable(false)
+                        .show_inside(ui, |ui| {
+                            egui::Frame::NONE
+                                .inner_margin(egui::Margin::same(WINDOW_PADDING))
+                                .show(ui, |ui| {
+                                    ui.add_enabled_ui(can_write, |ui| {
+                                        if ui.button("Write to INI").clicked() {
+                                            start_scan = Some((ScanKind::Primary, true));
+                                        }
+                                    });
+                                });
+                        });
+
+                    // Header — claimed from the top after footer.
+                    // Panel::top draws its own separator at the bottom edge.
+                    egui::Panel::top("offset_finder_header")
+                        .resizable(false)
+                        .show_inside(ui, |ui| {
+                            egui::Frame::NONE
+                                .inner_margin(egui::Margin::same(WINDOW_PADDING))
+                                .show(ui, |ui| {
+                                    // Browse allocated before TextEdit so it is
+                                    // never pushed off the right edge.
+                                    ui.horizontal(|ui| {
+                                        ui.label("EQ Executable:");
+                                        if ui.button("Browse…").clicked() {
+                                            do_browse = true;
+                                        }
+                                        ui.add(
+                                            egui::TextEdit::singleline(&mut exe_path)
+                                                .desired_width(f32::INFINITY),
+                                        );
+                                    });
+
+                                    ui.add_space(4.0);
+
+                                    ui.horizontal(|ui| {
+                                        ui.add_enabled_ui(!scanning && has_path, |ui| {
+                                            if ui.button("Scan Primary").clicked() {
+                                                start_scan = Some((ScanKind::Primary, false));
+                                            }
+                                            if ui.button("Scan Secondary").clicked() {
+                                                start_scan = Some((ScanKind::Secondary, false));
+                                            }
+                                            if ui.button("Scan Both").clicked() {
+                                                start_scan = Some((ScanKind::Both, false));
+                                            }
+                                        });
+                                        if scanning {
+                                            ui.add(egui::Spinner::new());
+                                        }
+                                    });
+                                });
+                        });
+
+                    // Central area — bounded height = whatever the two panels left.
+                    // Capture available_height before the Frame reduces it further.
+                    egui::Frame::NONE
+                        .inner_margin(egui::Margin {
+                            left: WINDOW_PADDING,
+                            right: WINDOW_PADDING,
+                            top: 4,
+                            bottom: 4,
+                        })
+                        .show(ui, |ui| {
+                            let h = ui.available_height();
+                            egui::ScrollArea::vertical()
+                                .max_height(h)
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
+                                    ui.add(
+                                        egui::TextEdit::multiline(&mut display_text)
+                                            .font(egui::TextStyle::Monospace)
+                                            .desired_width(f32::INFINITY)
+                                            .interactive(false),
+                                    );
+                                });
+                        });
+                });
+            },
+        );
+
+        self.offset_finder.open = open;
+        self.offset_finder.exe_path = exe_path;
+
+        // Browse must run outside the egui closure so it can block for the dialog.
+        if do_browse {
+            if let Some(path) = browse_for_exe() {
+                self.offset_finder.exe_path = path;
+                self.save_exe_path();
+            }
+        }
+
+        if let Some((kind, write_out)) = start_scan {
+            self.save_exe_path();
+            self.start_scan(kind, write_out);
+        }
+    }
 }
+
+// ── Native file dialog ────────────────────────────────────────────────────────
+
+/// Opens a native Windows file-open dialog and returns the chosen path, or None
+/// if the user cancelled or an error occurred.
+fn browse_for_exe() -> Option<String> {
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Shell::{
+        Common::COMDLG_FILTERSPEC, FileOpenDialog, IFileOpenDialog, SIGDN_FILESYSPATH,
+    };
+    use windows::core::w;
+
+    unsafe {
+        // Initialize COM for this call; ignore S_FALSE (already initialized).
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+        let path = (|| -> Option<String> {
+            let dialog: IFileOpenDialog =
+                CoCreateInstance(&FileOpenDialog, None, CLSCTX_ALL).ok()?;
+
+            let filters = [
+                COMDLG_FILTERSPEC { pszName: w!("EverQuest Game"), pszSpec: w!("eqgame.exe") },
+                COMDLG_FILTERSPEC { pszName: w!("Executable Files (*.exe)"), pszSpec: w!("*.exe") },
+            ];
+            let _ = dialog.SetFileTypes(&filters);
+            let _ = dialog.SetFileTypeIndex(1); // default to eqgame.exe filter
+
+            dialog.Show(None).ok()?;
+            let item = dialog.GetResult().ok()?;
+            let pwstr = item.GetDisplayName(SIGDN_FILESYSPATH).ok()?;
+            // Convert before freeing; always free regardless of conversion result.
+            let s = pwstr.to_string().ok();
+            windows::Win32::System::Com::CoTaskMemFree(Some(
+                pwstr.0 as *const core::ffi::c_void,
+            ));
+            s
+        })();
+
+        CoUninitialize();
+        path
+    }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn make_placeholder_icon() -> Icon {
     let size = 16u32;
@@ -111,6 +404,8 @@ fn list_local_ips() -> Vec<String> {
         Err(_) => vec![],
     }
 }
+
+// ── eframe::App ───────────────────────────────────────────────────────────────
 
 impl eframe::App for WinShowEQApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -249,8 +544,9 @@ impl eframe::App for WinShowEQApp {
                             s.push_log("Reload Offsets: not yet wired to server thread");
                         }
                     }
-                    // Offset Finder — implemented in M7-6.
-                    ui.add_enabled(false, egui::Button::new("Offset Finder"));
+                    if ui.button("Offset Finder").clicked() {
+                        self.offset_finder.open = true;
+                    }
                 });
 
                 ui.separator();
@@ -264,6 +560,10 @@ impl eframe::App for WinShowEQApp {
                             ui.label(RichText::new(line).monospace());
                         }
                     });
+
+                // ── Offset Finder (separate OS window via immediate viewport) ──────────
+                let ctx = ui.ctx().clone();
+                self.render_offset_finder(&ctx);
             });
     }
 }

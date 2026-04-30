@@ -5,7 +5,7 @@ This folder contains the first-pass Windows installer scaffold for `WinShowEQ`.
 ## What it builds
 
 - Installs `WinShowEQServer.exe` to `%ProgramFiles%\WinShowEQ\bin`
-- Seeds `myseqserver.ini` and `config.ini` into `%ProgramData%\WinShowEQ`
+- Seeds `myseqserver.ini` and `patterns.ini` into `%ProgramData%\WinShowEQ`
 - Creates Start Menu shortcuts that launch the server with `WorkingDir=%ProgramData%\WinShowEQ`
 - Preserves user-edited INI files on upgrade and uninstall
 - Optionally includes `WinShowEQClient.exe` as a custom component
@@ -65,7 +65,9 @@ workspace artifacts:
 
 - The default installer type is **Server only**.
 - The client component is optional because `client/src/main.rs` is still a placeholder.
-- Config files are installed with `onlyifdoesntexist` and `uninsneveruninstall`, so upgrades do not
-  overwrite user edits.
+- `myseqserver.ini` and `patterns.ini` are installed with `onlyifdoesntexist` and
+  `uninsneveruninstall`, so upgrades do not overwrite user edits.
+- `config.ini` is **not seeded** by the installer — it is auto-created on first launch when
+  the user changes a setting (e.g. Start Minimized or Browse for eqgame.exe).
 - The configuration folder shortcut opens `%ProgramData%\WinShowEQ` directly for manual edits.
 

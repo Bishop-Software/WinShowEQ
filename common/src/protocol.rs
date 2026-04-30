@@ -23,8 +23,8 @@ pub const OPT_SELF: u32 = 0xFD;
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpawnType {
-    Npc = 0,
-    Pc = 1,
+    Pc = 0,
+    Npc = 1,
     Corpse = 2,
 }
 

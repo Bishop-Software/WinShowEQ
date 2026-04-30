@@ -51,7 +51,7 @@ Name: "{commonappdata}\WinShowEQ"; Permissions: users-modify; Components: server
 [Files]
 Source: "{#StageDir}\bin\WinShowEQServer.exe"; DestDir: "{app}\bin"; Flags: ignoreversion; Components: server
 Source: "{#StageDir}\config\myseqserver.ini"; DestDir: "{commonappdata}\WinShowEQ"; Flags: onlyifdoesntexist uninsneveruninstall; Components: server
-Source: "{#StageDir}\config\config.ini"; DestDir: "{commonappdata}\WinShowEQ"; Flags: onlyifdoesntexist uninsneveruninstall; Components: server
+Source: "{#StageDir}\config\patterns.ini"; DestDir: "{commonappdata}\WinShowEQ"; Flags: onlyifdoesntexist uninsneveruninstall; Components: server
 Source: "{#StageDir}\docs\README.md"; DestDir: "{app}\docs"; DestName: "README.md"; Flags: ignoreversion; Components: server
 Source: "{#StageDir}\docs\INSTALLER-README.md"; DestDir: "{app}\docs"; DestName: "INSTALLER-README.md"; Flags: ignoreversion; Components: server
 Source: "{#StageDir}\docs\LICENSE.txt"; DestDir: "{app}\docs"; DestName: "LICENSE.txt"; Flags: ignoreversion; Components: server

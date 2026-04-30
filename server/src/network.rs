@@ -70,7 +70,7 @@ impl NetworkServer {
             }
         };
 
-        self.log_info(&format!("MySEQServer: Listening on 0.0.0.0:{}", self.port));
+        self.log_info(&format!("WinShowEQServer: Listening on 0.0.0.0:{}", self.port));
 
         if let Some(n) = &self.notifier {
             n.on_connection_changed(&ConnectionEvent {
@@ -86,7 +86,7 @@ impl NetworkServer {
                         .peer_addr()
                         .map(|a| a.to_string())
                         .unwrap_or_else(|_| "unknown".into());
-                    self.log_info(&format!("MySEQServer: New connection from: {}", peer));
+                    self.log_info(&format!("WinShowEQServer: New connection from: {}", peer));
 
                     if let Some(n) = &self.notifier {
                         n.on_connection_changed(&ConnectionEvent {
@@ -97,7 +97,7 @@ impl NetworkServer {
 
                     self.handle_client(client, Arc::clone(&provider));
 
-                    self.log_info("MySEQServer: Client disconnected.");
+                    self.log_info("WinShowEQServer: Client disconnected.");
 
                     if let Some(n) = &self.notifier {
                         n.on_connection_changed(&ConnectionEvent {
@@ -180,9 +180,9 @@ impl NetworkServer {
                 let mut corpse = 0i32;
                 for mut rec in provider.spawn_list() {
                     match rec.spawn_type {
-                        1 => pc += 1,
-                        2 => corpse += 1,
-                        _ => npc += 1,
+                        0 => pc += 1,
+                        1 => npc += 1,
+                        _ => corpse += 1,
                     }
                     rec.flags = OPT_SPAWNS;
                     records.push(rec);
@@ -298,7 +298,7 @@ impl DataProvider for StubDataProvider {
         npc.z = 0.0;
         npc.id = 2;
         npc.level = 30;
-        npc.spawn_type = 0; // NPC
+        npc.spawn_type = 1; // NPC
         vec![npc]
     }
 

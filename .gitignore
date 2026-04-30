@@ -94,4 +94,5 @@ build/
 /.cocoindex_code/
 
 
-
+# Local configuration file, may contain sensitive data
+/server/config.ini

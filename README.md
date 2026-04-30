@@ -6,18 +6,18 @@ future **client** (planned Rust overlay) in a single workspace.
 
 ## Status
 
-| Component | Milestone                                     | Status      |
-|-----------|-----------------------------------------------|-------------|
-| Server    | M1 — Data types, INI reader, notifier trait   | Complete    |
-| Server    | M2 — EQ file scanner (pattern matching)       | Complete    |
-| Server    | M3 — Memory reader (Win32 unsafe)             | Complete    |
-| Server    | M4 — Network server + binary protocol         | Complete    |
-| Server    | M5 — Server logic + console mode (end-to-end) | Complete    |
-| Server    | M6 — Debug loop, full CLI (`clap`)            | Complete    |
-| Server    | M7 — GUI (`egui` + `eframe`)                  | Partial     |
-| Client    | Prereq — Cargo workspace restructure          | Complete    |
+| Component | Milestone                                     | Status        |
+|-----------|-----------------------------------------------|---------------|
+| Server    | M1 — Data types, INI reader, notifier trait   | Complete      |
+| Server    | M2 — EQ file scanner (pattern matching)       | Complete      |
+| Server    | M3 — Memory reader (Win32 unsafe)             | Complete      |
+| Server    | M4 — Network server + binary protocol         | Complete      |
+| Server    | M5 — Server logic + console mode (end-to-end) | Complete      |
+| Server    | M6 — Debug loop, full CLI (`clap`)            | Complete      |
+| Server    | M7 — GUI (`egui` + `eframe`)                  | Partial       |
+| Client    | Prereq — Cargo workspace restructure          | Complete      |
 | Client    | C1 — Common crate + client foundation         | Scaffold only |
-| Client    | C2–C8 — Network, map, rendering, filters…     | Not started |
+| Client    | C2–C8 — Network, map, rendering, filters…     | Not started   |
 
 ## What it does
 
@@ -102,12 +102,15 @@ By default, the server resolves INI files in this order:
 2. `%ProgramData%\WinShowEQ\<name>` when that directory exists (installer layout)
 3. current working directory fallback for ad-hoc local runs
 
-Two INI files are expected in that resolved config location:
+Three INI files are used in that resolved config location:
 
-**`myseqserver.ini`** — runtime offsets and port:
+**`myseqserver.ini`** — runtime offsets and port. `[File Info]` fields are auto-populated
+by the Offset Finder scan or the `scan` subcommand — manual edits are not required:
 ```ini
 [File Info]
-PatchDate=MM/DD/YYYY
+PatchDate=MM/DD/YYYY          ; derived from PE TimeDateStamp (compile date)
+ClientHash=<sha1>             ; SHA1 of eqgame.exe — uniquely identifies the client build
+BuildString=Release Client #N HH:MM:SS Mon DD YYYY  ; from binary scan + PE timestamp (Pacific time)
 
 [Port]
 Port=5555
@@ -131,14 +134,28 @@ NameOffset=...
 ; ...
 ```
 
-**`config.ini`** — scanner patterns and startup preferences:
+**`config.ini`** — startup preferences and persisted UI state:
 ```ini
 [Server]
 StartMinimized=0
 
-[EQG_SpawnList]
-Pattern=\x48\x8B...
-; ... (byte patterns for scanning eqgame.exe)
+[OffsetFinder]
+EQGamePath=C:\path\to\eqgame.exe
+```
+
+**`patterns.ini`** — EQ memory scanner byte patterns:
+```ini
+[ZoneAddr]
+Start=0x...
+Pattern=\x41\xB8...
+Mask=xxxxxxxxx...
+
+[SpawnHeaderAddr]
+Start=0x...
+Pattern=\x40\x53...
+Mask=xxxxxxx...
+
+; ... (one section per scanned address)
 ```
 
 ## Wire protocol

@@ -74,6 +74,7 @@ fn run_gui(ini_override: Option<&str>) {
         .map(str::to_owned)
         .unwrap_or_else(|| resolve_ini_path("myseqserver.ini"));
     let config_ini_path = resolve_ini_path("config.ini");
+    let patterns_ini_path = resolve_ini_path("patterns.ini");
 
     let start_minimized = {
         let mut ir = IniReader::new();
@@ -86,6 +87,7 @@ fn run_gui(ini_override: Option<&str>) {
 
     let ini_path_for_gui = ini_path.clone();
     let config_ini_path_for_gui = config_ini_path.clone();
+    let patterns_ini_path_for_gui = patterns_ini_path.clone();
     let mut runner = SessionRunner::new(ini_path, config_ini_path);
     runner.set_notifier(notifier as Arc<dyn UiNotifier>);
 
@@ -109,6 +111,7 @@ fn run_gui(ini_override: Option<&str>) {
                 gui_state,
                 ini_path_for_gui,
                 config_ini_path_for_gui,
+                patterns_ini_path_for_gui,
                 start_minimized,
             )))
         }),
@@ -130,10 +133,12 @@ fn run_debug(ini_override: Option<&str>) {
         .map(str::to_owned)
         .unwrap_or_else(|| resolve_ini_path("myseqserver.ini"));
     let config_ini_path = resolve_ini_path("config.ini");
+    let patterns_ini_path = resolve_ini_path("patterns.ini");
 
     let mut ir = IniReader::new();
     let _ = ir.open_file(&ini_path);
     ir.open_config_file(&config_ini_path);
+    ir.open_patterns_file(&patterns_ini_path);
 
     MemReader::enable_debug_privileges();
     let mut mem = MemReader::new();
@@ -189,9 +194,11 @@ fn run_scan(exe_path: &str, ini_override: Option<&str>) {
         .map(str::to_owned)
         .unwrap_or_else(|| resolve_ini_path("myseqserver.ini"));
     let config_ini_path = resolve_ini_path("config.ini");
+    let patterns_ini_path = resolve_ini_path("patterns.ini");
 
     let mut ir = IniReader::new();
     ir.open_config_file(&config_ini_path);
+    ir.open_patterns_file(&patterns_ini_path);
     let _ = ir.open_file(&ini_path);
 
     let current_offsets = ir

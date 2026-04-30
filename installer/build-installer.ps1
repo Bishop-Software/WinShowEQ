@@ -120,7 +120,7 @@ $null = New-Item -ItemType Directory -Path $outputRoot -Force
 
 Copy-Item -Path $serverExe -Destination (Join-Path $stageRoot "bin\WinShowEQServer.exe")
 Copy-Item -Path (Join-Path $repoRoot "server\myseqserver.ini") -Destination (Join-Path $stageRoot "config\myseqserver.ini")
-Copy-Item -Path (Join-Path $repoRoot "server\config.ini") -Destination (Join-Path $stageRoot "config\config.ini")
+Copy-Item -Path (Join-Path $repoRoot "server\patterns.ini") -Destination (Join-Path $stageRoot "config\patterns.ini")
 Copy-Item -Path (Join-Path $repoRoot "README.md") -Destination (Join-Path $stageRoot "docs\README.md")
 Copy-Item -Path (Join-Path $repoRoot "LICENSE") -Destination (Join-Path $stageRoot "docs\LICENSE.txt")
 Copy-Item -Path (Join-Path $installerDir "README.md") -Destination (Join-Path $stageRoot "docs\INSTALLER-README.md")

@@ -19,6 +19,7 @@ pub struct PeSectionInfo {
 
 pub struct PeImageInfo {
     pub image_base: u64,
+    pub time_date_stamp: u32,
     pub sections: Vec<PeSectionInfo>,
 }
 
@@ -375,6 +376,7 @@ impl EqGameScanner {
         // IMAGE_FILE_HEADER at e_lfanew + 4
         let fh = e_lfanew + 4;
         let num_sections = read_u16_le(b, fh + 2)? as usize;
+        let time_date_stamp = read_u32_le(b, fh + 4)?;
         let opt_header_size = read_u16_le(b, fh + 16)? as usize;
 
         // IMAGE_OPTIONAL_HEADER64 at fh + 20
@@ -407,6 +409,7 @@ impl EqGameScanner {
 
         Some(PeImageInfo {
             image_base,
+            time_date_stamp,
             sections,
         })
     }
@@ -472,9 +475,9 @@ impl EqGameScanner {
         reload: &mut bool,
         has_mismatch: &mut bool,
     ) -> String {
-        let start = ir.read_integer_entry(entry.ini_section, "Start", true);
-        let pattern = ir.read_escape_bytes(entry.ini_section, "Pattern");
-        let mask_str = ir.read_string_entry(entry.ini_section, "Mask", true);
+        let start = ir.read_pattern_int(entry.ini_section, "Start");
+        let pattern = ir.read_pattern_bytes(entry.ini_section, "Pattern");
+        let mask_str = ir.read_pattern_string(entry.ini_section, "Mask");
 
         let match_addr =
             self.find_eq_pointer_offset(start, SCAN_WINDOW, &pattern, mask_str.as_bytes());
@@ -508,9 +511,9 @@ impl EqGameScanner {
         entry: &SecondaryPatternEntry,
         base_addr: u64,
     ) -> String {
-        let start = ir.read_integer_entry(entry.ini_section, "Start", true);
-        let pattern = ir.read_escape_bytes(entry.ini_section, "Pattern");
-        let mask_str = ir.read_string_entry(entry.ini_section, "Mask", true);
+        let start = ir.read_pattern_int(entry.ini_section, "Start");
+        let pattern = ir.read_pattern_bytes(entry.ini_section, "Pattern");
+        let mask_str = ir.read_pattern_string(entry.ini_section, "Mask");
 
         let match_addr = self.find_eq_structure_offset(
             start,
@@ -549,18 +552,36 @@ impl EqGameScanner {
 
         let mut out = String::new();
 
-        if let Ok(meta) = std::fs::metadata(&self.exe_path) {
-            if let Ok(modified) = meta.modified() {
-                let secs = modified
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                let patch_date = unix_to_date(secs);
-                if write_out {
-                    ir.write_string_entry("File Info", "PatchDate", &patch_date, false);
+        if let Some(pe) = self.parse_pe_headers() {
+            let patch_date = unix_to_date(pe.time_date_stamp as u64);
+            let client_hash = self.compute_client_hash().unwrap_or_default();
+            let build_string = self.scan_build_string(&pe).map(|raw| {
+                // Binary stores the short form "Release Client #NNN)\n" (newline before null).
+                // Trim trailing whitespace then ')' before appending time/date from the PE
+                // TimeDateStamp (UTC — may differ from local build-machine time by timezone).
+                let base = raw.trim_end().trim_end_matches(')');
+                let (time_str, date_str) =
+                    unix_to_compile_time_date(pe.time_date_stamp as u64);
+                format!("{} {} {}", base, time_str, date_str)
+            }).unwrap_or_default();
+
+            if write_out {
+                ir.write_string_entry("File Info", "PatchDate", &patch_date, false);
+                if !client_hash.is_empty() {
+                    ir.write_string_entry("File Info", "ClientHash", &client_hash, false);
                 }
-                let _ = write!(out, "[File Info]\r\nPatchDate={}\r\n\r\n", patch_date);
+                if !build_string.is_empty() {
+                    ir.write_string_entry("File Info", "BuildString", &build_string, false);
+                }
             }
+            let _ = write!(out, "[File Info]\r\nPatchDate={}\r\n", patch_date);
+            if !client_hash.is_empty() {
+                let _ = write!(out, "ClientHash={}\r\n", client_hash);
+            }
+            if !build_string.is_empty() {
+                let _ = write!(out, "BuildString={}\r\n", build_string);
+            }
+            out.push_str("\r\n");
         }
 
         let port = ir.read_integer_entry("Port", "Port", false);
@@ -582,6 +603,60 @@ impl EqGameScanner {
         result
     }
 
+    /// Compute SHA1 of the entire exe. Returns lowercase hex or None on I/O error.
+    pub fn compute_client_hash(&self) -> Option<String> {
+        let mut file = File::open(&self.exe_path).ok()?;
+        let mut hasher = sha1_smol::Sha1::new();
+        let mut buf = vec![0u8; 65536];
+        loop {
+            let n = file.read(&mut buf).ok()?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+        }
+        Some(hasher.digest().to_string())
+    }
+
+    /// Scan all PE sections for the null-terminated EQ build string.
+    /// EQ embeds a string like "Release Client #630 10:45:28 Apr 14 2026".
+    /// Multiple occurrences exist across sections; we return the longest
+    /// non-format-string match (skipping any containing '%').
+    pub fn scan_build_string(&self, pe: &PeImageInfo) -> Option<String> {
+        const PREFIX: &[u8] = b"Release Client #";
+        let mut file = File::open(&self.exe_path).ok()?;
+        let mut best: Option<String> = None;
+
+        for section in &pe.sections {
+            file.seek(SeekFrom::Start(section.pointer_to_raw_data as u64))
+                .ok()?;
+            let mut data = vec![0u8; section.size_of_raw_data as usize];
+            let n = file.read(&mut data).ok()?;
+            data.truncate(n);
+
+            let mut from = 0usize;
+            while from + PREFIX.len() <= data.len() {
+                let Some(rel) = data[from..].windows(PREFIX.len()).position(|w| w == PREFIX) else {
+                    break;
+                };
+                let pos = from + rel;
+                let end = data[pos..]
+                    .iter()
+                    .position(|&b| b == 0)
+                    .map(|p| pos + p)
+                    .unwrap_or(data.len());
+                let s = String::from_utf8_lossy(&data[pos..end]).into_owned();
+                if !s.contains('%')
+                    && best.as_ref().map(|b: &String| s.len() > b.len()).unwrap_or(true)
+                {
+                    best = Some(s);
+                }
+                from = pos + 1;
+            }
+        }
+        best
+    }
+
     /// Run the secondary (structure field offset) scan against the exe.
     /// Mirrors EQGameScanner::ScanSecondary in EQGameScanner.cpp.
     pub fn scan_secondary(&self, ir: &IniReader, fallback_char_info: u64) -> String {
@@ -590,9 +665,9 @@ impl EqGameScanner {
         }
 
         let char_info_base = {
-            let start = ir.read_integer_entry("CharInfo", "Start", true);
-            let pattern = ir.read_escape_bytes("CharInfo", "Pattern");
-            let mask = ir.read_string_entry("CharInfo", "Mask", true);
+            let start = ir.read_pattern_int("CharInfo", "Start");
+            let pattern = ir.read_pattern_bytes("CharInfo", "Pattern");
+            let mask = ir.read_pattern_string("CharInfo", "Mask");
             let found = self.find_eq_pointer_offset(start, SCAN_WINDOW, &pattern, mask.as_bytes());
             if found != 0 {
                 found
@@ -607,6 +682,71 @@ impl EqGameScanner {
         }
         out
     }
+}
+
+/// Hinnant civil_from_days: days since Unix epoch → (year, month 1-based, day).
+fn civil_from_days(days: i64) -> (i64, u64, u64) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
+}
+
+/// Hinnant days_from_civil: (year, month 1-based, day) → days since Unix epoch.
+fn civil_to_days(y: i64, m: u64, d: u64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u64;
+    let m_adj = if m > 2 { m - 3 } else { m + 9 };
+    let doy = (153 * m_adj + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe as i64 - 719_468
+}
+
+/// Day of week from days since epoch: 0=Sun, 1=Mon, …, 6=Sat.
+fn weekday_from_days(days: i64) -> u64 {
+    (days + 4).rem_euclid(7) as u64
+}
+
+/// Day-of-month of the nth occurrence of `weekday` (0=Sun) in year/month.
+fn nth_weekday_of_month(year: i64, month: u64, weekday: u64, n: u64) -> u64 {
+    let first_dow = weekday_from_days(civil_to_days(year, month, 1));
+    let offset = (weekday + 7 - first_dow) % 7;
+    1 + offset + (n - 1) * 7
+}
+
+/// Pacific UTC offset in hours: -7 (PDT) or -8 (PST).
+/// US DST: 2nd Sunday of March 02:00 PST (= 10:00 UTC) → 1st Sunday of November 02:00 PDT (= 09:00 UTC).
+fn pacific_utc_offset_hours(utc_secs: u64) -> i64 {
+    let (year, _, _) = civil_from_days((utc_secs / 86400) as i64);
+    let mar_sun2 = nth_weekday_of_month(year, 3, 0, 2);
+    let nov_sun1 = nth_weekday_of_month(year, 11, 0, 1);
+    let dst_start = civil_to_days(year, 3, mar_sun2) as u64 * 86400 + 10 * 3600;
+    let dst_end = civil_to_days(year, 11, nov_sun1) as u64 * 86400 + 9 * 3600;
+    if utc_secs >= dst_start && utc_secs < dst_end { -7 } else { -8 }
+}
+
+/// Convert a UTC Unix timestamp to ("HH:MM:SS", "Mon DD YYYY") in Pacific time,
+/// matching the format of C's __TIME__ / __DATE__ macros used in EQ build strings.
+fn unix_to_compile_time_date(utc_secs: u64) -> (String, String) {
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let local_secs = (utc_secs as i64 + pacific_utc_offset_hours(utc_secs) * 3600) as u64;
+    let tod = local_secs % 86400;
+    let time_str = format!("{:02}:{:02}:{:02}", tod / 3600, (tod % 3600) / 60, tod % 60);
+    let (y, m, d) = civil_from_days((local_secs / 86400) as i64);
+    // C __DATE__: single-digit days are space-padded ("Apr  1 2026")
+    let date_str = format!("{} {:2} {}", MONTHS[(m - 1) as usize], d, y);
+    (time_str, date_str)
 }
 
 /// Convert a Unix timestamp to M/D/YYYY using the Hinnant civil calendar algorithm.
