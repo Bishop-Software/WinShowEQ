@@ -1,6 +1,7 @@
 /// Internal ground-item representation (mirrors itemBuffer_t in Item.h).
 /// Items are NOT sent as this struct; they are packed into a SpawnRecord via
 /// Spawn::packNetBufferFrom before transmission.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct GroundItem {
     pub id: u32,

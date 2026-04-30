@@ -237,6 +237,7 @@ impl MemReader {
         Ok(parse_string_bytes(&buf))
     }
 
+    #[allow(dead_code)]
     /// Like `read_string` but returns an empty string unless the first character is alphanumeric.
     pub fn read_alnum_string(&self, addr: u64, max_len: usize) -> Result<String, MemError> {
         let s = self.read_string(addr, max_len)?;

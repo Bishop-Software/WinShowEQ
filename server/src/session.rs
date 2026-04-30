@@ -16,6 +16,7 @@ pub enum SessionState {
     Starting,
     Listening,
     Connected,
+    #[allow(dead_code)]
     Stopping,
     Error,
     Paused,
@@ -23,6 +24,7 @@ pub enum SessionState {
 
 /// Selects the server's runtime mode.
 /// Mirrors SessionMode enum in ServerSessionRunner.h.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionMode {
     Interactive,
@@ -64,10 +66,12 @@ impl SessionRunner {
         Arc::clone(&self.reload_flag)
     }
 
+    #[allow(dead_code)]
     pub fn state(&self) -> SessionState {
         self.state
     }
 
+    #[allow(dead_code)]
     pub fn last_error(&self) -> &str {
         &self.last_error
     }

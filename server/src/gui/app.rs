@@ -223,6 +223,7 @@ impl WinShowEQApp {
                     open = false;
                 }
 
+                #[allow(deprecated)]
                 egui::CentralPanel::default().show(ctx, |ui| {
                     let can_write = !scanning
                         && !display_empty

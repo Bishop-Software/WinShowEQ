@@ -281,6 +281,7 @@ impl IniReader {
         result.is_ok()
     }
 
+    #[allow(dead_code)]
     /// Reads a value from config.ini and decodes `\xNN` hex escape sequences into raw bytes.
     /// All non-escape characters are discarded; only decoded bytes are returned.
     /// Mirrors IniReader::readEscapeStrings in IniReader.cpp.

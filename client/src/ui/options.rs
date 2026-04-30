@@ -86,7 +86,7 @@ impl OptionsDialog {
                 .with_inner_size([480.0, 620.0])
                 .with_resizable(true),
             |ctx, _class| {
-                egui::TopBottomPanel::bottom("options_buttons").show(ctx, |ui| {
+                egui::Panel::bottom("options_buttons").show(ctx, |ui| {
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         if ui.button("OK").clicked() {

@@ -116,7 +116,6 @@ impl NetworkServer {
         let mut zone_name = String::from("StartUp");
         // When true, next 4-byte recv is the target PID from an IPT_SETPROC request.
         let mut change_process = false;
-        let mut ui_char_name = String::new();
 
         loop {
             let mut buf = [0u8; 4];
@@ -167,8 +166,7 @@ impl NetworkServer {
                 if let Some(mut rec) = provider.self_spawn() {
                     rec.flags = OPT_SELF;
                     let len = rec.name.iter().position(|&b| b == 0).unwrap_or(rec.name.len());
-                    ui_char_name = String::from_utf8_lossy(&rec.name[..len]).into_owned();
-                    ui_snap.character_name = ui_char_name.clone();
+                    ui_snap.character_name = String::from_utf8_lossy(&rec.name[..len]).into_owned();
                     ui_dirty = true;
                     records.push(rec);
                 }

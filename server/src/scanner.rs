@@ -11,6 +11,7 @@ const PE_SIGNATURE: u32 = 0x0000_4550; // "PE\0\0"
 const OPT_HDR64_MAGIC: u16 = 0x020B; // PE32+
 
 pub struct PeSectionInfo {
+    #[allow(dead_code)]
     pub name: [u8; 9],
     pub virtual_address: u32,
     pub pointer_to_raw_data: u32,
