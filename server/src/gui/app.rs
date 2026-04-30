@@ -282,8 +282,7 @@ impl WinShowEQApp {
                                 });
                         });
 
-                    // Central area — bounded height = whatever the two panels left.
-                    // Capture available_height before the Frame reduces it further.
+                    // Central area — fill whatever space the two panels left.
                     egui::Frame::NONE
                         .inner_margin(egui::Margin {
                             left: WINDOW_PADDING,
@@ -293,11 +292,15 @@ impl WinShowEQApp {
                         })
                         .show(ui, |ui| {
                             let h = ui.available_height();
+                            let w = ui.available_width();
+                            // ScrollArea provides the hard height bound when content overflows.
+                            // add_sized forces the TextEdit to fill h when content is short.
                             egui::ScrollArea::vertical()
                                 .max_height(h)
                                 .auto_shrink([false, false])
                                 .show(ui, |ui| {
-                                    ui.add(
+                                    ui.add_sized(
+                                        [w, h],
                                         egui::TextEdit::multiline(&mut display_text)
                                             .font(egui::TextStyle::Monospace)
                                             .desired_width(f32::INFINITY)
@@ -390,13 +393,17 @@ fn status_color(state: SessionState) -> Color32 {
 }
 
 fn list_local_ips() -> Vec<String> {
-    use std::net::ToSocketAddrs;
+    use std::net::{IpAddr, ToSocketAddrs};
     let hostname = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "localhost".into());
     match (hostname.as_str(), 0u16).to_socket_addrs() {
         Ok(addrs) => {
             let mut ips: Vec<String> = addrs
-                .filter(|a| !a.ip().is_loopback())
-                .map(|a| a.ip().to_string())
+                .map(|a| a.ip())
+                .filter(|ip| {
+                    !ip.is_loopback()
+                        && !matches!(ip, IpAddr::V6(v6) if (v6.segments()[0] & 0xffc0) == 0xfe80)
+                })
+                .map(|ip| ip.to_string())
                 .collect();
             ips.dedup();
             ips
@@ -464,25 +471,18 @@ impl eframe::App for WinShowEQApp {
                 let port_str = if snapshot.port > 0 { snapshot.port.to_string() } else { String::new() };
 
                 // ── Status info block ─────────────────────────────────────────────────
-                ui.horizontal(|ui| {
-                    egui::Grid::new("status_port")
-                        .num_columns(4)
-                        .min_col_width(70.0)
-                        .spacing([8.0, 0.0])
-                        .show(ui, |ui| {
-                            ui.label("Status:");
-                            ui.colored_label(status_color(session_state), &status_text);
-                            ui.label("Port:");
-                            ui.label(&port_str);
-                            ui.end_row();
-                        });
-                });
-
-                egui::Grid::new("status_details")
+                let mut list_ips_clicked = false;
+                egui::Grid::new("status_info")
                     .num_columns(2)
                     .min_col_width(80.0)
                     .spacing([8.0, 4.0])
                     .show(ui, |ui| {
+                        ui.label("Status:");
+                        ui.colored_label(status_color(session_state), &status_text);
+                        ui.end_row();
+                        ui.label("Port:");
+                        ui.label(&port_str);
+                        ui.end_row();
                         ui.label("Patch:");
                         ui.label(&snapshot.patch_date);
                         ui.end_row();
@@ -492,25 +492,28 @@ impl eframe::App for WinShowEQApp {
                         ui.label("Character:");
                         ui.label(character);
                         ui.end_row();
+                        ui.label("IP Address:");
+                        ui.horizontal(|ui| {
+                            ui.label(&snapshot.primary_address);
+                            if ui.button("List IPs").clicked() {
+                                list_ips_clicked = true;
+                            }
+                        });
+                        ui.end_row();
                     });
 
-                // IP Address + List IPs inline (mirrors C++ layout)
-                ui.horizontal(|ui| {
-                    ui.label("IP Address:");
-                    ui.label(&snapshot.primary_address);
-                    if ui.button("List IPs").clicked() {
-                        let ips = list_local_ips();
-                        if let Ok(mut s) = self.state.lock() {
-                            if ips.is_empty() {
-                                s.push_log("List IPs: no non-loopback addresses found");
-                            } else {
-                                for ip in &ips {
-                                    s.push_log(&format!("Local IP: {ip}"));
-                                }
+                if list_ips_clicked {
+                    let ips = list_local_ips();
+                    if let Ok(mut s) = self.state.lock() {
+                        if ips.is_empty() {
+                            s.push_log("List IPs: no non-loopback addresses found");
+                        } else {
+                            for ip in &ips {
+                                s.push_log(&format!("Local IP: {ip}"));
                             }
                         }
                     }
-                });
+                }
 
                 ui.separator();
 
@@ -533,6 +536,22 @@ impl eframe::App for WinShowEQApp {
 
                 // ── Buttons ───────────────────────────────────────────────────────────
                 ui.horizontal(|ui| {
+                    let font_id = egui::TextStyle::Button.resolve(ui.style());
+                    let pad = ui.spacing().button_padding.x;
+                    let gap = ui.spacing().item_spacing.x;
+                    let painter = ui.painter();
+                    let btn_w = |text: &str| -> f32 {
+                        painter
+                            .layout_no_wrap(text.to_owned(), font_id.clone(), egui::Color32::WHITE)
+                            .size()
+                            .x
+                            + 2.0 * pad
+                    };
+                    let total = btn_w("Edit INI")
+                        + btn_w("Reload Offsets")
+                        + btn_w("Offset Finder")
+                        + 2.0 * gap;
+                    ui.add_space(((ui.available_width() - total) * 0.5).max(0.0));
                     if ui.button("Edit INI").clicked() {
                         std::process::Command::new("notepad.exe")
                             .arg(&self.ini_path)

@@ -184,12 +184,16 @@ fn fmt_addr(addr: u64) -> String {
 }
 
 fn primary_ip() -> String {
-    use std::net::ToSocketAddrs;
+    use std::net::{IpAddr, ToSocketAddrs};
     let hostname = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "localhost".into());
-    (hostname.as_str(), 0u16)
+    let addrs: Vec<IpAddr> = (hostname.as_str(), 0u16)
         .to_socket_addrs()
-        .ok()
-        .and_then(|mut addrs| addrs.find(|a| !a.ip().is_loopback()))
-        .map(|a| a.ip().to_string())
+        .map(|it| it.map(|a| a.ip()).filter(|ip| !ip.is_loopback()).collect())
+        .unwrap_or_default();
+    // Prefer a routable IPv4 address; fall back to any non-loopback.
+    addrs.iter()
+        .find(|ip| ip.is_ipv4())
+        .or_else(|| addrs.iter().find(|ip| !matches!(ip, IpAddr::V6(v6) if (v6.segments()[0] & 0xffc0) == 0xfe80)))
+        .map(|ip| ip.to_string())
         .unwrap_or_default()
 }
