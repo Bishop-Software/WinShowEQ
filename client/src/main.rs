@@ -2,6 +2,7 @@ mod config;
 mod data;
 mod filters;
 mod logger;
+mod map_reader;
 mod net;
 mod protocol;
 
