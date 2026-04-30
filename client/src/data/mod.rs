@@ -1,3 +1,4 @@
+pub mod annotations;
 pub mod ground;
 pub mod spawns;
 pub mod timers;
@@ -5,11 +6,14 @@ pub mod world;
 
 use std::collections::{HashMap, VecDeque};
 
+use crate::alerts::AlertEngine;
 use crate::filters::FilterSet;
+use crate::logger::Logger;
 use crate::map_reader::MapData;
 use crate::protocol::Packet;
+use annotations::AnnotationStore;
 use ground::GroundStore;
-use spawns::SpawnStore;
+use spawns::{SpawnInfo, SpawnStore};
 use timers::TimerStore;
 use world::InGameTime;
 
@@ -30,6 +34,8 @@ pub struct AppData {
     /// Mob trail positions (map coords — already X/Y negated). Updated each tick.
     pub trails: HashMap<u32, VecDeque<(f32, f32)>>,
     pub trails_enabled: bool,
+    pub alert_engine: AlertEngine,
+    pub annotations: AnnotationStore,
 }
 
 impl AppData {
@@ -50,7 +56,8 @@ impl AppData {
 }
 
 /// Apply a decoded packet to the shared app state.
-pub fn apply_packet(data: &mut AppData, packet: Packet) {
+/// Returns an optional log message (alerts) for the caller to record.
+pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
     match packet {
         Packet::Zone { name } => {
             data.zone_name = name;
@@ -59,23 +66,30 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) {
             data.trails.clear();
             data.self_id = None;
             data.target_id = None;
+            data.alert_engine.on_zone_change();
         }
         Packet::Spawn(rec) => {
             let id = rec.id;
-            let (new_x, new_y) = (rec.x, rec.y);
             if data.trails_enabled {
-                if let Some(existing) = data.spawns.get(id) {
-                    if (existing.x - new_x).abs() > 0.5 || (existing.y - new_y).abs() > 0.5 {
-                        let trail = data.trails.entry(id).or_default();
-                        trail.push_back((-existing.x, -existing.y));
-                        while trail.len() > MAX_TRAIL_LEN {
-                            trail.pop_front();
-                        }
+                let (new_x, new_y) = (rec.x, rec.y);
+                let trail_pt = data
+                    .spawns
+                    .get(id)
+                    .filter(|s| (s.x - new_x).abs() > 0.5 || (s.y - new_y).abs() > 0.5)
+                    .map(|s| (-s.x, -s.y));
+                if let Some(pt) = trail_pt {
+                    let trail = data.trails.entry(id).or_default();
+                    trail.push_back(pt);
+                    while trail.len() > MAX_TRAIL_LEN {
+                        trail.pop_front();
                     }
                 }
             }
-            let (spawns, filters) = (&mut data.spawns, &data.filters);
-            spawns.upsert_with_filter(&rec, filters);
+            let mut info = SpawnInfo::from_record(&rec);
+            info.apply_filters(&data.filters);
+            let log_msg = data.alert_engine.check_spawn(&info);
+            data.spawns.upsert_info(info);
+            return log_msg;
         }
         Packet::Self_(rec) => {
             data.self_id = Some(rec.id);
@@ -89,4 +103,21 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) {
         Packet::World(t) => data.world_time = t,
         Packet::Process { .. } | Packet::Unknown { .. } => {}
     }
+    None
+}
+
+/// Apply alert config from `ClientConfig` to the alert engine in `data`.
+pub fn configure_alerts(data: &mut AppData, cfg: &crate::config::ClientConfig) {
+    use crate::alerts::AlertMode;
+    data.alert_engine.danger_mode =
+        AlertMode::from_config(&cfg.alert_danger_mode, &cfg.alert_danger_sound);
+    data.alert_engine.caution_mode =
+        AlertMode::from_config(&cfg.alert_caution_mode, &cfg.alert_caution_sound);
+    data.alert_engine.hunt_mode =
+        AlertMode::from_config(&cfg.alert_hunt_mode, &cfg.alert_hunt_sound);
+    data.alert_engine.alert_mode =
+        AlertMode::from_config(&cfg.alert_alert_mode, &cfg.alert_alert_sound);
+    data.alert_engine.discord_webhook = cfg.discord_webhook.clone();
+    data.alert_engine.discord_on_danger = cfg.discord_on_danger;
+    data.alert_engine.discord_on_hunt = cfg.discord_on_hunt;
 }

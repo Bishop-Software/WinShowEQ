@@ -69,6 +69,7 @@ impl<'a> MapCon<'a> {
         draw_ground_items(&ctx, self.data, z_filter);
         draw_spawns(&ctx, self.data, z_filter);
         draw_self(&ctx, self.data);
+        draw_annotations(&ctx, self.data);
         draw_hud(&ctx, ui, self.data);
     }
 
@@ -201,6 +202,38 @@ fn draw_ground_items(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>
                 Stroke::new(1.5, Color32::YELLOW),
             );
         }
+    }
+}
+
+fn draw_annotations(ctx: &DrawCtx, data: &AppData) {
+    for ann in &data.annotations.items {
+        let (mx, my) = eq_to_map(ann.x, ann.y);
+        let pos = ctx.to_screen(mx, my);
+        if !ctx.is_visible(pos) {
+            continue;
+        }
+        let [r, g, b] = ann.color;
+        let color = Color32::from_rgb(r, g, b);
+        let font_size = ann.size as f32;
+        // Small diamond marker
+        let d = 4.0_f32;
+        let pts = [
+            Pos2::new(pos.x, pos.y - d),
+            Pos2::new(pos.x + d, pos.y),
+            Pos2::new(pos.x, pos.y + d),
+            Pos2::new(pos.x - d, pos.y),
+        ];
+        for i in 0..4 {
+            ctx.painter
+                .line_segment([pts[i], pts[(i + 1) % 4]], Stroke::new(1.5, color));
+        }
+        ctx.painter.text(
+            pos + Vec2::new(6.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            &ann.text,
+            FontId::proportional(font_size),
+            color,
+        );
     }
 }
 

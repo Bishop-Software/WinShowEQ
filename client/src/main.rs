@@ -1,3 +1,4 @@
+mod alerts;
 mod config;
 mod data;
 mod filters;

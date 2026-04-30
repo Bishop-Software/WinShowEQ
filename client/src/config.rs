@@ -19,6 +19,21 @@ pub struct ClientConfig {
     pub log_dir: String,
     /// Directory for filter XML files (often same as cfg_dir).
     pub filter_dir: String,
+
+    // ── Alert modes — "none" | "beep" | "speech" | "sound" ──────────────────
+    pub alert_danger_mode: String,
+    pub alert_danger_sound: String,
+    pub alert_caution_mode: String,
+    pub alert_caution_sound: String,
+    pub alert_hunt_mode: String,
+    pub alert_hunt_sound: String,
+    pub alert_alert_mode: String,
+    pub alert_alert_sound: String,
+
+    // ── Discord ───────────────────────────────────────────────────────────────
+    pub discord_webhook: String,
+    pub discord_on_danger: bool,
+    pub discord_on_hunt: bool,
 }
 
 impl Default for ClientConfig {
@@ -31,6 +46,17 @@ impl Default for ClientConfig {
             timer_dir: "timers".to_owned(),
             log_dir: "logs".to_owned(),
             filter_dir: "cfg".to_owned(),
+            alert_danger_mode: "speech".to_owned(),
+            alert_danger_sound: String::new(),
+            alert_caution_mode: "beep".to_owned(),
+            alert_caution_sound: String::new(),
+            alert_hunt_mode: "beep".to_owned(),
+            alert_hunt_sound: String::new(),
+            alert_alert_mode: "none".to_owned(),
+            alert_alert_sound: String::new(),
+            discord_webhook: String::new(),
+            discord_on_danger: false,
+            discord_on_hunt: false,
         }
     }
 }
@@ -55,6 +81,21 @@ impl ClientConfig {
         writeln!(f, "TimerDir={}", self.timer_dir)?;
         writeln!(f, "LogDir={}", self.log_dir)?;
         writeln!(f, "FilterDir={}", self.filter_dir)?;
+        writeln!(f)?;
+        writeln!(f, "[Alerts]")?;
+        writeln!(f, "DangerMode={}", self.alert_danger_mode)?;
+        writeln!(f, "DangerSound={}", self.alert_danger_sound)?;
+        writeln!(f, "CautionMode={}", self.alert_caution_mode)?;
+        writeln!(f, "CautionSound={}", self.alert_caution_sound)?;
+        writeln!(f, "HuntMode={}", self.alert_hunt_mode)?;
+        writeln!(f, "HuntSound={}", self.alert_hunt_sound)?;
+        writeln!(f, "AlertMode={}", self.alert_alert_mode)?;
+        writeln!(f, "AlertSound={}", self.alert_alert_sound)?;
+        writeln!(f)?;
+        writeln!(f, "[Discord]")?;
+        writeln!(f, "Webhook={}", self.discord_webhook)?;
+        writeln!(f, "OnDanger={}", if self.discord_on_danger { 1 } else { 0 })?;
+        writeln!(f, "OnHunt={}", if self.discord_on_hunt { 1 } else { 0 })?;
         Ok(())
     }
 
@@ -95,6 +136,23 @@ impl ClientConfig {
             if let Some(v) = dirs.get("filterdir") {
                 cfg.filter_dir = v.clone();
             }
+        }
+
+        if let Some(alerts) = sections.get("alerts") {
+            if let Some(v) = alerts.get("dangermode") { cfg.alert_danger_mode = v.clone(); }
+            if let Some(v) = alerts.get("dangersound") { cfg.alert_danger_sound = v.clone(); }
+            if let Some(v) = alerts.get("cautionmode") { cfg.alert_caution_mode = v.clone(); }
+            if let Some(v) = alerts.get("cautionsound") { cfg.alert_caution_sound = v.clone(); }
+            if let Some(v) = alerts.get("huntmode") { cfg.alert_hunt_mode = v.clone(); }
+            if let Some(v) = alerts.get("huntsound") { cfg.alert_hunt_sound = v.clone(); }
+            if let Some(v) = alerts.get("alertmode") { cfg.alert_alert_mode = v.clone(); }
+            if let Some(v) = alerts.get("alertsound") { cfg.alert_alert_sound = v.clone(); }
+        }
+
+        if let Some(discord) = sections.get("discord") {
+            if let Some(v) = discord.get("webhook") { cfg.discord_webhook = v.clone(); }
+            if let Some(v) = discord.get("ondanger") { cfg.discord_on_danger = v == "1"; }
+            if let Some(v) = discord.get("onhunt") { cfg.discord_on_hunt = v == "1"; }
         }
 
         cfg

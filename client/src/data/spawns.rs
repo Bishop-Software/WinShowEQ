@@ -198,6 +198,11 @@ impl SpawnStore {
         }
     }
 
+    /// Insert a pre-built SpawnInfo directly (avoids double construction in apply_packet).
+    pub fn upsert_info(&mut self, info: SpawnInfo) {
+        self.spawns.insert(info.id, info);
+    }
+
     pub fn remove(&mut self, id: u32) {
         self.spawns.remove(&id);
     }
