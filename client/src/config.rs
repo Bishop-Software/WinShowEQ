@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-/// Client configuration loaded from `winshoweq-client.ini`.
+/// Client configuration loaded from `client.ini`.
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
     /// Server IP address.
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn parse_defaults_when_file_missing() {
-        let cfg = ClientConfig::load(Path::new("nonexistent_winshoweq-client.ini"));
+        let cfg = ClientConfig::load(Path::new("nonexistent_client.ini"));
         assert_eq!(cfg.server_ip, "127.0.0.1");
         assert_eq!(cfg.server_port, 5555);
         assert_eq!(cfg.update_delay_ms, 250);

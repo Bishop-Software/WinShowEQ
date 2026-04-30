@@ -1,5 +1,5 @@
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -22,7 +22,6 @@ const TICK_REQUEST: i32 =
     IPT_ZONE | IPT_SELF | IPT_TARGET | IPT_SPAWNS | IPT_GROUND | IPT_WORLD;
 const TICK_DELAY_MS: u64 = 250;
 const RECONNECT_DELAY_SECS: u64 = 2;
-const CONFIG_PATH: &str = "winshoweq-client.ini";
 
 #[derive(Default, PartialEq)]
 enum BottomTab {
@@ -34,6 +33,7 @@ enum BottomTab {
 pub struct MainApp {
     data: Arc<Mutex<AppData>>,
     config: ClientConfig,
+    config_path: PathBuf,
     map_pane: MapPane,
     login: LoginDialog,
     options: OptionsDialog,
@@ -44,8 +44,12 @@ pub struct MainApp {
 }
 
 impl MainApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>, server_addr: Option<SocketAddr>) -> Self {
-        let config = ClientConfig::load(Path::new(CONFIG_PATH));
+    pub fn new(
+        _cc: &eframe::CreationContext<'_>,
+        server_addr: Option<SocketAddr>,
+        config_path: PathBuf,
+    ) -> Self {
+        let config = ClientConfig::load(&config_path);
         let data = Arc::new(Mutex::new(AppData::default()));
         let stop = Arc::new(AtomicBool::new(false));
         let addr_cell: Arc<Mutex<Option<SocketAddr>>> = Arc::new(Mutex::new(server_addr));
@@ -58,6 +62,7 @@ impl MainApp {
         Self {
             data,
             config,
+            config_path,
             map_pane: MapPane::default(),
             login,
             options,
@@ -69,7 +74,7 @@ impl MainApp {
     }
 
     fn save_config(&self) {
-        let _ = self.config.save(Path::new(CONFIG_PATH));
+        let _ = self.config.save(&self.config_path);
     }
 
     fn handle_zone_change(&mut self, new_zone: String) {
@@ -114,7 +119,7 @@ impl eframe::App for MainApp {
             let trails = self.options.trails_enabled;
             self.config = new_config;
             self.data.lock().unwrap().trails_enabled = trails;
-            let _ = self.config.save(Path::new(CONFIG_PATH));
+            let _ = self.config.save(&self.config_path);
         }
 
         // Menu bar

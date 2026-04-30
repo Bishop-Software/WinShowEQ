@@ -8,6 +8,7 @@
 
 # Local configuration file, may contain sensitive data
 /server/config.ini
+/client/client.ini
 
 # --- Rust build artifacts ---
 /target/
@@ -123,3 +124,4 @@ CLAUDE.md
 # Server config files
 !server/myseqserver.ini
 !server/patterns.ini
+
