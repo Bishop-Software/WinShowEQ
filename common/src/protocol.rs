@@ -32,7 +32,7 @@ pub enum SpawnType {
 /// Layout matches netBuffer_t (#pragma pack(1)) in Spawn.h exactly.
 /// Items and world time are also encoded here; the flags field carries the OPT_* type.
 #[repr(C, packed)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct SpawnRecord {
     pub name: [u8; 30],
     pub x: f32,

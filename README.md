@@ -17,7 +17,8 @@ future **client** (planned Rust overlay) in a single workspace.
 | Server    | M7 — GUI (`egui` + `eframe`)                  | Partial       |
 | Client    | Prereq — Cargo workspace restructure          | Complete      |
 | Client    | C1 — Common crate + client foundation         | Complete      |
-| Client    | C2–C8 — Network, map, rendering, filters…     | Not started   |
+| Client    | C2 — Network client (TCP tick loop, decode)   | Complete      |
+| Client    | C3–C8 — Map, rendering, filters, alerts…      | Not started   |
 
 ## What it does
 

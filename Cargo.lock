@@ -3638,6 +3638,7 @@ name = "winshoweq-client"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "clap",
  "common",
  "quick-xml 0.36.2",
  "tempfile",

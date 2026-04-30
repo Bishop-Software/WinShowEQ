@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 common = { path = "../common" }
+clap = { version = "4", features = ["derive"] }
 quick-xml = "0.36"
 chrono = "0.4"
 
