@@ -38,6 +38,26 @@ impl Default for ClientConfig {
 impl ClientConfig {
     /// Load from `path`. Missing keys fall back to defaults.
     /// Returns defaults if the file is missing or unreadable.
+    /// Persist config to `path` in INI format.
+    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        use std::io::Write as _;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut f = std::fs::File::create(path)?;
+        writeln!(f, "[WinShowEQ]")?;
+        writeln!(f, "Server={}", self.server_ip)?;
+        writeln!(f, "Port={}", self.server_port)?;
+        writeln!(f, "Rate={}", self.update_delay_ms)?;
+        writeln!(f)?;
+        writeln!(f, "[Directories]")?;
+        writeln!(f, "CfgDir={}", self.cfg_dir)?;
+        writeln!(f, "TimerDir={}", self.timer_dir)?;
+        writeln!(f, "LogDir={}", self.log_dir)?;
+        writeln!(f, "FilterDir={}", self.filter_dir)?;
+        Ok(())
+    }
+
     pub fn load(path: &Path) -> Self {
         let ini = match fs::read_to_string(path) {
             Ok(s) => s,

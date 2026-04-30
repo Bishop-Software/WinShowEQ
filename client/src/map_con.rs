@@ -65,6 +65,7 @@ impl<'a> MapCon<'a> {
 
         draw_map_lines(&ctx, &self.data.map);
         draw_labels(&ctx, &self.data.map);
+        draw_mob_trails(&ctx, self.data);
         draw_ground_items(&ctx, self.data, z_filter);
         draw_spawns(&ctx, self.data, z_filter);
         draw_self(&ctx, self.data);
@@ -84,6 +85,21 @@ impl<'a> MapCon<'a> {
 #[inline]
 fn eq_to_map(eq_x: f32, eq_y: f32) -> (f32, f32) {
     (-eq_x, -eq_y)
+}
+
+fn draw_mob_trails(ctx: &DrawCtx, data: &AppData) {
+    if !data.trails_enabled {
+        return;
+    }
+    for trail in data.trails.values() {
+        for &(mx, my) in trail {
+            let pos = ctx.to_screen(mx, my);
+            if ctx.is_visible(pos) {
+                ctx.painter
+                    .circle_filled(pos, 2.0, Color32::from_rgba_premultiplied(160, 100, 40, 140));
+            }
+        }
+    }
 }
 
 fn draw_map_lines(ctx: &DrawCtx, map: &MapData) {

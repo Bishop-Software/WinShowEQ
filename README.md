@@ -21,7 +21,8 @@ future **client** (planned Rust overlay) in a single workspace.
 | Client    | C3 — Map file parser (native EQ format)       | Complete      |
 | Client    | C4 — Core rendering (egui map canvas)         | Complete      |
 | Client    | C5 — Spawn categories, filters, Z-filter      | Complete      |
-| Client    | C6–C8 — Panels, timers, alerts…               | Not started   |
+| Client    | C6 — Panels, timers, persistence              | Complete      |
+| Client    | C7–C8 — Alerts, polish, parity…               | Not started   |
 
 ## What it does
 
