@@ -19,7 +19,8 @@ future **client** (planned Rust overlay) in a single workspace.
 | Client    | C1 — Common crate + client foundation         | Complete      |
 | Client    | C2 — Network client (TCP tick loop, decode)   | Complete      |
 | Client    | C3 — Map file parser (native EQ format)       | Complete      |
-| Client    | C4–C8 — Rendering, filters, alerts…           | Not started   |
+| Client    | C4 — Core rendering (egui map canvas)         | Complete      |
+| Client    | C5–C8 — Spawn mgmt, panels, alerts…           | Not started   |
 
 ## What it does
 

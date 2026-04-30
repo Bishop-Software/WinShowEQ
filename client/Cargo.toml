@@ -10,6 +10,8 @@ path = "src/main.rs"
 [dependencies]
 common = { path = "../common" }
 clap = { version = "4", features = ["derive"] }
+egui = "0.34"
+eframe = { version = "0.34", default-features = false, features = ["default_fonts", "glow"] }
 quick-xml = "0.36"
 chrono = "0.4"
 

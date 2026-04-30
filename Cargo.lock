@@ -3640,6 +3640,8 @@ dependencies = [
  "chrono",
  "clap",
  "common",
+ "eframe",
+ "egui",
  "quick-xml 0.36.2",
  "tempfile",
 ]
