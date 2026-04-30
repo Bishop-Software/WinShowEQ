@@ -22,6 +22,15 @@ impl FilterCategory {
             Self::Alert => 0,
         }
     }
+
+    fn xml_tag(self) -> &'static str {
+        match self {
+            Self::Hunt => "hunt",
+            Self::Caution => "caution",
+            Self::Danger => "danger",
+            Self::Alert => "alert",
+        }
+    }
 }
 
 /// A set of named spawn filters organized by category.
@@ -97,10 +106,10 @@ impl FilterSet {
         let Some(cat) = category else { return };
         for attr in e.attributes().flatten() {
             if attr.key.as_ref() == b"name" {
-                let name = std::str::from_utf8(&attr.value)
-                    .unwrap_or("")
-                    .trim()
-                    .to_lowercase();
+                let name = attr
+                    .unescape_value()
+                    .map(|v| v.trim().to_lowercase())
+                    .unwrap_or_default();
                 if !name.is_empty() {
                     self.add(cat, name);
                 }
@@ -131,6 +140,43 @@ impl FilterSet {
         self.entries.get(&name.to_lowercase()).copied()
     }
 
+    /// Remove an entry by name (case-insensitive).
+    pub fn remove(&mut self, name: &str) {
+        self.entries.remove(&name.to_lowercase());
+    }
+
+    /// Serialize to a `seqfilters` XML file.
+    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        use std::io::Write as _;
+        let mut f = std::fs::File::create(path)?;
+        writeln!(f, "<seqfilters>")?;
+        for cat in [
+            FilterCategory::Hunt,
+            FilterCategory::Caution,
+            FilterCategory::Danger,
+            FilterCategory::Alert,
+        ] {
+            let mut names: Vec<&String> = self
+                .entries
+                .iter()
+                .filter(|&(_, &v)| v == cat)
+                .map(|(k, _)| k)
+                .collect();
+            if names.is_empty() {
+                continue;
+            }
+            names.sort();
+            let tag = cat.xml_tag();
+            writeln!(f, "  <{tag}>")?;
+            for name in names {
+                writeln!(f, "    <item name=\"{}\" />", xml_escape(name))?;
+            }
+            writeln!(f, "  </{tag}>")?;
+        }
+        writeln!(f, "</seqfilters>")?;
+        Ok(())
+    }
+
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -138,6 +184,13 @@ impl FilterSet {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 #[cfg(test)]
@@ -205,5 +258,51 @@ mod tests {
     fn missing_file_returns_empty_set() {
         let set = FilterSet::load(Path::new("does_not_exist.xml"));
         assert!(set.is_empty());
+    }
+
+    #[test]
+    fn remove_drops_entry() {
+        let mut set = FilterSet::new();
+        set.add(FilterCategory::Hunt, "Fippy");
+        set.remove("Fippy");
+        assert!(set.classify("Fippy").is_none());
+        assert!(set.is_empty());
+    }
+
+    #[test]
+    fn remove_is_case_insensitive() {
+        let mut set = FilterSet::new();
+        set.add(FilterCategory::Danger, "Nagafen");
+        set.remove("NAGAFEN");
+        assert!(set.is_empty());
+    }
+
+    #[test]
+    fn save_and_reload_round_trips() {
+        let mut set = FilterSet::new();
+        set.add(FilterCategory::Danger, "Lord Nagafen");
+        set.add(FilterCategory::Hunt, "Fippy Darkpaw");
+        set.add(FilterCategory::Caution, "a gnoll");
+        set.add(FilterCategory::Alert, "Lockjaw");
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        set.save(tmp.path()).unwrap();
+        let loaded = FilterSet::load(tmp.path());
+        assert_eq!(loaded.classify("Lord Nagafen"), Some(FilterCategory::Danger));
+        assert_eq!(loaded.classify("Fippy Darkpaw"), Some(FilterCategory::Hunt));
+        assert_eq!(loaded.classify("a gnoll"), Some(FilterCategory::Caution));
+        assert_eq!(loaded.classify("Lockjaw"), Some(FilterCategory::Alert));
+    }
+
+    #[test]
+    fn save_xml_escapes_special_chars() {
+        let mut set = FilterSet::new();
+        set.add(FilterCategory::Hunt, "a & b");
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        set.save(tmp.path()).unwrap();
+        let contents = std::fs::read_to_string(tmp.path()).unwrap();
+        assert!(contents.contains("&amp;"));
+        // round-trip still works
+        let loaded = FilterSet::load(tmp.path());
+        assert_eq!(loaded.classify("a & b"), Some(FilterCategory::Hunt));
     }
 }

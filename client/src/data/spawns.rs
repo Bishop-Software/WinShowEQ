@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use common::SpawnRecord;
 
+use crate::filters::{FilterCategory, FilterSet};
+
 /// Con color assigned to a mob based on level delta relative to the player.
 /// Matches the color sequence shown in the C# MySEQ client (SpawnColors.cs).
 /// Verify exact thresholds against SpawnColors.cs when implementing C4 rendering.
@@ -55,8 +57,34 @@ fn gray_gap(player_level: u8) -> u8 {
     }
 }
 
+/// Broad category of an EQ spawn used for map rendering and filtering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpawnCategory {
+    Pc,
+    Npc,
+    Corpse,
+    /// NPC owned by a player (spawn_type==1, owner_id!=0, not a merc).
+    Pet,
+    /// Mercenary (spawn_type==1, owner_id!=0, class==71).
+    Merc,
+}
+
+/// Classify an NPC spawn from its raw fields.
+fn categorize(spawn_type: u8, owner_id: u32, class: u8) -> SpawnCategory {
+    match spawn_type {
+        0 => SpawnCategory::Pc,
+        2 => SpawnCategory::Corpse,
+        _ => {
+            if owner_id != 0 {
+                if class == 71 { SpawnCategory::Merc } else { SpawnCategory::Pet }
+            } else {
+                SpawnCategory::Npc
+            }
+        }
+    }
+}
+
 /// Data for a single EverQuest spawn, decoded from a SpawnRecord.
-/// Filter classification fields (is_hunt, etc.) are added in C5.
 #[derive(Debug, Clone)]
 pub struct SpawnInfo {
     pub id: u32,
@@ -75,6 +103,12 @@ pub struct SpawnInfo {
     pub hidden: u8,
     pub primary: u32,
     pub offhand: u32,
+    pub spawn_category: SpawnCategory,
+    /// Set by `apply_filters` — highest-priority filter match.
+    pub is_hunt: bool,
+    pub is_caution: bool,
+    pub is_danger: bool,
+    pub is_alert: bool,
 }
 
 impl SpawnInfo {
@@ -102,6 +136,26 @@ impl SpawnInfo {
             hidden,
             primary,
             offhand,
+            spawn_category: categorize(spawn_type, owner, class),
+            is_hunt: false,
+            is_caution: false,
+            is_danger: false,
+            is_alert: false,
+        }
+    }
+
+    /// Classify this spawn against a filter set, setting the filter flags.
+    pub fn apply_filters(&mut self, filters: &FilterSet) {
+        self.is_hunt = false;
+        self.is_caution = false;
+        self.is_danger = false;
+        self.is_alert = false;
+        match filters.classify(&self.name) {
+            Some(FilterCategory::Hunt) => self.is_hunt = true,
+            Some(FilterCategory::Caution) => self.is_caution = true,
+            Some(FilterCategory::Danger) => self.is_danger = true,
+            Some(FilterCategory::Alert) => self.is_alert = true,
+            None => {}
         }
     }
 
@@ -128,6 +182,20 @@ impl SpawnStore {
     pub fn upsert(&mut self, rec: &SpawnRecord) {
         let info = SpawnInfo::from_record(rec);
         self.spawns.insert(info.id, info);
+    }
+
+    /// Insert or replace, then immediately classify against `filters`.
+    pub fn upsert_with_filter(&mut self, rec: &SpawnRecord, filters: &FilterSet) {
+        let mut info = SpawnInfo::from_record(rec);
+        info.apply_filters(filters);
+        self.spawns.insert(info.id, info);
+    }
+
+    /// Re-apply filters to every spawn — call when the active FilterSet changes.
+    pub fn reclassify_all(&mut self, filters: &FilterSet) {
+        for spawn in self.spawns.values_mut() {
+            spawn.apply_filters(filters);
+        }
     }
 
     pub fn remove(&mut self, id: u32) {
@@ -268,6 +336,80 @@ mod tests {
         rec.name[..src.len()].copy_from_slice(src);
         let info = SpawnInfo::from_record(&rec);
         assert_eq!(info.name, "Fippy");
+    }
+
+    // ── SpawnCategory ────────────────────────────────────────────────────────
+
+    #[test]
+    fn pc_spawn_type_is_pc() {
+        let mut rec = SpawnRecord::zeroed();
+        rec.spawn_type = 0;
+        assert_eq!(SpawnInfo::from_record(&rec).spawn_category, SpawnCategory::Pc);
+    }
+
+    #[test]
+    fn corpse_spawn_type_is_corpse() {
+        let mut rec = SpawnRecord::zeroed();
+        rec.spawn_type = 2;
+        assert_eq!(SpawnInfo::from_record(&rec).spawn_category, SpawnCategory::Corpse);
+    }
+
+    #[test]
+    fn unowned_npc_is_npc() {
+        let mut rec = SpawnRecord::zeroed();
+        rec.spawn_type = 1;
+        rec.owner = 0;
+        assert_eq!(SpawnInfo::from_record(&rec).spawn_category, SpawnCategory::Npc);
+    }
+
+    #[test]
+    fn owned_npc_is_pet() {
+        let mut rec = SpawnRecord::zeroed();
+        rec.spawn_type = 1;
+        rec.owner = 100;
+        rec.class = 1;
+        assert_eq!(SpawnInfo::from_record(&rec).spawn_category, SpawnCategory::Pet);
+    }
+
+    #[test]
+    fn owned_npc_class71_is_merc() {
+        let mut rec = SpawnRecord::zeroed();
+        rec.spawn_type = 1;
+        rec.owner = 100;
+        rec.class = 71;
+        assert_eq!(SpawnInfo::from_record(&rec).spawn_category, SpawnCategory::Merc);
+    }
+
+    // ── filter flags ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn apply_filters_sets_danger_flag() {
+        use crate::filters::{FilterCategory, FilterSet};
+        let mut filters = FilterSet::new();
+        filters.add(FilterCategory::Danger, "Lord Nagafen");
+        let mut rec = SpawnRecord::zeroed();
+        rec.name[..13].copy_from_slice(b"Lord Nagafen\0");
+        let mut info = SpawnInfo::from_record(&rec);
+        info.apply_filters(&filters);
+        assert!(info.is_danger);
+        assert!(!info.is_hunt);
+        assert!(!info.is_caution);
+        assert!(!info.is_alert);
+    }
+
+    #[test]
+    fn apply_filters_clears_old_flags() {
+        use crate::filters::{FilterCategory, FilterSet};
+        let mut filters = FilterSet::new();
+        filters.add(FilterCategory::Hunt, "Fippy");
+        let mut rec = SpawnRecord::zeroed();
+        rec.name[..5].copy_from_slice(b"Fippy");
+        let mut info = SpawnInfo::from_record(&rec);
+        info.apply_filters(&filters);
+        assert!(info.is_hunt);
+        // Re-apply with empty filters → flags cleared
+        info.apply_filters(&FilterSet::new());
+        assert!(!info.is_hunt);
     }
 
     #[test]

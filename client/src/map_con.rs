@@ -1,7 +1,7 @@
 use egui::{Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 
 use crate::data::AppData;
-use crate::data::spawns::{con_color, ConColor};
+use crate::data::spawns::{con_color, ConColor, SpawnCategory, SpawnInfo};
 use crate::map_reader::MapData;
 
 const SPAWN_RADIUS: f32 = 4.0;
@@ -34,7 +34,8 @@ impl<'a> MapCon<'a> {
         Self { data, state }
     }
 
-    pub fn show(self, ui: &mut Ui) {
+    /// `z_filter`: if `Some((center_z, range))`, spawns with `|z - center| > range` are hidden.
+    pub fn show(self, ui: &mut Ui, z_filter: Option<(f32, f32)>) {
         let size = ui.available_size();
         let (response, painter) = ui.allocate_painter(size, Sense::click_and_drag());
 
@@ -64,8 +65,8 @@ impl<'a> MapCon<'a> {
 
         draw_map_lines(&ctx, &self.data.map);
         draw_labels(&ctx, &self.data.map);
-        draw_ground_items(&ctx, self.data);
-        draw_spawns(&ctx, self.data);
+        draw_ground_items(&ctx, self.data, z_filter);
+        draw_spawns(&ctx, self.data, z_filter);
         draw_self(&ctx, self.data);
         draw_hud(&ctx, ui, self.data);
     }
@@ -121,10 +122,13 @@ fn draw_labels(ctx: &DrawCtx, map: &MapData) {
     }
 }
 
-fn draw_spawns(ctx: &DrawCtx, data: &AppData) {
+fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>) {
     let player_level = data.self_level();
     for spawn in data.spawns.iter() {
         if Some(spawn.id) == data.self_id {
+            continue;
+        }
+        if z_filtered(spawn.z, z_filter) {
             continue;
         }
         let (mx, my) = eq_to_map(spawn.x, spawn.y);
@@ -132,7 +136,7 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData) {
         if !ctx.is_visible(pos) {
             continue;
         }
-        let color = con_to_color(con_color(player_level, spawn.level));
+        let color = spawn_color(spawn, player_level);
         ctx.painter.circle_filled(pos, SPAWN_RADIUS, color);
     }
 }
@@ -157,8 +161,11 @@ fn draw_self(ctx: &DrawCtx, data: &AppData) {
     ctx.painter.line_segment([pos, tip], Stroke::new(2.0, Color32::WHITE));
 }
 
-fn draw_ground_items(ctx: &DrawCtx, data: &AppData) {
+fn draw_ground_items(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>) {
     for item in data.ground.iter() {
+        if z_filtered(item.z, z_filter) {
+            continue;
+        }
         let (mx, my) = eq_to_map(item.x, item.y);
         let pos = ctx.to_screen(mx, my);
         if !ctx.is_visible(pos) {
@@ -205,6 +212,37 @@ fn draw_hud(ctx: &DrawCtx, _ui: &mut Ui, data: &AppData) {
             font,
             Color32::from_rgb(200, 200, 150),
         );
+    }
+}
+
+/// Returns true if `z` is outside the filter range and should be hidden.
+#[inline]
+fn z_filtered(z: f32, filter: Option<(f32, f32)>) -> bool {
+    match filter {
+        Some((center, range)) => (z - center).abs() > range,
+        None => false,
+    }
+}
+
+/// Spawn dot color: filter flags take priority over category/con color.
+fn spawn_color(spawn: &SpawnInfo, player_level: u8) -> Color32 {
+    if spawn.is_danger {
+        return Color32::from_rgb(255, 50, 50);
+    }
+    if spawn.is_caution {
+        return Color32::from_rgb(255, 140, 0);
+    }
+    if spawn.is_hunt {
+        return Color32::from_rgb(0, 255, 120);
+    }
+    if spawn.is_alert {
+        return Color32::from_rgb(220, 0, 255);
+    }
+    match spawn.spawn_category {
+        SpawnCategory::Pc => Color32::from_rgb(0, 200, 255),
+        SpawnCategory::Corpse => Color32::from_rgb(80, 40, 40),
+        SpawnCategory::Pet | SpawnCategory::Merc => Color32::from_rgb(160, 160, 160),
+        SpawnCategory::Npc => con_to_color(con_color(player_level, spawn.level)),
     }
 }
 

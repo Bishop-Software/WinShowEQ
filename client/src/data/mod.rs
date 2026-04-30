@@ -2,6 +2,7 @@ pub mod ground;
 pub mod spawns;
 pub mod world;
 
+use crate::filters::FilterSet;
 use crate::map_reader::MapData;
 use crate::protocol::Packet;
 use ground::GroundStore;
@@ -18,6 +19,7 @@ pub struct AppData {
     pub zone_name: String,
     pub target_id: Option<u32>,
     pub self_id: Option<u32>,
+    pub filters: FilterSet,
 }
 
 impl AppData {
@@ -40,11 +42,14 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) {
             data.self_id = None;
             data.target_id = None;
         }
-        Packet::Spawn(rec) => data.spawns.upsert(&rec),
+        Packet::Spawn(rec) => {
+            let (spawns, filters) = (&mut data.spawns, &data.filters);
+            spawns.upsert_with_filter(&rec, filters);
+        }
         Packet::Self_(rec) => {
-            let id = rec.id;
-            data.self_id = Some(id);
-            data.spawns.upsert(&rec);
+            data.self_id = Some(rec.id);
+            let (spawns, filters) = (&mut data.spawns, &data.filters);
+            spawns.upsert_with_filter(&rec, filters);
         }
         Packet::Target(rec) => {
             data.target_id = Some(rec.id);
