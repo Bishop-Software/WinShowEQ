@@ -1,3 +1,4 @@
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use crate::config::{IniReader, ServerConfigModel};
@@ -5,7 +6,7 @@ use crate::data::spawn_offsets::{ItemOffsets, SpawnOffsets, WorldOffsets};
 use crate::mem_reader::MemReader;
 use crate::network::NetworkServer;
 use crate::notifier::{ConnectionEvent, LoggingNotifier, StatusSnapshot, UiNotifier};
-use crate::server_logic::{MemDataProvider, ServerLogic};
+use crate::server_logic::{LiveOffsets, MemDataProvider, ServerLogic};
 
 /// Server session state machine.
 /// Mirrors SessionState enum in ServerSessionRunner.h.
@@ -34,6 +35,9 @@ pub enum SessionMode {
 /// Mirrors ServerSessionRunner in C++ — Start/Stop/Pause/Resume + per-mode loops.
 pub struct SessionRunner {
     logic: ServerLogic,
+    ini_path: String,
+    config_ini_path: String,
+    reload_flag: Arc<AtomicBool>,
     notifier: Arc<dyn UiNotifier>,
     state: SessionState,
     last_error: String,
@@ -42,7 +46,10 @@ pub struct SessionRunner {
 impl SessionRunner {
     pub fn new(ini_path: String, config_ini_path: String) -> Self {
         Self {
-            logic: ServerLogic::new(ini_path, config_ini_path),
+            logic: ServerLogic::new(ini_path.clone(), config_ini_path.clone()),
+            ini_path,
+            config_ini_path,
+            reload_flag: Arc::new(AtomicBool::new(false)),
             notifier: Arc::new(LoggingNotifier::new(true)),
             state: SessionState::Idle,
             last_error: String::new(),
@@ -51,6 +58,10 @@ impl SessionRunner {
 
     pub fn set_notifier(&mut self, notifier: Arc<dyn UiNotifier>) {
         self.notifier = notifier;
+    }
+
+    pub fn reload_flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.reload_flag)
     }
 
     pub fn state(&self) -> SessionState {
@@ -113,6 +124,7 @@ impl SessionRunner {
         let spawn_off = SpawnOffsets::from_ini(&ir);
         let item_off = ItemOffsets::from_ini(&ir);
         let world_off = WorldOffsets::from_ini(&ir);
+        let live = LiveOffsets { primary: config.offsets.clone(), spawn_off: spawn_off.clone(), item_off, world_off };
 
         if spawn_off.buf_size <= 30 {
             self.notifier
@@ -140,10 +152,10 @@ impl SessionRunner {
 
         let provider = Arc::new(MemDataProvider::new(
             Arc::clone(&mem),
-            config.offsets,
-            spawn_off,
-            item_off,
-            world_off,
+            live,
+            self.ini_path.clone(),
+            self.config_ini_path.clone(),
+            Arc::clone(&self.reload_flag),
             Some(Arc::clone(&self.notifier)),
         ));
 

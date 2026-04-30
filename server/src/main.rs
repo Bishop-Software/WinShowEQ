@@ -90,6 +90,7 @@ fn run_gui(ini_override: Option<&str>) {
     let patterns_ini_path_for_gui = patterns_ini_path.clone();
     let mut runner = SessionRunner::new(ini_path, config_ini_path);
     runner.set_notifier(notifier as Arc<dyn UiNotifier>);
+    let reload_flag = runner.reload_flag();
 
     std::thread::spawn(move || {
         runner.run_console_loop();
@@ -112,6 +113,7 @@ fn run_gui(ini_override: Option<&str>) {
                 ini_path_for_gui,
                 config_ini_path_for_gui,
                 patterns_ini_path_for_gui,
+                reload_flag,
                 start_minimized,
             )))
         }),

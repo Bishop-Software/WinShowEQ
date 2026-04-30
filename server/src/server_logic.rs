@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use common::{OPT_GROUND, OPT_SELF, OPT_SPAWNS, OPT_TARGET, SpawnRecord, WorldTime};
@@ -119,15 +119,41 @@ fn extract_world_time(buf: &[u8], offs: &WorldOffsets) -> WorldTime {
 }
 
 // --------------------------------------------------------------------------
+// LiveOffsets — hot-reloadable offset bundle
+// --------------------------------------------------------------------------
+
+#[derive(Clone)]
+pub struct LiveOffsets {
+    pub primary: PrimaryOffsets,
+    pub spawn_off: SpawnOffsets,
+    pub item_off: ItemOffsets,
+    pub world_off: WorldOffsets,
+}
+
+/// Read all offsets from the two INI files. Used at startup and on reload.
+pub fn load_live_offsets(ini_path: &str, config_ini_path: &str) -> Result<LiveOffsets, String> {
+    let mut ir = IniReader::new();
+    ir.open_config_file(config_ini_path);
+    ir.open_file(ini_path)?;
+    let model = ir.read_server_config_model()?;
+    Ok(LiveOffsets {
+        primary: model.offsets,
+        spawn_off: SpawnOffsets::from_ini(&ir),
+        item_off: ItemOffsets::from_ini(&ir),
+        world_off: WorldOffsets::from_ini(&ir),
+    })
+}
+
+// --------------------------------------------------------------------------
 // MemDataProvider — live DataProvider backed by ReadProcessMemory
 // --------------------------------------------------------------------------
 
 pub struct MemDataProvider {
     mem: Arc<Mutex<MemReader>>,
-    primary: PrimaryOffsets,
-    spawn_off: SpawnOffsets,
-    item_off: ItemOffsets,
-    world_off: WorldOffsets,
+    offsets: Arc<Mutex<LiveOffsets>>,
+    ini_path: String,
+    config_ini_path: String,
+    reload_flag: Arc<AtomicBool>,
     /// Throttle counter for reattach attempts (retries on value % 10 == 2).
     check_ctr: AtomicU32,
     notifier: Option<Arc<dyn UiNotifier>>,
@@ -136,66 +162,92 @@ pub struct MemDataProvider {
 impl MemDataProvider {
     pub fn new(
         mem: Arc<Mutex<MemReader>>,
-        primary: PrimaryOffsets,
-        spawn_off: SpawnOffsets,
-        item_off: ItemOffsets,
-        world_off: WorldOffsets,
+        live: LiveOffsets,
+        ini_path: String,
+        config_ini_path: String,
+        reload_flag: Arc<AtomicBool>,
         notifier: Option<Arc<dyn UiNotifier>>,
     ) -> Self {
         Self {
             mem,
-            primary,
-            spawn_off,
-            item_off,
-            world_off,
+            offsets: Arc::new(Mutex::new(live)),
+            ini_path,
+            config_ini_path,
+            reload_flag,
             check_ctr: AtomicU32::new(0),
             notifier,
+        }
+    }
+
+    fn check_and_reload(&self) {
+        if !self.reload_flag.swap(false, Ordering::Relaxed) {
+            return;
+        }
+        match load_live_offsets(&self.ini_path, &self.config_ini_path) {
+            Ok(new_offs) => {
+                *self.offsets.lock().unwrap() = new_offs;
+                if let Some(n) = &self.notifier {
+                    n.on_log_event("Offsets reloaded from INI.");
+                }
+            }
+            Err(e) => {
+                if let Some(n) = &self.notifier {
+                    n.on_log_event(&format!("[ERROR] Reload offsets failed: {e}"));
+                }
+            }
         }
     }
 }
 
 impl DataProvider for MemDataProvider {
     fn zone_name(&self) -> String {
+        self.check_and_reload();
+        let zone_name_addr = self.offsets.lock().unwrap().primary.zone_name;
         let mut mem = self.mem.lock().unwrap();
         if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return "StartUp".to_string();
         }
-        let addr = self.primary.zone_name;
-        if addr == 0 {
+        if zone_name_addr == 0 {
             return "StartUp".to_string();
         }
-        let remapped = mem.canonical_to_actual(addr);
+        let remapped = mem.canonical_to_actual(zone_name_addr);
         mem.read_string(remapped, 64)
             .unwrap_or_else(|_| "StartUp".to_string())
     }
 
     fn self_spawn(&self) -> Option<SpawnRecord> {
+        let (self_addr, spawn_off) = {
+            let o = self.offsets.lock().unwrap();
+            (o.primary.self_addr, o.spawn_off.clone())
+        };
         let mut mem = self.mem.lock().unwrap();
         if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return None;
         }
-        let addr = self.primary.self_addr;
-        if addr == 0 {
+        if self_addr == 0 {
             return None;
         }
-        let ptr = mem.read_raw_pointer(addr).ok()?;
+        let ptr = mem.read_raw_pointer(self_addr).ok()?;
         if ptr == 0 {
             return None;
         }
-        let buf = mem.read_bytes(ptr, self.spawn_off.buf_size).ok()?;
-        Some(extract_spawn_record(&buf, &self.spawn_off, OPT_SELF))
+        let buf = mem.read_bytes(ptr, spawn_off.buf_size).ok()?;
+        Some(extract_spawn_record(&buf, &spawn_off, OPT_SELF))
     }
 
     fn spawn_list(&self) -> Vec<SpawnRecord> {
+        let (spawn_list_addr, spawn_off) = {
+            let o = self.offsets.lock().unwrap();
+            (o.primary.spawn_list, o.spawn_off.clone())
+        };
         let mut mem = self.mem.lock().unwrap();
         if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return Vec::new();
         }
-        let addr = self.primary.spawn_list;
-        if addr == 0 {
+        if spawn_list_addr == 0 {
             return Vec::new();
         }
-        let Ok(mut ptr) = mem.read_raw_pointer(addr) else {
+        let Ok(mut ptr) = mem.read_raw_pointer(spawn_list_addr) else {
             return Vec::new();
         };
         if ptr == 0 {
@@ -204,8 +256,8 @@ impl DataProvider for MemDataProvider {
 
         // Walk backward to the true head of the list. After TSS shrouds/hover, the
         // INI pointer may land mid-list — matches C++ handleSpawnList() back-walk.
-        let buf_size = self.spawn_off.buf_size;
-        let prev_off = self.spawn_off.prev;
+        let buf_size = spawn_off.buf_size;
+        let prev_off = spawn_off.prev;
         for _ in 0..2000 {
             let Ok(buf) = mem.read_bytes(ptr, buf_size) else {
                 break;
@@ -218,7 +270,7 @@ impl DataProvider for MemDataProvider {
         }
 
         // Walk forward collecting records.
-        let next_off = self.spawn_off.next;
+        let next_off = spawn_off.next;
         let mut records = Vec::new();
         loop {
             if ptr == 0 {
@@ -227,7 +279,7 @@ impl DataProvider for MemDataProvider {
             let Ok(buf) = mem.read_bytes(ptr, buf_size) else {
                 break;
             };
-            records.push(extract_spawn_record(&buf, &self.spawn_off, OPT_SPAWNS));
+            records.push(extract_spawn_record(&buf, &spawn_off, OPT_SPAWNS));
             let next = read_u64_at(&buf, next_off);
             if next == 0 || next == ptr {
                 break;
@@ -238,32 +290,38 @@ impl DataProvider for MemDataProvider {
     }
 
     fn target(&self) -> Option<SpawnRecord> {
+        let (target_addr, spawn_off) = {
+            let o = self.offsets.lock().unwrap();
+            (o.primary.target, o.spawn_off.clone())
+        };
         let mut mem = self.mem.lock().unwrap();
         if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return None;
         }
-        let addr = self.primary.target;
-        if addr == 0 {
+        if target_addr == 0 {
             return None;
         }
-        let ptr = mem.read_raw_pointer(addr).ok()?;
+        let ptr = mem.read_raw_pointer(target_addr).ok()?;
         if ptr == 0 {
             return None;
         }
-        let buf = mem.read_bytes(ptr, self.spawn_off.buf_size).ok()?;
-        Some(extract_spawn_record(&buf, &self.spawn_off, OPT_TARGET))
+        let buf = mem.read_bytes(ptr, spawn_off.buf_size).ok()?;
+        Some(extract_spawn_record(&buf, &spawn_off, OPT_TARGET))
     }
 
     fn ground_items(&self) -> Vec<SpawnRecord> {
+        let (ground_addr, item_off) = {
+            let o = self.offsets.lock().unwrap();
+            (o.primary.ground, o.item_off.clone())
+        };
         let mut mem = self.mem.lock().unwrap();
         if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return Vec::new();
         }
-        let addr = self.primary.ground;
-        if addr == 0 {
+        if ground_addr == 0 {
             return Vec::new();
         }
-        let Ok(base_ptr) = mem.read_raw_pointer(addr) else {
+        let Ok(base_ptr) = mem.read_raw_pointer(ground_addr) else {
             return Vec::new();
         };
         if base_ptr == 0 {
@@ -273,7 +331,7 @@ impl DataProvider for MemDataProvider {
         // If the name at base_ptr+nameOff starts with "IT", base_ptr is a direct item.
         // Otherwise base_ptr is a container that holds a pointer to the first item.
         // Mirrors NetworkServer::handleGroundItems() pointer disambiguation.
-        let name_check_addr = base_ptr + self.item_off.name as u64;
+        let name_check_addr = base_ptr + item_off.name as u64;
         let first_name = mem.read_string(name_check_addr, 4).unwrap_or_default();
         let mut ptr = if first_name.starts_with("IT") {
             base_ptr
@@ -281,8 +339,8 @@ impl DataProvider for MemDataProvider {
             mem.read_pointer(base_ptr).unwrap_or(0)
         };
 
-        let buf_size = self.item_off.buf_size;
-        let next_off = self.item_off.next;
+        let buf_size = item_off.buf_size;
+        let next_off = item_off.next;
         let mut records = Vec::new();
         let mut count = 0u32;
         loop {
@@ -292,7 +350,7 @@ impl DataProvider for MemDataProvider {
             let Ok(buf) = mem.read_bytes(ptr, buf_size) else {
                 break;
             };
-            records.push(pack_item_as_spawn(&buf, &self.item_off));
+            records.push(pack_item_as_spawn(&buf, &item_off));
             let next = read_u64_at(&buf, next_off);
             if next == 0 || next == ptr {
                 break;
@@ -304,20 +362,23 @@ impl DataProvider for MemDataProvider {
     }
 
     fn world_time(&self) -> Option<WorldTime> {
+        let (world_addr, world_off) = {
+            let o = self.offsets.lock().unwrap();
+            (o.primary.world, o.world_off.clone())
+        };
         let mut mem = self.mem.lock().unwrap();
         if !try_attach(&mut mem, &self.check_ctr, self.notifier.as_ref()) {
             return None;
         }
-        let addr = self.primary.world;
-        if addr == 0 {
+        if world_addr == 0 {
             return None;
         }
-        let ptr = mem.read_raw_pointer(addr).ok()?;
+        let ptr = mem.read_raw_pointer(world_addr).ok()?;
         if ptr == 0 {
             return None;
         }
-        let buf = mem.read_bytes(ptr, self.world_off.buf_size).ok()?;
-        Some(extract_world_time(&buf, &self.world_off))
+        let buf = mem.read_bytes(ptr, world_off.buf_size).ok()?;
+        Some(extract_world_time(&buf, &world_off))
     }
 
     fn processes(&self) -> Vec<u32> {
@@ -378,12 +439,5 @@ impl ServerLogic {
         ir.open_file(&self.ini_path)?;
         let model = ir.read_server_config_model()?;
         Ok((ir, model))
-    }
-
-    /// Reload offsets from files; return the patch date on success.
-    /// Mirrors ServerLogic::reloadOffsets() in C++.
-    pub fn reload_offsets(&self) -> Result<String, String> {
-        let (ir, _model) = self.load_config()?;
-        Ok(ir.patch_date.clone())
     }
 }

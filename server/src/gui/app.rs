@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use eframe::egui::{self, Color32, RichText};
@@ -58,6 +59,7 @@ pub struct WinShowEQApp {
     ini_path: String,
     config_ini_path: String,
     patterns_ini_path: String,
+    reload_flag: Arc<AtomicBool>,
     _tray: TrayIcon,
     menu_open: MenuItem,
     menu_start_min: CheckMenuItem,
@@ -73,6 +75,7 @@ impl WinShowEQApp {
         ini_path: String,
         config_ini_path: String,
         patterns_ini_path: String,
+        reload_flag: Arc<AtomicBool>,
         start_minimized: bool,
     ) -> Self {
         let menu_open = MenuItem::new("Open", true, None);
@@ -105,6 +108,7 @@ impl WinShowEQApp {
             ini_path,
             config_ini_path,
             patterns_ini_path,
+            reload_flag,
             _tray: tray,
             menu_open,
             menu_start_min,
@@ -559,8 +563,9 @@ impl eframe::App for WinShowEQApp {
                             .ok();
                     }
                     if ui.button("Reload Offsets").clicked() {
+                        self.reload_flag.store(true, Ordering::Relaxed);
                         if let Ok(mut s) = self.state.lock() {
-                            s.push_log("Reload Offsets: not yet wired to server thread");
+                            s.push_log("Reload Offsets: requested — will apply on next tick");
                         }
                     }
                     if ui.button("Offset Finder").clicked() {
