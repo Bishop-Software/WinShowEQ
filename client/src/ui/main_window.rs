@@ -12,7 +12,7 @@ use crate::data::annotations::AnnotationStore;
 use crate::data::timers::{SpawnTimer, TimerStore};
 use crate::data::{apply_packet, configure_alerts, AppData};
 use crate::game_data::GameData;
-use crate::logger::Logger;
+use crate::logger::{LogLevel, Logger};
 use crate::net::ServerConnection;
 use crate::protocol::decode_packet;
 use crate::ui::ground_list;
@@ -71,6 +71,7 @@ pub struct MainApp {
     data: Arc<Mutex<AppData>>,
     config: ClientConfig,
     config_path: PathBuf,
+    logger: Logger,
     map_pane: MapPane,
     login: LoginDialog,
     options: OptionsDialog,
@@ -102,6 +103,8 @@ impl MainApp {
     ) -> Self {
         let config = ClientConfig::load(&config_path);
         let logger = Logger::new(&config.log_dir);
+        logger.set_enabled(config.log_enabled);
+        logger.set_level(LogLevel::from_str(&config.log_level));
         let data = Arc::new(Mutex::new(AppData::default()));
         let stop = Arc::new(AtomicBool::new(false));
         let addr_cell: Arc<Mutex<Option<SocketAddr>>> = Arc::new(Mutex::new(server_addr));
@@ -118,7 +121,7 @@ impl MainApp {
             Arc::clone(&addr_cell),
             Arc::clone(&data),
             Arc::clone(&stop),
-            logger,
+            logger.clone(),
         );
 
         let login = LoginDialog::new(server_addr);
@@ -128,6 +131,7 @@ impl MainApp {
             data,
             config,
             config_path,
+            logger,
             map_pane: MapPane::default(),
             login,
             options,
@@ -278,6 +282,8 @@ impl eframe::App for MainApp {
         if let Some(new_config) = self.options.show(&ctx) {
             let trails = self.options.trails_enabled;
             self.config = new_config;
+            self.logger.set_enabled(self.config.log_enabled);
+            self.logger.set_level(LogLevel::from_str(&self.config.log_level));
             {
                 let mut data = self.data.lock().unwrap();
                 data.trails_enabled = trails;

@@ -38,6 +38,11 @@ pub struct ClientConfig {
     // ── EverQuest installation ────────────────────────────────────────────────
     /// Path to the EverQuest installation folder (for loading dbstr_us.txt).
     pub eq_path: String,
+
+    // ── Logging ───────────────────────────────────────────────────────────────
+    pub log_enabled: bool,
+    /// Minimum log level: "debug" | "info" | "warn" | "error"
+    pub log_level: String,
 }
 
 impl Default for ClientConfig {
@@ -62,6 +67,8 @@ impl Default for ClientConfig {
             discord_on_danger: false,
             discord_on_hunt: false,
             eq_path: String::new(),
+            log_enabled: true,
+            log_level: "info".to_owned(),
         }
     }
 }
@@ -104,6 +111,10 @@ impl ClientConfig {
         writeln!(f)?;
         writeln!(f, "[EQ]")?;
         writeln!(f, "Path={}", self.eq_path)?;
+        writeln!(f)?;
+        writeln!(f, "[Logging]")?;
+        writeln!(f, "Enabled={}", if self.log_enabled { 1 } else { 0 })?;
+        writeln!(f, "Level={}", self.log_level)?;
         Ok(())
     }
 
@@ -165,6 +176,11 @@ impl ClientConfig {
 
         if let Some(eq) = sections.get("eq") {
             if let Some(v) = eq.get("path") { cfg.eq_path = v.clone(); }
+        }
+
+        if let Some(logging) = sections.get("logging") {
+            if let Some(v) = logging.get("enabled") { cfg.log_enabled = v != "0"; }
+            if let Some(v) = logging.get("level") { cfg.log_level = v.clone(); }
         }
 
         cfg

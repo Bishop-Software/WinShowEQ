@@ -1,4 +1,5 @@
 use crate::config::ClientConfig;
+use crate::logger::LogLevel;
 
 pub struct OptionsDialog {
     pub open: bool,
@@ -27,6 +28,9 @@ pub struct OptionsDialog {
     discord_on_hunt: bool,
     // EQ
     eq_path: String,
+    // Logging
+    log_enabled: bool,
+    log_level: String,
 }
 
 impl OptionsDialog {
@@ -52,6 +56,8 @@ impl OptionsDialog {
             discord_on_danger: cfg.discord_on_danger,
             discord_on_hunt: cfg.discord_on_hunt,
             eq_path: cfg.eq_path.clone(),
+            log_enabled: cfg.log_enabled,
+            log_level: cfg.log_level.clone(),
         }
     }
 
@@ -74,6 +80,8 @@ impl OptionsDialog {
         self.discord_on_danger = cfg.discord_on_danger;
         self.discord_on_hunt = cfg.discord_on_hunt;
         self.eq_path = cfg.eq_path.clone();
+        self.log_enabled = cfg.log_enabled;
+        self.log_level = cfg.log_level.clone();
         self.trails_enabled = trails_enabled;
     }
 
@@ -87,7 +95,7 @@ impl OptionsDialog {
             egui::ViewportId::from_hash_of("options_dialog"),
             egui::ViewportBuilder::default()
                 .with_title("Options")
-                .with_inner_size([510.0, 600.0])
+                .with_inner_size([510.0, 700.0])
                 .with_resizable(false),
             |ctx, _class| {
                 egui::Panel::bottom("options_buttons").show(ctx, |ui| {
@@ -112,6 +120,8 @@ impl OptionsDialog {
                                 discord_on_danger: self.discord_on_danger,
                                 discord_on_hunt: self.discord_on_hunt,
                                 eq_path: self.eq_path.clone(),
+                                log_enabled: self.log_enabled,
+                                log_level: self.log_level.clone(),
                                 ..self.base_config.clone()
                             });
                             self.open = false;
@@ -228,6 +238,31 @@ impl OptionsDialog {
 
                             ui.strong("Discord on hunt:");
                             ui.checkbox(&mut self.discord_on_hunt, "");
+                            ui.end_row();
+
+                            // ── Logging ──────────────────────────────────────
+                            ui.separator();
+                            ui.end_row();
+                            ui.strong("Logging");
+                            ui.label("");
+                            ui.end_row();
+
+                            ui.strong("Enable logging:");
+                            ui.checkbox(&mut self.log_enabled, "");
+                            ui.end_row();
+
+                            ui.strong("Log level:");
+                            egui::ComboBox::from_id_salt("log_level")
+                                .selected_text(self.log_level.as_str())
+                                .show_ui(ui, |ui| {
+                                    for level in LogLevel::all() {
+                                        ui.selectable_value(
+                                            &mut self.log_level,
+                                            level.as_str().to_owned(),
+                                            level.as_str(),
+                                        );
+                                    }
+                                });
                             ui.end_row();
 
                             // ── EverQuest ─────────────────────────────────────
