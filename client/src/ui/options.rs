@@ -87,13 +87,13 @@ impl OptionsDialog {
             egui::ViewportId::from_hash_of("options_dialog"),
             egui::ViewportBuilder::default()
                 .with_title("Options")
-                .with_inner_size([480.0, 620.0])
-                .with_resizable(true),
+                .with_inner_size([510.0, 600.0])
+                .with_resizable(false),
             |ctx, _class| {
                 egui::Panel::bottom("options_buttons").show(ctx, |ui| {
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                        if ui.button("OK").clicked() {
+                        if ui.button("Save").clicked() {
                             result = Some(ClientConfig {
                                 server_ip: self.server_ip.clone(),
                                 server_port: self.server_port.parse().unwrap_or(5555),
@@ -142,19 +142,40 @@ impl OptionsDialog {
                             ui.end_row();
 
                             // ── Directories ──────────────────────────────────
-                            ui.strong("Config dir:");
-                            ui.text_edit_singleline(&mut self.cfg_dir);
+                            ui.strong("Config path:");
+                            ui.horizontal(|ui| {
+                                ui.text_edit_singleline(&mut self.cfg_dir);
+                                if ui.button("Browse…").clicked() {
+                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                        self.cfg_dir = path.display().to_string();
+                                    }
+                                }
+                            });
                             ui.end_row();
 
-                            ui.strong("Timer dir:");
-                            ui.text_edit_singleline(&mut self.timer_dir);
+                            ui.strong("Timer path:");
+                            ui.horizontal(|ui| {
+                                ui.text_edit_singleline(&mut self.timer_dir);
+                                if ui.button("Browse…").clicked() {
+                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                        self.timer_dir = path.display().to_string();
+                                    }
+                                }
+                            });
                             ui.end_row();
 
-                            ui.strong("Log dir:");
-                            ui.text_edit_singleline(&mut self.log_dir);
+                            ui.strong("Log path:");
+                            ui.horizontal(|ui| {
+                                ui.text_edit_singleline(&mut self.log_dir);
+                                if ui.button("Browse…").clicked() {
+                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                        self.log_dir = path.display().to_string();
+                                    }
+                                }
+                            });
                             ui.end_row();
 
-                            ui.strong("Filter dir:");
+                            ui.strong("Filter path:");
                             ui.text_edit_singleline(&mut self.filter_dir);
                             ui.end_row();
 
@@ -213,7 +234,14 @@ impl OptionsDialog {
                             ui.separator();
                             ui.end_row();
                             ui.strong("EQ install path:");
-                            ui.text_edit_singleline(&mut self.eq_path);
+                            ui.horizontal(|ui| {
+                                ui.text_edit_singleline(&mut self.eq_path);
+                                if ui.button("Browse…").clicked() {
+                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                        self.eq_path = path.display().to_string();
+                                    }
+                                }
+                            });
                             ui.end_row();
                         });
                 });

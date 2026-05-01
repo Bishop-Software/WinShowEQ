@@ -10,17 +10,21 @@ pub fn show(ui: &mut Ui, data: &AppData) {
         .id_salt("ground_scroll")
         .show(ui, |ui| {
             egui::Grid::new("ground_list")
-                .num_columns(2)
+                .num_columns(4)
                 .striped(true)
-                .min_col_width(80.0)
+                .min_col_width(60.0)
                 .show(ui, |ui| {
                     ui.strong("Item");
-                    ui.strong("Loc");
+                    ui.strong("X");
+                    ui.strong("Y");
+                    ui.strong("Z");
                     ui.end_row();
 
                     for item in &items {
                         ui.label(&item.name);
-                        ui.label(format!("{:.0},{:.0}", item.x, item.y));
+                        ui.label(format!("{:.0}", item.x));
+                        ui.label(format!("{:.0}", item.y));
+                        ui.label(format!("{:.0}", item.z));
                         ui.end_row();
                     }
                 });

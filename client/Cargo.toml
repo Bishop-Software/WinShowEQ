@@ -17,6 +17,7 @@ chrono = "0.4"
 tts = "0.26"
 rodio = { version = "0.19", default-features = false, features = ["wav"] }
 ureq = "2"
+rfd = "0.14"
 
 [dev-dependencies]
 tempfile = "3"

@@ -101,7 +101,7 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
         Packet::Target(rec) => {
             data.target_id = Some(rec.id);
         }
-        Packet::Ground(rec) => data.ground.upsert(&rec),
+        Packet::Ground(rec) => data.ground.push(&rec),
         Packet::World(t) => data.world_time = t,
         Packet::Process { .. } | Packet::Unknown { .. } => {}
     }

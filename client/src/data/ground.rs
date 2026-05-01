@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use common::{OPT_GROUND, SpawnRecord};
 
 /// A ground item decoded from an OPT_GROUND SpawnRecord.
@@ -14,20 +12,19 @@ pub struct GroundItem {
 
 impl GroundItem {
     pub fn from_record(rec: &SpawnRecord) -> Option<Self> {
-        let (flags, id, x, y, z) = (rec.flags, rec.id, rec.x, rec.y, rec.z);
-        if flags != OPT_GROUND {
+        if rec.flags != OPT_GROUND {
             return None;
         }
         let end = rec.name.iter().position(|&b| b == 0).unwrap_or(rec.name.len());
         let name = String::from_utf8_lossy(&rec.name[..end]).into_owned();
-        Some(Self { id, name, x, y, z })
+        Some(Self { id: rec.id, name, x: rec.x, y: rec.y, z: rec.z })
     }
 }
 
-/// Active ground items keyed by item id.
+/// Active ground items. Replaced wholesale each tick via clear() + push().
 #[derive(Debug, Default)]
 pub struct GroundStore {
-    items: HashMap<u32, GroundItem>,
+    items: Vec<GroundItem>,
 }
 
 impl GroundStore {
@@ -35,28 +32,20 @@ impl GroundStore {
         Self::default()
     }
 
-    /// Insert or replace the ground item described by `rec`.
-    /// Silently ignores records that are not OPT_GROUND.
-    pub fn upsert(&mut self, rec: &SpawnRecord) {
+    /// Append the ground item described by `rec`. Silently ignores non-OPT_GROUND records.
+    /// Caller must call clear() before the first push() of each tick.
+    pub fn push(&mut self, rec: &SpawnRecord) {
         if let Some(item) = GroundItem::from_record(rec) {
-            self.items.insert(item.id, item);
+            self.items.push(item);
         }
-    }
-
-    pub fn remove(&mut self, id: u32) {
-        self.items.remove(&id);
     }
 
     pub fn clear(&mut self) {
         self.items.clear();
     }
 
-    pub fn get(&self, id: u32) -> Option<&GroundItem> {
-        self.items.get(&id)
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = &GroundItem> {
-        self.items.values()
+        self.items.iter()
     }
 
     pub fn len(&self) -> usize {
@@ -86,13 +75,14 @@ mod tests {
     }
 
     #[test]
-    fn upsert_and_retrieve() {
+    fn push_and_iterate() {
         let mut store = GroundStore::new();
-        let rec = make_ground_record(42, "ITEM0001", 100.0, 200.0, 0.0);
-        store.upsert(&rec);
-        let item = store.get(42).unwrap();
-        assert_eq!(item.name, "ITEM0001");
-        assert_eq!(item.x, 100.0);
+        store.push(&make_ground_record(0, "IT0001", 100.0, 200.0, 0.0));
+        store.push(&make_ground_record(0, "IT0002", 300.0, 400.0, 0.0));
+        assert_eq!(store.len(), 2);
+        let names: Vec<_> = store.iter().map(|i| i.name.as_str()).collect();
+        assert!(names.contains(&"IT0001"));
+        assert!(names.contains(&"IT0002"));
     }
 
     #[test]
@@ -100,15 +90,15 @@ mod tests {
         let mut store = GroundStore::new();
         let mut rec = SpawnRecord::zeroed();
         rec.flags = common::OPT_SPAWNS;
-        store.upsert(&rec);
+        store.push(&rec);
         assert!(store.is_empty());
     }
 
     #[test]
     fn clear_empties_store() {
         let mut store = GroundStore::new();
-        store.upsert(&make_ground_record(1, "IT0001", 0.0, 0.0, 0.0));
-        store.upsert(&make_ground_record(2, "IT0002", 0.0, 0.0, 0.0));
+        store.push(&make_ground_record(0, "IT0001", 0.0, 0.0, 0.0));
+        store.push(&make_ground_record(0, "IT0002", 0.0, 0.0, 0.0));
         assert_eq!(store.len(), 2);
         store.clear();
         assert!(store.is_empty());

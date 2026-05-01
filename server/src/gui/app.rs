@@ -337,46 +337,13 @@ impl WinShowEQApp {
 
 // ── Native file dialog ────────────────────────────────────────────────────────
 
-/// Opens a native Windows file-open dialog and returns the chosen path, or None
-/// if the user cancelled or an error occurred.
+/// Opens a native file-open dialog and returns the chosen eqgame.exe path, or None
+/// if the user canceled or an error occurred.
 fn browse_for_exe() -> Option<String> {
-    use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
-    };
-    use windows::Win32::UI::Shell::{
-        Common::COMDLG_FILTERSPEC, FileOpenDialog, IFileOpenDialog, SIGDN_FILESYSPATH,
-    };
-    use windows::core::w;
-
-    unsafe {
-        // Initialize COM for this call; ignore S_FALSE (already initialized).
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-
-        let path = (|| -> Option<String> {
-            let dialog: IFileOpenDialog =
-                CoCreateInstance(&FileOpenDialog, None, CLSCTX_ALL).ok()?;
-
-            let filters = [
-                COMDLG_FILTERSPEC { pszName: w!("EverQuest Game"), pszSpec: w!("eqgame.exe") },
-                COMDLG_FILTERSPEC { pszName: w!("Executable Files (*.exe)"), pszSpec: w!("*.exe") },
-            ];
-            let _ = dialog.SetFileTypes(&filters);
-            let _ = dialog.SetFileTypeIndex(1); // default to eqgame.exe filter
-
-            dialog.Show(None).ok()?;
-            let item = dialog.GetResult().ok()?;
-            let pwstr = item.GetDisplayName(SIGDN_FILESYSPATH).ok()?;
-            // Convert before freeing; always free regardless of conversion result.
-            let s = pwstr.to_string().ok();
-            windows::Win32::System::Com::CoTaskMemFree(Some(
-                pwstr.0 as *const core::ffi::c_void,
-            ));
-            s
-        })();
-
-        CoUninitialize();
-        path
-    }
+    rfd::FileDialog::new()
+        .add_filter("Executable Files", &["exe"])
+        .pick_file()
+        .map(|p| p.display().to_string())
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

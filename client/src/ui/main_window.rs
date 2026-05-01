@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use common::{IPT_GROUND, IPT_SELF, IPT_SPAWNS, IPT_TARGET, IPT_WORLD, IPT_ZONE};
+use common::{IPT_GROUND, IPT_SELF, IPT_SPAWNS, IPT_TARGET, IPT_WORLD, IPT_ZONE, OPT_GROUND};
 
 use crate::config::ClientConfig;
 use crate::data::annotations::AnnotationStore;
@@ -252,11 +252,12 @@ impl eframe::App for MainApp {
             });
         });
 
-        // Right panel: spawn list
-        egui::Panel::right("spawn_panel")
+        // Spawn list window
+        egui::Window::new("Spawns")
+            .default_pos([10.0, 40.0])
+            .default_size([700.0, 300.0])
             .resizable(true)
-            .default_size(230.0)
-            .show_inside(ui, |ui| {
+            .show(&ctx, |ui| {
                 let data = self.data.lock().unwrap();
                 ui.heading(format!("Spawns ({})", data.spawns.len()));
                 ui.separator();
@@ -268,11 +269,12 @@ impl eframe::App for MainApp {
                 );
             });
 
-        // Bottom panel: timers / ground tabs
-        egui::Panel::bottom("bottom_panel")
+        // Timers / Ground window
+        egui::Window::new("Timers & Ground Items")
+            .default_pos([10.0, 360.0])
+            .default_size([500.0, 250.0])
             .resizable(true)
-            .default_size(140.0)
-            .show_inside(ui, |ui| {
+            .show(&ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.bottom_tab, BottomTab::Timers, "Timers");
                     ui.selectable_value(&mut self.bottom_tab, BottomTab::Ground, "Ground Items");
@@ -290,11 +292,15 @@ impl eframe::App for MainApp {
                 }
             });
 
-        // Center: map canvas
-        egui::CentralPanel::default().show_inside(ui, |ui| {
-            let data = self.data.lock().unwrap();
-            self.map_pane.show(ui, &data);
-        });
+        // Map window
+        egui::Window::new("Map")
+            .default_pos([730.0, 40.0])
+            .default_size([550.0, 570.0])
+            .resizable(true)
+            .show(&ctx, |ui| {
+                let data = self.data.lock().unwrap();
+                self.map_pane.show(ui, &data);
+            });
     }
 }
 
@@ -330,6 +336,9 @@ fn start_network_thread(
                             match conn.tick(TICK_REQUEST) {
                                 Ok(records) => {
                                     let mut d = data.lock().unwrap();
+                                    if records.iter().any(|r| r.flags == OPT_GROUND) {
+                                        d.ground.clear();
+                                    }
                                     for rec in records {
                                         let pkt = decode_packet(rec);
                                         // Log zone changes before applying
