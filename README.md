@@ -23,7 +23,7 @@ future **client** (planned Rust overlay) in a single workspace.
 | Client    | C5 — Spawn categories, filters, Z-filter      | Complete      |
 | Client    | C6 — Panels, timers, persistence              | Complete      |
 | Client    | C7 — Alerts and integrations                  | Complete      |
-| Client    | C8 — Polish and parity                        | Not started   |
+| Client    | C8 — Polish and parity                        | In Progress   |
 
 ## What it does
 
@@ -34,8 +34,11 @@ MySEQ is a map overlay tool for EverQuest. The server component today:
 - Supports GUI mode (default), console mode, and debug mode
 
 The Rust client component currently:
-- Is scaffolded only (`client/src/main.rs` placeholder)
-- Does not yet implement map rendering or server connectivity
+- Connects to the server over TCP and decodes all packet types
+- Renders EQ zone maps with spawn dots, ground items, mob trails, and annotations
+- Maintains spawn list, timer list, and ground item list panels (floating windows)
+- Supports filter categories (hunt/caution/danger/alert), Z-filter, alerts (TTS/sound/Discord)
+- Persists timers, annotations, filters, and config across sessions
 
 ## Workspace layout
 
@@ -66,7 +69,31 @@ WinShowEQ/
         spawn_offsets.rs  # SpawnOffsets, ItemOffsets, WorldOffsets (from INI)
   client/             # client binary (winshoweq-client / WinShowEQClient.exe)
     src/
-      main.rs         # scaffold only — C1 not yet started
+      main.rs
+      config.rs       # ClientConfig — client.ini load/save
+      net.rs          # ServerConnection — TCP tick loop
+      protocol.rs     # decode_packet — OPT_* dispatch
+      map_reader.rs   # native EQ .map file parser (L/P lines, 3 layers)
+      map_con.rs      # MapCon — egui map canvas rendering
+      filters.rs      # FilterSet — hunt/caution/danger/alert XML filters
+      alerts.rs       # AlertEngine — TTS, sound, Discord webhook
+      logger.rs       # Logger — dated log files
+      game_data.rs    # GameData — race/class name lookup from EQ data files
+      data/
+        mod.rs        # AppData aggregate, apply_packet
+        spawns.rs     # SpawnInfo, SpawnStore, SpawnCategory, con colors
+        ground.rs     # GroundItem, GroundStore (Vec; replaced per tick)
+        timers.rs     # SpawnTimer, TimerStore — respawn tracking + persistence
+        world.rs      # InGameTime
+        annotations.rs # AnnotationStore — per-zone map notes
+      ui/
+        main_window.rs # MainApp: eframe::App — floating window layout
+        map_pane.rs   # MapPane — Z-filter + map canvas host
+        spawn_list.rs # sortable spawn table
+        timer_list.rs # timer countdown table
+        ground_list.rs # ground item table (name, X, Y, Z)
+        options.rs    # settings dialog with folder browse buttons (rfd)
+        login.rs      # connect dialog
 ```
 
 ## Building and running
