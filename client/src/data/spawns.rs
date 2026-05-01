@@ -117,8 +117,12 @@ pub struct SpawnInfo {
 impl SpawnInfo {
     pub fn from_record(rec: &SpawnRecord) -> Self {
         // Copy packed fields to locals to avoid misaligned reads.
+        // Wire offset 30 is EQ's north-south axis (the C++ struct calls it 'y');
+        // offset 34 is EQ's east-west axis ('x'). The SpawnRecord field names are
+        // swapped relative to EQ convention, so we cross-assign here so that
+        // SpawnInfo.x = east-west and SpawnInfo.y = north-south, matching map files.
         let (id, x, y, z, heading, speed, owner, class, race, level, hidden, primary, offhand, spawn_type) = (
-            rec.id, rec.x, rec.y, rec.z, rec.heading, rec.speed,
+            rec.id, rec.y, rec.x, rec.z, rec.heading, rec.speed,
             rec.owner, rec.class, rec.race, rec.level, rec.hidden,
             rec.primary, rec.offhand, rec.spawn_type,
         );

@@ -10,6 +10,7 @@ use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use crate::config::ClientConfig;
 use crate::data::annotations::AnnotationStore;
 use crate::data::timers::{SpawnTimer, TimerStore};
+use crate::map_reader;
 use crate::data::{apply_packet, configure_alerts, AppData};
 use crate::game_data::GameData;
 use crate::logger::{LogLevel, Logger};
@@ -159,9 +160,16 @@ impl MainApp {
         }
         let new_timers = TimerStore::load(&new_zone, &self.config.timer_dir);
         let new_annotations = AnnotationStore::load(&new_zone, &self.config.cfg_dir);
+        // Zone names from EQ are lowercase short names; map files use the same convention.
+        let new_map = map_reader::load_zone(
+            std::path::Path::new(&self.config.map_dir),
+            &new_zone.to_lowercase(),
+        )
+        .unwrap_or_default();
         let mut data = self.data.lock().unwrap();
         data.timers = new_timers;
         data.annotations = new_annotations;
+        data.map = new_map;
         self.prev_zone = new_zone;
     }
 

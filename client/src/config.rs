@@ -19,6 +19,8 @@ pub struct ClientConfig {
     pub log_dir: String,
     /// Directory for filter XML files (often same as cfg_dir).
     pub filter_dir: String,
+    /// Directory containing EQ native map files ({zone}_1.txt etc.).
+    pub map_dir: String,
 
     // ── Alert modes — "none" | "beep" | "speech" | "sound" ──────────────────
     pub alert_danger_mode: String,
@@ -55,6 +57,7 @@ impl Default for ClientConfig {
             timer_dir: "timers".to_owned(),
             log_dir: "logs".to_owned(),
             filter_dir: "cfg".to_owned(),
+            map_dir: "maps".to_owned(),
             alert_danger_mode: "speech".to_owned(),
             alert_danger_sound: String::new(),
             alert_caution_mode: "beep".to_owned(),
@@ -93,6 +96,7 @@ impl ClientConfig {
         writeln!(f, "TimerDir={}", self.timer_dir)?;
         writeln!(f, "LogDir={}", self.log_dir)?;
         writeln!(f, "FilterDir={}", self.filter_dir)?;
+        writeln!(f, "MapDir={}", self.map_dir)?;
         writeln!(f)?;
         writeln!(f, "[Alerts]")?;
         writeln!(f, "DangerMode={}", self.alert_danger_mode)?;
@@ -154,6 +158,9 @@ impl ClientConfig {
             }
             if let Some(v) = dirs.get("filterdir") {
                 cfg.filter_dir = v.clone();
+            }
+            if let Some(v) = dirs.get("mapdir") {
+                cfg.map_dir = v.clone();
             }
         }
 

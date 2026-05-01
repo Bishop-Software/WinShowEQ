@@ -17,7 +17,7 @@ impl GroundItem {
         }
         let end = rec.name.iter().position(|&b| b == 0).unwrap_or(rec.name.len());
         let name = String::from_utf8_lossy(&rec.name[..end]).into_owned();
-        Some(Self { id: rec.id, name, x: rec.x, y: rec.y, z: rec.z })
+        Some(Self { id: rec.id, name, x: rec.y, y: rec.x, z: rec.z })
     }
 }
 

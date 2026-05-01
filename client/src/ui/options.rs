@@ -15,6 +15,7 @@ pub struct OptionsDialog {
     timer_dir: String,
     log_dir: String,
     filter_dir: String,
+    map_dir: String,
     // Alerts
     danger_mode: String,
     caution_mode: String,
@@ -46,6 +47,7 @@ impl OptionsDialog {
             timer_dir: cfg.timer_dir.clone(),
             log_dir: cfg.log_dir.clone(),
             filter_dir: cfg.filter_dir.clone(),
+            map_dir: cfg.map_dir.clone(),
             danger_mode: cfg.alert_danger_mode.clone(),
             caution_mode: cfg.alert_caution_mode.clone(),
             hunt_mode: cfg.alert_hunt_mode.clone(),
@@ -70,6 +72,7 @@ impl OptionsDialog {
         self.timer_dir = cfg.timer_dir.clone();
         self.log_dir = cfg.log_dir.clone();
         self.filter_dir = cfg.filter_dir.clone();
+        self.map_dir = cfg.map_dir.clone();
         self.danger_mode = cfg.alert_danger_mode.clone();
         self.caution_mode = cfg.alert_caution_mode.clone();
         self.hunt_mode = cfg.alert_hunt_mode.clone();
@@ -110,6 +113,7 @@ impl OptionsDialog {
                                 timer_dir: self.timer_dir.clone(),
                                 log_dir: self.log_dir.clone(),
                                 filter_dir: self.filter_dir.clone(),
+                                map_dir: self.map_dir.clone(),
                                 alert_danger_mode: self.danger_mode.clone(),
                                 alert_danger_sound: self.danger_sound.clone(),
                                 alert_caution_mode: self.caution_mode.clone(),
@@ -187,6 +191,17 @@ impl OptionsDialog {
 
                             ui.strong("Filter path:");
                             ui.text_edit_singleline(&mut self.filter_dir);
+                            ui.end_row();
+
+                            ui.strong("Map path:");
+                            ui.horizontal(|ui| {
+                                ui.text_edit_singleline(&mut self.map_dir);
+                                if ui.button("Browse…").clicked() {
+                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                        self.map_dir = path.display().to_string();
+                                    }
+                                }
+                            });
                             ui.end_row();
 
                             // ── Rendering ────────────────────────────────────

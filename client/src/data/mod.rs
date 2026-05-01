@@ -73,7 +73,7 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
         Packet::Spawn(rec) => {
             let id = rec.id;
             if data.trails_enabled {
-                let (new_x, new_y) = (rec.x, rec.y);
+                let (new_x, new_y) = (rec.y, rec.x); // match SpawnInfo.x=east-west, .y=north-south
                 let trail_pt = data
                     .spawns
                     .get(id)
