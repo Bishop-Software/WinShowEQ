@@ -1,6 +1,9 @@
 use crate::config::ClientConfig;
 use crate::logger::LogLevel;
 
+const ALERT_MODES: &[&str] = &["none", "beep", "speech", "sound"];
+const AUDIO_EXTENSIONS: &[&str] = &["wav", "flac", "ogg", "mp3"];
+
 pub struct OptionsDialog {
     pub open: bool,
     pub trails_enabled: bool,
@@ -22,7 +25,9 @@ pub struct OptionsDialog {
     hunt_mode: String,
     alert_mode: String,
     danger_sound: String,
+    caution_sound: String,
     hunt_sound: String,
+    alert_sound: String,
     // Discord
     discord_webhook: String,
     discord_on_danger: bool,
@@ -51,9 +56,11 @@ impl OptionsDialog {
             danger_mode: cfg.alert_danger_mode.clone(),
             caution_mode: cfg.alert_caution_mode.clone(),
             hunt_mode: cfg.alert_hunt_mode.clone(),
-            alert_mode: cfg.alert_alert_mode.clone(),
+            alert_mode: cfg.alert_rare_mode.clone(),
             danger_sound: cfg.alert_danger_sound.clone(),
+            caution_sound: cfg.alert_caution_sound.clone(),
             hunt_sound: cfg.alert_hunt_sound.clone(),
+            alert_sound: cfg.alert_rare_sound.clone(),
             discord_webhook: cfg.discord_webhook.clone(),
             discord_on_danger: cfg.discord_on_danger,
             discord_on_hunt: cfg.discord_on_hunt,
@@ -76,9 +83,11 @@ impl OptionsDialog {
         self.danger_mode = cfg.alert_danger_mode.clone();
         self.caution_mode = cfg.alert_caution_mode.clone();
         self.hunt_mode = cfg.alert_hunt_mode.clone();
-        self.alert_mode = cfg.alert_alert_mode.clone();
+        self.alert_mode = cfg.alert_rare_mode.clone();
         self.danger_sound = cfg.alert_danger_sound.clone();
+        self.caution_sound = cfg.alert_caution_sound.clone();
         self.hunt_sound = cfg.alert_hunt_sound.clone();
+        self.alert_sound = cfg.alert_rare_sound.clone();
         self.discord_webhook = cfg.discord_webhook.clone();
         self.discord_on_danger = cfg.discord_on_danger;
         self.discord_on_hunt = cfg.discord_on_hunt;
@@ -88,7 +97,7 @@ impl OptionsDialog {
         self.trails_enabled = trails_enabled;
     }
 
-    /// Returns `Some(config)` when the user clicks OK.
+    /// Returns `Some(config)` when the user clicks Save.
     pub fn show(&mut self, ctx: &egui::Context) -> Option<ClientConfig> {
         if !self.open {
             return None;
@@ -117,9 +126,11 @@ impl OptionsDialog {
                                 alert_danger_mode: self.danger_mode.clone(),
                                 alert_danger_sound: self.danger_sound.clone(),
                                 alert_caution_mode: self.caution_mode.clone(),
+                                alert_caution_sound: self.caution_sound.clone(),
                                 alert_hunt_mode: self.hunt_mode.clone(),
                                 alert_hunt_sound: self.hunt_sound.clone(),
-                                alert_alert_mode: self.alert_mode.clone(),
+                                alert_rare_mode: self.alert_mode.clone(),
+                                alert_rare_sound: self.alert_sound.clone(),
                                 discord_webhook: self.discord_webhook.clone(),
                                 discord_on_danger: self.discord_on_danger,
                                 discord_on_hunt: self.discord_on_hunt,
@@ -190,7 +201,14 @@ impl OptionsDialog {
                             ui.end_row();
 
                             ui.strong("Filter path:");
-                            ui.text_edit_singleline(&mut self.filter_dir);
+                            ui.horizontal(|ui| {
+                                ui.text_edit_singleline(&mut self.filter_dir);
+                                if ui.button("Browse…").clicked() {
+                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                        self.filter_dir = path.display().to_string();
+                                    }
+                                }
+                            });
                             ui.end_row();
 
                             ui.strong("Map path:");
@@ -213,31 +231,107 @@ impl OptionsDialog {
                             ui.separator();
                             ui.end_row();
                             ui.strong("Alerts");
-                            ui.label("(none | beep | speech | sound)");
+                            ui.label("");
                             ui.end_row();
 
                             ui.strong("Danger mode:");
-                            ui.text_edit_singleline(&mut self.danger_mode);
+                            egui::ComboBox::from_id_salt("danger_mode")
+                                .selected_text(self.danger_mode.as_str())
+                                .show_ui(ui, |ui| {
+                                    for mode in ALERT_MODES {
+                                        ui.selectable_value(&mut self.danger_mode, mode.to_string(), *mode);
+                                    }
+                                });
                             ui.end_row();
 
                             ui.strong("Danger sound file:");
-                            ui.text_edit_singleline(&mut self.danger_sound);
+                            ui.horizontal(|ui| {
+                                ui.text_edit_singleline(&mut self.danger_sound);
+                                if ui.button("Browse…").clicked() {
+                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file");
+                                    for ext in AUDIO_EXTENSIONS {
+                                        dialog = dialog.add_filter(*ext, &[*ext]);
+                                    }
+                                    if let Some(path) = dialog.pick_file() {
+                                        self.danger_sound = path.display().to_string();
+                                    }
+                                }
+                            });
                             ui.end_row();
 
                             ui.strong("Caution mode:");
-                            ui.text_edit_singleline(&mut self.caution_mode);
+                            egui::ComboBox::from_id_salt("caution_mode")
+                                .selected_text(self.caution_mode.as_str())
+                                .show_ui(ui, |ui| {
+                                    for mode in ALERT_MODES {
+                                        ui.selectable_value(&mut self.caution_mode, mode.to_string(), *mode);
+                                    }
+                                });
+                            ui.end_row();
+
+                            ui.strong("Caution sound file:");
+                            ui.horizontal(|ui| {
+                                ui.text_edit_singleline(&mut self.caution_sound);
+                                if ui.button("Browse…").clicked() {
+                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file");
+                                    for ext in AUDIO_EXTENSIONS {
+                                        dialog = dialog.add_filter(*ext, &[*ext]);
+                                    }
+                                    if let Some(path) = dialog.pick_file() {
+                                        self.caution_sound = path.display().to_string();
+                                    }
+                                }
+                            });
                             ui.end_row();
 
                             ui.strong("Hunt mode:");
-                            ui.text_edit_singleline(&mut self.hunt_mode);
+                            egui::ComboBox::from_id_salt("hunt_mode")
+                                .selected_text(self.hunt_mode.as_str())
+                                .show_ui(ui, |ui| {
+                                    for mode in ALERT_MODES {
+                                        ui.selectable_value(&mut self.hunt_mode, mode.to_string(), *mode);
+                                    }
+                                });
                             ui.end_row();
 
                             ui.strong("Hunt sound file:");
-                            ui.text_edit_singleline(&mut self.hunt_sound);
+                            ui.horizontal(|ui| {
+                                ui.text_edit_singleline(&mut self.hunt_sound);
+                                if ui.button("Browse…").clicked() {
+                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file");
+                                    for ext in AUDIO_EXTENSIONS {
+                                        dialog = dialog.add_filter(*ext, &[*ext]);
+                                    }
+                                    if let Some(path) = dialog.pick_file() {
+                                        self.hunt_sound = path.display().to_string();
+                                    }
+                                }
+                            });
                             ui.end_row();
 
-                            ui.strong("Alert mode:");
-                            ui.text_edit_singleline(&mut self.alert_mode);
+                            ui.strong("Rare mode:");
+                            egui::ComboBox::from_id_salt("alert_mode")
+                                .selected_text(self.alert_mode.as_str())
+                                .show_ui(ui, |ui| {
+                                    for mode in ALERT_MODES {
+                                        ui.selectable_value(&mut self.alert_mode, mode.to_string(), *mode);
+                                    }
+                                });
+                            ui.end_row();
+
+                            ui.strong("Rare sound file:");
+                            ui.horizontal(|ui| {
+                                ui.text_edit_singleline(&mut self.alert_sound);
+                                if ui.button("Browse…").clicked() {
+                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file");
+                                    for ext in AUDIO_EXTENSIONS {
+                                        dialog = dialog.add_filter(*ext, &[*ext]);
+                                    }
+                                    if let Some(path) = dialog.pick_file() {
+                                        self.alert_sound = path.display().to_string();
+                                    }
+                                }
+                            });
                             ui.end_row();
 
                             // ── Discord ──────────────────────────────────────

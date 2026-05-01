@@ -141,7 +141,7 @@ pub fn show(
                     egui::Color32::from_rgb(255, 160, 0)
                 } else if s.is_hunt {
                     egui::Color32::from_rgb(0, 220, 120)
-                } else if s.is_alert {
+                } else if s.is_rare {
                     egui::Color32::from_rgb(200, 0, 255)
                 } else {
                     ui.visuals().text_color()
@@ -213,10 +213,10 @@ pub fn show(
                         });
                         ui.close();
                     }
-                    if ui.button("Add to Alert").clicked() {
+                    if ui.button("Add to Rare").clicked() {
                         action = Some(SpawnAction::AddToFilter {
                             name: spawn_name.clone(),
-                            category: FilterCategory::Alert,
+                            category: FilterCategory::Rare,
                         });
                         ui.close();
                     }

@@ -52,7 +52,7 @@ pub struct AlertEngine {
     pub danger_mode: AlertMode,
     pub caution_mode: AlertMode,
     pub hunt_mode: AlertMode,
-    pub alert_mode: AlertMode,
+    pub rare_mode: AlertMode,
     pub discord_webhook: String,
     pub discord_on_danger: bool,
     pub discord_on_hunt: bool,
@@ -69,7 +69,7 @@ impl Default for AlertEngine {
             danger_mode: AlertMode::None,
             caution_mode: AlertMode::None,
             hunt_mode: AlertMode::None,
-            alert_mode: AlertMode::None,
+            rare_mode: AlertMode::None,
             discord_webhook: String::new(),
             discord_on_danger: false,
             discord_on_hunt: false,
@@ -103,8 +103,8 @@ impl AlertEngine {
             (&self.caution_mode, "Caution")
         } else if spawn.is_hunt {
             (&self.hunt_mode, "Hunt")
-        } else if spawn.is_alert {
-            (&self.alert_mode, "Alert")
+        } else if spawn.is_rare {
+            (&self.rare_mode, "Rare")
         } else {
             return None;
         };

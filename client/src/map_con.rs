@@ -284,7 +284,7 @@ fn spawn_color(spawn: &SpawnInfo, player_level: u8) -> Color32 {
     if spawn.is_hunt {
         return Color32::from_rgb(0, 255, 120);
     }
-    if spawn.is_alert {
+    if spawn.is_rare {
         return Color32::from_rgb(220, 0, 255);
     }
     match spawn.spawn_category {

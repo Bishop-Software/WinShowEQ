@@ -29,8 +29,8 @@ pub struct ClientConfig {
     pub alert_caution_sound: String,
     pub alert_hunt_mode: String,
     pub alert_hunt_sound: String,
-    pub alert_alert_mode: String,
-    pub alert_alert_sound: String,
+    pub alert_rare_mode: String,
+    pub alert_rare_sound: String,
 
     // ── Discord ───────────────────────────────────────────────────────────────
     pub discord_webhook: String,
@@ -64,8 +64,8 @@ impl Default for ClientConfig {
             alert_caution_sound: String::new(),
             alert_hunt_mode: "beep".to_owned(),
             alert_hunt_sound: String::new(),
-            alert_alert_mode: "none".to_owned(),
-            alert_alert_sound: String::new(),
+            alert_rare_mode: "none".to_owned(),
+            alert_rare_sound: String::new(),
             discord_webhook: String::new(),
             discord_on_danger: false,
             discord_on_hunt: false,
@@ -105,8 +105,8 @@ impl ClientConfig {
         writeln!(f, "CautionSound={}", self.alert_caution_sound)?;
         writeln!(f, "HuntMode={}", self.alert_hunt_mode)?;
         writeln!(f, "HuntSound={}", self.alert_hunt_sound)?;
-        writeln!(f, "AlertMode={}", self.alert_alert_mode)?;
-        writeln!(f, "AlertSound={}", self.alert_alert_sound)?;
+        writeln!(f, "AlertMode={}", self.alert_rare_mode)?;
+        writeln!(f, "AlertSound={}", self.alert_rare_sound)?;
         writeln!(f)?;
         writeln!(f, "[Discord]")?;
         writeln!(f, "Webhook={}", self.discord_webhook)?;
@@ -171,8 +171,8 @@ impl ClientConfig {
             if let Some(v) = alerts.get("cautionsound") { cfg.alert_caution_sound = v.clone(); }
             if let Some(v) = alerts.get("huntmode") { cfg.alert_hunt_mode = v.clone(); }
             if let Some(v) = alerts.get("huntsound") { cfg.alert_hunt_sound = v.clone(); }
-            if let Some(v) = alerts.get("alertmode") { cfg.alert_alert_mode = v.clone(); }
-            if let Some(v) = alerts.get("alertsound") { cfg.alert_alert_sound = v.clone(); }
+            if let Some(v) = alerts.get("alertmode") { cfg.alert_rare_mode = v.clone(); }
+            if let Some(v) = alerts.get("alertsound") { cfg.alert_rare_sound = v.clone(); }
         }
 
         if let Some(discord) = sections.get("discord") {

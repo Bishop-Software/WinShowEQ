@@ -111,7 +111,7 @@ pub struct SpawnInfo {
     pub is_hunt: bool,
     pub is_caution: bool,
     pub is_danger: bool,
-    pub is_alert: bool,
+    pub is_rare: bool,
 }
 
 impl SpawnInfo {
@@ -148,7 +148,7 @@ impl SpawnInfo {
             is_hunt: false,
             is_caution: false,
             is_danger: false,
-            is_alert: false,
+            is_rare: false,
         }
     }
 
@@ -157,12 +157,12 @@ impl SpawnInfo {
         self.is_hunt = false;
         self.is_caution = false;
         self.is_danger = false;
-        self.is_alert = false;
+        self.is_rare = false;
         match filters.classify(&self.name) {
             Some(FilterCategory::Hunt) => self.is_hunt = true,
             Some(FilterCategory::Caution) => self.is_caution = true,
             Some(FilterCategory::Danger) => self.is_danger = true,
-            Some(FilterCategory::Alert) => self.is_alert = true,
+            Some(FilterCategory::Rare) => self.is_rare = true,
             None => {}
         }
     }
@@ -436,7 +436,7 @@ mod tests {
         assert!(info.is_danger);
         assert!(!info.is_hunt);
         assert!(!info.is_caution);
-        assert!(!info.is_alert);
+        assert!(!info.is_rare);
     }
 
     #[test]

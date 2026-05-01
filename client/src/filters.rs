@@ -4,13 +4,13 @@ use std::path::Path;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
-/// Filter category. Priority for overlapping matches: Danger > Caution > Hunt > Alert.
+/// Filter category. Priority for overlapping matches: Danger > Caution > Hunt > Rare.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FilterCategory {
     Hunt,
     Caution,
     Danger,
-    Alert,
+    Rare,
 }
 
 impl FilterCategory {
@@ -19,7 +19,7 @@ impl FilterCategory {
             Self::Danger => 3,
             Self::Caution => 2,
             Self::Hunt => 1,
-            Self::Alert => 0,
+            Self::Rare => 0,
         }
     }
 
@@ -28,7 +28,7 @@ impl FilterCategory {
             Self::Hunt => "hunt",
             Self::Caution => "caution",
             Self::Danger => "danger",
-            Self::Alert => "alert",
+            Self::Rare => "alert",
         }
     }
 }
@@ -78,7 +78,7 @@ impl FilterSet {
                     b"hunt" => current = Some(FilterCategory::Hunt),
                     b"caution" => current = Some(FilterCategory::Caution),
                     b"danger" => current = Some(FilterCategory::Danger),
-                    b"alert" => current = Some(FilterCategory::Alert),
+                    b"alert" => current = Some(FilterCategory::Rare),
                     b"item" => self.insert_from_element(&e, current),
                     _ => {}
                 },
@@ -154,7 +154,7 @@ impl FilterSet {
             FilterCategory::Hunt,
             FilterCategory::Caution,
             FilterCategory::Danger,
-            FilterCategory::Alert,
+            FilterCategory::Rare,
         ] {
             let mut names: Vec<&String> = self
                 .entries
@@ -218,7 +218,7 @@ mod tests {
         assert_eq!(set.classify("Fippy Darkpaw"), Some(FilterCategory::Hunt));
         assert_eq!(set.classify("a gnoll scout"), Some(FilterCategory::Caution));
         assert_eq!(set.classify("Lord Nagafen"), Some(FilterCategory::Danger));
-        assert_eq!(set.classify("Lockjaw"), Some(FilterCategory::Alert));
+        assert_eq!(set.classify("Lockjaw"), Some(FilterCategory::Rare));
     }
 
     #[test]
@@ -283,14 +283,14 @@ mod tests {
         set.add(FilterCategory::Danger, "Lord Nagafen");
         set.add(FilterCategory::Hunt, "Fippy Darkpaw");
         set.add(FilterCategory::Caution, "a gnoll");
-        set.add(FilterCategory::Alert, "Lockjaw");
+        set.add(FilterCategory::Rare, "Lockjaw");
         let tmp = tempfile::NamedTempFile::new().unwrap();
         set.save(tmp.path()).unwrap();
         let loaded = FilterSet::load(tmp.path());
         assert_eq!(loaded.classify("Lord Nagafen"), Some(FilterCategory::Danger));
         assert_eq!(loaded.classify("Fippy Darkpaw"), Some(FilterCategory::Hunt));
         assert_eq!(loaded.classify("a gnoll"), Some(FilterCategory::Caution));
-        assert_eq!(loaded.classify("Lockjaw"), Some(FilterCategory::Alert));
+        assert_eq!(loaded.classify("Lockjaw"), Some(FilterCategory::Rare));
     }
 
     #[test]

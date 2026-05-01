@@ -117,8 +117,8 @@ pub fn configure_alerts(data: &mut AppData, cfg: &crate::config::ClientConfig) {
         AlertMode::from_config(&cfg.alert_caution_mode, &cfg.alert_caution_sound);
     data.alert_engine.hunt_mode =
         AlertMode::from_config(&cfg.alert_hunt_mode, &cfg.alert_hunt_sound);
-    data.alert_engine.alert_mode =
-        AlertMode::from_config(&cfg.alert_alert_mode, &cfg.alert_alert_sound);
+    data.alert_engine.rare_mode =
+        AlertMode::from_config(&cfg.alert_rare_mode, &cfg.alert_rare_sound);
     data.alert_engine.discord_webhook = cfg.discord_webhook.clone();
     data.alert_engine.discord_on_danger = cfg.discord_on_danger;
     data.alert_engine.discord_on_hunt = cfg.discord_on_hunt;
