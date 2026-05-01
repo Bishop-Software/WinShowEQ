@@ -1,7 +1,7 @@
 use egui::Ui;
 
 use crate::data::AppData;
-use crate::data::spawns::SpawnCategory;
+use crate::data::spawns::{SpawnCategory, class_name};
 
 pub fn show(ui: &mut Ui, data: &AppData) {
     let player_pos = data.player_pos();
@@ -22,19 +22,29 @@ pub fn show(ui: &mut Ui, data: &AppData) {
         spawns.sort_by(|a, b| a.name.cmp(&b.name));
     }
 
-    egui::ScrollArea::vertical()
+    egui::ScrollArea::both()
         .id_salt("spawn_scroll")
         .show(ui, |ui| {
             egui::Grid::new("spawn_list")
-                .num_columns(5)
+                .num_columns(14)
                 .striped(true)
-                .min_col_width(36.0)
+                .min_col_width(28.0)
                 .show(ui, |ui| {
                     ui.strong("Name");
+                    ui.strong("Last Name");
                     ui.strong("Lvl");
-                    ui.strong("Cat");
-                    ui.strong("Loc");
+                    ui.strong("Class");
+                    ui.strong("Race");
+                    ui.strong("Type");
+                    ui.strong("Owner");
+                    ui.strong("Invis");
+                    ui.strong("Speed");
+                    ui.strong("X");
+                    ui.strong("Y");
+                    ui.strong("Z");
                     ui.strong("Dist");
+                    ui.strong("ID");
+                    ui.strong("Time");
                     ui.end_row();
 
                     for s in &spawns {
@@ -62,10 +72,27 @@ pub fn show(ui: &mut Ui, data: &AppData) {
                         };
 
                         ui.colored_label(color, &s.name);
+                        ui.label(&s.last_name);
                         ui.label(s.level.to_string());
+                        ui.label(class_name(s.class));
+                        ui.label(data.game_data.race_name(s.race));
                         ui.label(cat);
-                        ui.label(format!("{:.0},{:.0}", s.x, s.y));
+                        let owner_name = if s.owner_id != 0 {
+                            data.spawns.get(s.owner_id)
+                                .map(|o| o.name.as_str())
+                                .unwrap_or("?")
+                        } else {
+                            ""
+                        };
+                        ui.label(owner_name);
+                        ui.label(if s.hidden != 0 { "Y" } else { "" });
+                        ui.label(format!("{:.1}", s.speed));
+                        ui.label(format!("{:.0}", s.x));
+                        ui.label(format!("{:.0}", s.y));
+                        ui.label(format!("{:.0}", s.z));
                         ui.label(dist_str);
+                        ui.label(s.id.to_string());
+                        ui.label(s.first_seen.format("%H:%M:%S").to_string());
                         ui.end_row();
                     }
                 });

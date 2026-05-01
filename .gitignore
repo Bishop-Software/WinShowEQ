@@ -3,6 +3,9 @@
 # Matches the Claude allow-list strategy
 # ============================================================
 
+# Logs
+/logs/
+
 # Internal Documentation
 /design
 
@@ -82,7 +85,6 @@ target_sqlite.db
 CLAUDE.md
 .claude/
 .claudeignore
-
 
 # ============================================================
 # Files and directories we explicitly KEEP (do NOT ignore)

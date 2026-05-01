@@ -8,6 +8,7 @@ use common::{IPT_GROUND, IPT_SELF, IPT_SPAWNS, IPT_TARGET, IPT_WORLD, IPT_ZONE};
 
 use crate::config::ClientConfig;
 use crate::data::annotations::AnnotationStore;
+use crate::game_data::GameData;
 use crate::data::timers::TimerStore;
 use crate::data::{apply_packet, configure_alerts, AppData};
 use crate::logger::Logger;
@@ -75,8 +76,14 @@ impl MainApp {
         let stop = Arc::new(AtomicBool::new(false));
         let addr_cell: Arc<Mutex<Option<SocketAddr>>> = Arc::new(Mutex::new(server_addr));
 
-        // Apply alert config from ini
-        configure_alerts(&mut data.lock().unwrap(), &config);
+        // Apply alert config and game data from ini
+        {
+            let mut d = data.lock().unwrap();
+            configure_alerts(&mut d, &config);
+            if let Some(gd) = GameData::load(&config.eq_path) {
+                d.game_data = gd;
+            }
+        }
 
         start_network_thread(
             Arc::clone(&addr_cell),
@@ -156,6 +163,9 @@ impl eframe::App for MainApp {
                 let mut data = self.data.lock().unwrap();
                 data.trails_enabled = trails;
                 configure_alerts(&mut data, &self.config);
+                if let Some(gd) = GameData::load(&self.config.eq_path) {
+                    data.game_data = gd;
+                }
             }
             let _ = self.config.save(&self.config_path);
         }

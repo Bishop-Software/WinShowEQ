@@ -25,6 +25,8 @@ pub struct OptionsDialog {
     discord_webhook: String,
     discord_on_danger: bool,
     discord_on_hunt: bool,
+    // EQ
+    eq_path: String,
 }
 
 impl OptionsDialog {
@@ -49,6 +51,7 @@ impl OptionsDialog {
             discord_webhook: cfg.discord_webhook.clone(),
             discord_on_danger: cfg.discord_on_danger,
             discord_on_hunt: cfg.discord_on_hunt,
+            eq_path: cfg.eq_path.clone(),
         }
     }
 
@@ -70,6 +73,7 @@ impl OptionsDialog {
         self.discord_webhook = cfg.discord_webhook.clone();
         self.discord_on_danger = cfg.discord_on_danger;
         self.discord_on_hunt = cfg.discord_on_hunt;
+        self.eq_path = cfg.eq_path.clone();
         self.trails_enabled = trails_enabled;
     }
 
@@ -107,6 +111,7 @@ impl OptionsDialog {
                                 discord_webhook: self.discord_webhook.clone(),
                                 discord_on_danger: self.discord_on_danger,
                                 discord_on_hunt: self.discord_on_hunt,
+                                eq_path: self.eq_path.clone(),
                                 ..self.base_config.clone()
                             });
                             self.open = false;
@@ -202,6 +207,13 @@ impl OptionsDialog {
 
                             ui.strong("Discord on hunt:");
                             ui.checkbox(&mut self.discord_on_hunt, "");
+                            ui.end_row();
+
+                            // ── EverQuest ─────────────────────────────────────
+                            ui.separator();
+                            ui.end_row();
+                            ui.strong("EQ install path:");
+                            ui.text_edit_singleline(&mut self.eq_path);
                             ui.end_row();
                         });
                 });

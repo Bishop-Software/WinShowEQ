@@ -34,6 +34,10 @@ pub struct ClientConfig {
     pub discord_webhook: String,
     pub discord_on_danger: bool,
     pub discord_on_hunt: bool,
+
+    // ── EverQuest installation ────────────────────────────────────────────────
+    /// Path to the EverQuest installation folder (for loading dbstr_us.txt).
+    pub eq_path: String,
 }
 
 impl Default for ClientConfig {
@@ -57,6 +61,7 @@ impl Default for ClientConfig {
             discord_webhook: String::new(),
             discord_on_danger: false,
             discord_on_hunt: false,
+            eq_path: String::new(),
         }
     }
 }
@@ -96,6 +101,9 @@ impl ClientConfig {
         writeln!(f, "Webhook={}", self.discord_webhook)?;
         writeln!(f, "OnDanger={}", if self.discord_on_danger { 1 } else { 0 })?;
         writeln!(f, "OnHunt={}", if self.discord_on_hunt { 1 } else { 0 })?;
+        writeln!(f)?;
+        writeln!(f, "[EQ]")?;
+        writeln!(f, "Path={}", self.eq_path)?;
         Ok(())
     }
 
@@ -153,6 +161,10 @@ impl ClientConfig {
             if let Some(v) = discord.get("webhook") { cfg.discord_webhook = v.clone(); }
             if let Some(v) = discord.get("ondanger") { cfg.discord_on_danger = v == "1"; }
             if let Some(v) = discord.get("onhunt") { cfg.discord_on_hunt = v == "1"; }
+        }
+
+        if let Some(eq) = sections.get("eq") {
+            if let Some(v) = eq.get("path") { cfg.eq_path = v.clone(); }
         }
 
         cfg

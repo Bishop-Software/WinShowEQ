@@ -8,6 +8,7 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::alerts::AlertEngine;
 use crate::filters::FilterSet;
+use crate::game_data::GameData;
 use crate::logger::Logger;
 use crate::map_reader::MapData;
 use crate::protocol::Packet;
@@ -36,6 +37,7 @@ pub struct AppData {
     pub trails_enabled: bool,
     pub alert_engine: AlertEngine,
     pub annotations: AnnotationStore,
+    pub game_data: GameData,
 }
 
 impl AppData {

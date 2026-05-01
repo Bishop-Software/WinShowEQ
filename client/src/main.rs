@@ -1,6 +1,7 @@
 mod alerts;
 mod config;
 mod data;
+mod game_data;
 mod filters;
 mod logger;
 mod map_con;

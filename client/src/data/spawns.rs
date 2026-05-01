@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::{DateTime, Local};
 use common::SpawnRecord;
 
 use crate::filters::{FilterCategory, FilterSet};
@@ -104,6 +105,8 @@ pub struct SpawnInfo {
     pub primary: u32,
     pub offhand: u32,
     pub spawn_category: SpawnCategory,
+    /// Wall-clock time when this spawn was first seen in the zone.
+    pub first_seen: DateTime<Local>,
     /// Set by `apply_filters` — highest-priority filter match.
     pub is_hunt: bool,
     pub is_caution: bool,
@@ -137,6 +140,7 @@ impl SpawnInfo {
             primary,
             offhand,
             spawn_category: categorize(spawn_type, owner, class),
+            first_seen: Local::now(),
             is_hunt: false,
             is_caution: false,
             is_danger: false,
@@ -180,13 +184,19 @@ impl SpawnStore {
 
     /// Insert or replace the spawn described by `rec`.
     pub fn upsert(&mut self, rec: &SpawnRecord) {
-        let info = SpawnInfo::from_record(rec);
+        let mut info = SpawnInfo::from_record(rec);
+        if let Some(existing) = self.spawns.get(&info.id) {
+            info.first_seen = existing.first_seen;
+        }
         self.spawns.insert(info.id, info);
     }
 
     /// Insert or replace, then immediately classify against `filters`.
     pub fn upsert_with_filter(&mut self, rec: &SpawnRecord, filters: &FilterSet) {
         let mut info = SpawnInfo::from_record(rec);
+        if let Some(existing) = self.spawns.get(&info.id) {
+            info.first_seen = existing.first_seen;
+        }
         info.apply_filters(filters);
         self.spawns.insert(info.id, info);
     }
@@ -199,7 +209,10 @@ impl SpawnStore {
     }
 
     /// Insert a pre-built SpawnInfo directly (avoids double construction in apply_packet).
-    pub fn upsert_info(&mut self, info: SpawnInfo) {
+    pub fn upsert_info(&mut self, mut info: SpawnInfo) {
+        if let Some(existing) = self.spawns.get(&info.id) {
+            info.first_seen = existing.first_seen;
+        }
         self.spawns.insert(info.id, info);
     }
 
@@ -225,6 +238,26 @@ impl SpawnStore {
 
     pub fn is_empty(&self) -> bool {
         self.spawns.is_empty()
+    }
+}
+
+pub fn class_name(class: u8) -> &'static str {
+    match class {
+        1 => "WAR", 2 => "CLR", 3 => "PAL", 4 => "RNG", 5 => "SHD",
+        6 => "DRU", 7 => "MNK", 8 => "BRD", 9 => "ROG", 10 => "SHM",
+        11 => "NEC", 12 => "WIZ", 13 => "MAG", 14 => "ENC", 15 => "BST",
+        16 => "BER", 20 => "BNK", 21 => "MCH", 40 => "GBK", 71 => "MRC",
+        _ => "---",
+    }
+}
+
+pub fn race_name(race: u32) -> &'static str {
+    match race {
+        1 => "Human", 2 => "Barb", 3 => "Erud", 4 => "WElf",
+        5 => "HElf", 6 => "DElf", 7 => "HalfElf", 8 => "Dwarf",
+        9 => "Troll", 10 => "Ogre", 11 => "Halfling", 12 => "Gnome",
+        13 => "Iksar", 14 => "VahShir", 15 => "Froglok", 16 => "Drakkin",
+        _ => "---",
     }
 }
 
