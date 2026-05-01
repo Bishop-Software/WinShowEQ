@@ -18,6 +18,7 @@ tts = "0.26"
 rodio = { version = "0.19", default-features = false, features = ["wav"] }
 ureq = "2"
 rfd = "0.14"
+egui_dock = "0.19"
 
 [dev-dependencies]
 tempfile = "3"

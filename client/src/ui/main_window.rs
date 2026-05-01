@@ -5,12 +5,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use common::{IPT_GROUND, IPT_SELF, IPT_SPAWNS, IPT_TARGET, IPT_WORLD, IPT_ZONE, OPT_GROUND};
+use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 
 use crate::config::ClientConfig;
 use crate::data::annotations::AnnotationStore;
-use crate::game_data::GameData;
 use crate::data::timers::TimerStore;
 use crate::data::{apply_packet, configure_alerts, AppData};
+use crate::game_data::GameData;
 use crate::logger::Logger;
 use crate::net::ServerConnection;
 use crate::protocol::decode_packet;
@@ -26,11 +27,13 @@ const TICK_REQUEST: i32 =
 const TICK_DELAY_MS: u64 = 250;
 const RECONNECT_DELAY_SECS: u64 = 2;
 
-#[derive(Default, PartialEq)]
-enum BottomTab {
-    #[default]
+/// Identifies each dockable panel.
+#[derive(Debug, Clone, PartialEq)]
+enum Tab {
+    Spawns,
     Timers,
     Ground,
+    Map,
 }
 
 /// State for the "Add Note" floating dialog.
@@ -42,11 +45,11 @@ struct AddNoteDialog {
 }
 
 const NOTE_COLORS: &[[u8; 3]] = &[
-    [255, 255, 255], // White
-    [255, 255, 0],   // Yellow
-    [255, 100, 100], // Red
-    [100, 255, 100], // Green
-    [100, 200, 255], // Cyan
+    [255, 255, 255],
+    [255, 255, 0],
+    [255, 100, 100],
+    [100, 255, 100],
+    [100, 200, 255],
 ];
 const NOTE_COLOR_NAMES: &[&str] = &["White", "Yellow", "Red", "Green", "Cyan"];
 
@@ -57,13 +60,22 @@ pub struct MainApp {
     map_pane: MapPane,
     login: LoginDialog,
     options: OptionsDialog,
-    bottom_tab: BottomTab,
+    dock_state: DockState<Tab>,
     add_note: AddNoteDialog,
     stop: Arc<AtomicBool>,
     server_addr: Arc<Mutex<Option<SocketAddr>>>,
     prev_zone: String,
     spawn_sort_column: Option<usize>,
     spawn_sort_ascending: bool,
+}
+
+/// Build the initial dock layout: Spawns (top-left) + Timers/Ground tabs (bottom-left) + Map (right).
+fn build_dock_state() -> DockState<Tab> {
+    let mut state = DockState::new(vec![Tab::Map]);
+    let surface = state.main_surface_mut();
+    let [left, _] = surface.split_left(NodeIndex::root(), 0.35, vec![Tab::Spawns]);
+    surface.split_below(left, 0.6, vec![Tab::Timers, Tab::Ground]);
+    state
 }
 
 impl MainApp {
@@ -78,7 +90,6 @@ impl MainApp {
         let stop = Arc::new(AtomicBool::new(false));
         let addr_cell: Arc<Mutex<Option<SocketAddr>>> = Arc::new(Mutex::new(server_addr));
 
-        // Apply alert config and game data from ini
         {
             let mut d = data.lock().unwrap();
             configure_alerts(&mut d, &config);
@@ -104,7 +115,7 @@ impl MainApp {
             map_pane: MapPane::default(),
             login,
             options,
-            bottom_tab: BottomTab::default(),
+            dock_state: build_dock_state(),
             add_note: AddNoteDialog::default(),
             stop,
             server_addr: addr_cell,
@@ -132,6 +143,66 @@ impl MainApp {
         self.prev_zone = new_zone;
     }
 }
+
+// ---------------------------------------------------------------------------
+// TabViewer — renders each panel's content, created fresh each frame.
+// ---------------------------------------------------------------------------
+
+struct WinseqTabViewer<'a> {
+    data: &'a Arc<Mutex<AppData>>,
+    map_pane: &'a mut MapPane,
+    spawn_sort_column: &'a mut Option<usize>,
+    spawn_sort_ascending: &'a mut bool,
+}
+
+impl<'a> TabViewer for WinseqTabViewer<'a> {
+    type Tab = Tab;
+
+    fn title(&mut self, tab: &mut Tab) -> egui::WidgetText {
+        match tab {
+            Tab::Spawns => "Spawns".into(),
+            Tab::Timers => "Timers".into(),
+            Tab::Ground => "Ground Items".into(),
+            Tab::Map => "Map".into(),
+        }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
+        match tab {
+            Tab::Spawns => {
+                let data = self.data.lock().unwrap();
+                ui.label(format!("Spawns ({})", data.spawns.len()));
+                ui.separator();
+                spawn_list::show(
+                    ui,
+                    &data,
+                    self.spawn_sort_column,
+                    self.spawn_sort_ascending,
+                );
+            }
+            Tab::Timers => {
+                let mut data = self.data.lock().unwrap();
+                timer_list::show(ui, &mut data.timers);
+            }
+            Tab::Ground => {
+                let data = self.data.lock().unwrap();
+                ground_list::show(ui, &data);
+            }
+            Tab::Map => {
+                let data = self.data.lock().unwrap();
+                self.map_pane.show(ui, &data);
+            }
+        }
+    }
+
+    fn is_closeable(&self, _tab: &Tab) -> bool {
+        false
+    }
+}
+
+// ---------------------------------------------------------------------------
+// eframe::App
+// ---------------------------------------------------------------------------
 
 impl eframe::App for MainApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -174,7 +245,7 @@ impl eframe::App for MainApp {
             let _ = self.config.save(&self.config_path);
         }
 
-        // "Add Note" dialog
+        // "Add Note" floating dialog
         if self.add_note.open {
             let mut open = true;
             egui::Window::new("Add Map Note")
@@ -194,8 +265,10 @@ impl eframe::App for MainApp {
                             let color = egui::Color32::from_rgb(r, g, b);
                             let selected = self.add_note.color_idx == i;
                             if ui
-                                .add(egui::SelectableLabel::new(selected,
-                                    egui::RichText::new(*name).color(color)))
+                                .add(egui::SelectableLabel::new(
+                                    selected,
+                                    egui::RichText::new(*name).color(color),
+                                ))
                                 .clicked()
                             {
                                 self.add_note.color_idx = i;
@@ -215,7 +288,11 @@ impl eframe::App for MainApp {
                             let color = NOTE_COLORS[self.add_note.color_idx];
                             self.data.lock().unwrap().annotations.add(
                                 self.add_note.text.trim().to_owned(),
-                                x, y, z, color, 12,
+                                x,
+                                y,
+                                z,
+                                color,
+                                12,
                             );
                             self.add_note.open = false;
                             self.add_note.text.clear();
@@ -252,57 +329,20 @@ impl eframe::App for MainApp {
             });
         });
 
-        // Spawn list window
-        egui::Window::new("Spawns")
-            .default_pos([10.0, 40.0])
-            .default_size([700.0, 300.0])
-            .resizable(true)
-            .show(&ctx, |ui| {
-                let data = self.data.lock().unwrap();
-                ui.heading(format!("Spawns ({})", data.spawns.len()));
-                ui.separator();
-                spawn_list::show(
-                    ui,
-                    &data,
-                    &mut self.spawn_sort_column,
-                    &mut self.spawn_sort_ascending,
-                );
-            });
-
-        // Timers / Ground window
-        egui::Window::new("Timers & Ground Items")
-            .default_pos([10.0, 360.0])
-            .default_size([500.0, 250.0])
-            .resizable(true)
-            .show(&ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.bottom_tab, BottomTab::Timers, "Timers");
-                    ui.selectable_value(&mut self.bottom_tab, BottomTab::Ground, "Ground Items");
-                });
-                ui.separator();
-                match self.bottom_tab {
-                    BottomTab::Timers => {
-                        let mut data = self.data.lock().unwrap();
-                        timer_list::show(ui, &mut data.timers);
-                    }
-                    BottomTab::Ground => {
-                        let data = self.data.lock().unwrap();
-                        ground_list::show(ui, &data);
-                    }
-                }
-            });
-
-        // Map window
-        egui::Window::new("Map")
-            .default_pos([730.0, 40.0])
-            .default_size([550.0, 570.0])
-            .resizable(true)
-            .show(&ctx, |ui| {
-                let data = self.data.lock().unwrap();
-                self.map_pane.show(ui, &data);
-            });
+        // Docked panel layout
+        let mut viewer = WinseqTabViewer {
+            data: &self.data,
+            map_pane: &mut self.map_pane,
+            spawn_sort_column: &mut self.spawn_sort_column,
+            spawn_sort_ascending: &mut self.spawn_sort_ascending,
+        };
+        DockArea::new(&mut self.dock_state).show_inside(ui, &mut viewer);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Network thread
+// ---------------------------------------------------------------------------
 
 fn start_network_thread(
     addr_cell: Arc<Mutex<Option<SocketAddr>>>,
@@ -341,8 +381,8 @@ fn start_network_thread(
                                     }
                                     for rec in records {
                                         let pkt = decode_packet(rec);
-                                        // Log zone changes before applying
-                                        if let crate::protocol::Packet::Zone { name: ref z } = pkt {
+                                        if let crate::protocol::Packet::Zone { name: ref z } = pkt
+                                        {
                                             logger.info(&format!("Zone: {z}"));
                                         }
                                         if let Some(msg) = apply_packet(&mut d, pkt) {
