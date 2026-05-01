@@ -9,7 +9,7 @@ use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 
 use crate::config::ClientConfig;
 use crate::data::annotations::AnnotationStore;
-use crate::data::timers::TimerStore;
+use crate::data::timers::{SpawnTimer, TimerStore};
 use crate::data::{apply_packet, configure_alerts, AppData};
 use crate::game_data::GameData;
 use crate::logger::Logger;
@@ -19,7 +19,7 @@ use crate::ui::ground_list;
 use crate::ui::login::LoginDialog;
 use crate::ui::map_pane::MapPane;
 use crate::ui::options::OptionsDialog;
-use crate::ui::spawn_list;
+use crate::ui::spawn_list::{self, SpawnAction};
 use crate::ui::timer_list;
 
 const TICK_REQUEST: i32 =
@@ -42,6 +42,20 @@ struct AddNoteDialog {
     open: bool,
     text: String,
     color_idx: usize,
+    /// When set, the note is placed at this position instead of the player's position.
+    override_pos: Option<(f32, f32, f32)>,
+}
+
+/// State for the "Add Timer" floating dialog.
+#[derive(Default)]
+struct AddTimerDialog {
+    open: bool,
+    name: String,
+    x: f32,
+    y: f32,
+    z: f32,
+    /// Respawn time in minutes, as user-editable text.
+    respawn_input: String,
 }
 
 const NOTE_COLORS: &[[u8; 3]] = &[
@@ -62,6 +76,8 @@ pub struct MainApp {
     options: OptionsDialog,
     dock_state: DockState<Tab>,
     add_note: AddNoteDialog,
+    add_timer: AddTimerDialog,
+    pending_spawn_action: Option<SpawnAction>,
     stop: Arc<AtomicBool>,
     server_addr: Arc<Mutex<Option<SocketAddr>>>,
     prev_zone: String,
@@ -117,6 +133,8 @@ impl MainApp {
             options,
             dock_state: build_dock_state(),
             add_note: AddNoteDialog::default(),
+            add_timer: AddTimerDialog::default(),
+            pending_spawn_action: None,
             stop,
             server_addr: addr_cell,
             prev_zone: String::new(),
@@ -142,6 +160,31 @@ impl MainApp {
         data.annotations = new_annotations;
         self.prev_zone = new_zone;
     }
+
+    /// Dispatch a `SpawnAction` returned from the spawn list context menu.
+    fn handle_spawn_action(&mut self, action: SpawnAction) {
+        match action {
+            SpawnAction::AddTimer { name, x, y, z } => {
+                self.add_timer.open = true;
+                self.add_timer.name = name;
+                self.add_timer.x = x;
+                self.add_timer.y = y;
+                self.add_timer.z = z;
+                self.add_timer.respawn_input = "30".to_owned();
+            }
+            SpawnAction::AddToFilter { name, category } => {
+                let mut data = self.data.lock().unwrap();
+                data.filters.add(category, name);
+                let filters = data.filters.clone();
+                data.spawns.reclassify_all(&filters);
+            }
+            SpawnAction::AddMapText { x, y, z } => {
+                self.add_note.open = true;
+                self.add_note.text.clear();
+                self.add_note.override_pos = Some((x, y, z));
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -153,6 +196,7 @@ struct WinseqTabViewer<'a> {
     map_pane: &'a mut MapPane,
     spawn_sort_column: &'a mut Option<usize>,
     spawn_sort_ascending: &'a mut bool,
+    spawn_action: &'a mut Option<SpawnAction>,
 }
 
 impl<'a> TabViewer for WinseqTabViewer<'a> {
@@ -173,7 +217,7 @@ impl<'a> TabViewer for WinseqTabViewer<'a> {
                 let data = self.data.lock().unwrap();
                 ui.label(format!("Spawns ({})", data.spawns.len()));
                 ui.separator();
-                spawn_list::show(
+                *self.spawn_action = spawn_list::show(
                     ui,
                     &data,
                     self.spawn_sort_column,
@@ -280,10 +324,10 @@ impl eframe::App for MainApp {
                         let can_add = !self.add_note.text.trim().is_empty();
                         if ui.add_enabled(can_add, egui::Button::new("Add")).clicked() {
                             let (x, y, z) = self
-                                .data
-                                .lock()
-                                .unwrap()
-                                .player_pos()
+                                .add_note
+                                .override_pos
+                                .take()
+                                .or_else(|| self.data.lock().unwrap().player_pos())
                                 .unwrap_or((0.0, 0.0, 0.0));
                             let color = NOTE_COLORS[self.add_note.color_idx];
                             self.data.lock().unwrap().annotations.add(
@@ -299,11 +343,58 @@ impl eframe::App for MainApp {
                         }
                         if ui.button("Cancel").clicked() {
                             self.add_note.open = false;
+                            self.add_note.override_pos = None;
                         }
                     });
                 });
             if !open {
                 self.add_note.open = false;
+                self.add_note.override_pos = None;
+            }
+        }
+
+        // "Add Timer" floating dialog
+        if self.add_timer.open {
+            let mut open = true;
+            egui::Window::new("Add Timer")
+                .collapsible(false)
+                .resizable(false)
+                .open(&mut open)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(&ctx, |ui| {
+                    ui.label(format!("Mob: {}", self.add_timer.name));
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        ui.label("Respawn (minutes):");
+                        ui.text_edit_singleline(&mut self.add_timer.respawn_input);
+                    });
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        let minutes: Option<i64> = self
+                            .add_timer
+                            .respawn_input
+                            .trim()
+                            .parse::<i64>()
+                            .ok()
+                            .filter(|&m| m > 0);
+                        if ui.add_enabled(minutes.is_some(), egui::Button::new("Add")).clicked() {
+                            let timer = SpawnTimer::new(
+                                self.add_timer.name.clone(),
+                                self.add_timer.x,
+                                self.add_timer.y,
+                                self.add_timer.z,
+                                minutes.unwrap() * 60,
+                            );
+                            self.data.lock().unwrap().timers.add(timer);
+                            self.add_timer.open = false;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            self.add_timer.open = false;
+                        }
+                    });
+                });
+            if !open {
+                self.add_timer.open = false;
             }
         }
 
@@ -324,6 +415,7 @@ impl eframe::App for MainApp {
                 if ui.button("Add Map Note…").clicked() {
                     self.add_note.open = true;
                     self.add_note.text.clear();
+                    self.add_note.override_pos = None;
                     ui.close();
                 }
             });
@@ -335,8 +427,14 @@ impl eframe::App for MainApp {
             map_pane: &mut self.map_pane,
             spawn_sort_column: &mut self.spawn_sort_column,
             spawn_sort_ascending: &mut self.spawn_sort_ascending,
+            spawn_action: &mut self.pending_spawn_action,
         };
         DockArea::new(&mut self.dock_state).show_inside(ui, &mut viewer);
+
+        // Handle any spawn context menu action from this frame
+        if let Some(action) = self.pending_spawn_action.take() {
+            self.handle_spawn_action(action);
+        }
     }
 }
 

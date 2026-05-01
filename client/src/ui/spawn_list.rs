@@ -2,13 +2,21 @@ use egui::Ui;
 
 use crate::data::AppData;
 use crate::data::spawns::{SpawnCategory, class_name};
+use crate::filters::FilterCategory;
+
+/// Action returned when the user selects a context menu item on a spawn row.
+pub enum SpawnAction {
+    AddTimer { name: String, x: f32, y: f32, z: f32 },
+    AddToFilter { name: String, category: FilterCategory },
+    AddMapText { x: f32, y: f32, z: f32 },
+}
 
 pub fn show(
     ui: &mut Ui,
     data: &AppData,
     sort_column: &mut Option<usize>,
     sort_ascending: &mut bool,
-) {
+) -> Option<SpawnAction> {
     const HEADERS: &[&str] = &[
         "Name", "Last Name", "Lvl", "Class", "Race", "Type", "Owner", "Invis", "Speed", "X",
         "Y", "Z", "Dist", "ID", "Time",
@@ -115,6 +123,8 @@ pub fn show(
 
     ui.separator();
 
+    let mut action: Option<SpawnAction> = None;
+
     // Data rows (scrolled)
     egui::ScrollArea::both()
         .id_salt("spawn_scroll")
@@ -155,7 +165,7 @@ pub fn show(
                     s.first_seen.format("%H:%M:%S").to_string(),
                 ];
 
-                ui.horizontal(|ui| {
+                let row_rect = ui.horizontal(|ui| {
                     for (i, text) in cells.iter().enumerate() {
                         let cell_color = if i == 0 { color } else { ui.visuals().text_color() };
                         ui.add_sized(
@@ -165,9 +175,61 @@ pub fn show(
                             ).truncate(),
                         );
                     }
+                }).response.rect;
+
+                // Capture name/pos before the closure borrows s
+                let spawn_name = s.name.clone();
+                let (sx, sy, sz) = (s.x, s.y, s.z);
+
+                // ui.interact() gives the rect a click sense so context_menu fires on right-click
+                let row_resp = ui.interact(row_rect, ui.id().with(s.id), egui::Sense::click());
+                row_resp.context_menu(|ui| {
+                    if ui.button("Add Timer…").clicked() {
+                        action = Some(SpawnAction::AddTimer {
+                            name: spawn_name.clone(),
+                            x: sx, y: sy, z: sz,
+                        });
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.button("Add to Hunt").clicked() {
+                        action = Some(SpawnAction::AddToFilter {
+                            name: spawn_name.clone(),
+                            category: FilterCategory::Hunt,
+                        });
+                        ui.close();
+                    }
+                    if ui.button("Add to Caution").clicked() {
+                        action = Some(SpawnAction::AddToFilter {
+                            name: spawn_name.clone(),
+                            category: FilterCategory::Caution,
+                        });
+                        ui.close();
+                    }
+                    if ui.button("Add to Danger").clicked() {
+                        action = Some(SpawnAction::AddToFilter {
+                            name: spawn_name.clone(),
+                            category: FilterCategory::Danger,
+                        });
+                        ui.close();
+                    }
+                    if ui.button("Add to Alert").clicked() {
+                        action = Some(SpawnAction::AddToFilter {
+                            name: spawn_name.clone(),
+                            category: FilterCategory::Alert,
+                        });
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.button("Add Map Text").clicked() {
+                        action = Some(SpawnAction::AddMapText { x: sx, y: sy, z: sz });
+                        ui.close();
+                    }
                 });
             }
         });
+
+    action
 }
 
 fn spawn_category_str(cat: SpawnCategory) -> &'static str {

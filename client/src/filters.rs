@@ -35,7 +35,7 @@ impl FilterCategory {
 
 /// A set of named spawn filters organized by category.
 /// Load from `seqfilters` XML files (global and/or zone-specific).
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct FilterSet {
     /// Lowercase name → highest-priority matching category.
     entries: HashMap<String, FilterCategory>,
