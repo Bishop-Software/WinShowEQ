@@ -3,7 +3,17 @@ use egui::Ui;
 use crate::data::AppData;
 use crate::data::spawns::{SpawnCategory, class_name};
 
-pub fn show(ui: &mut Ui, data: &AppData) {
+pub fn show(
+    ui: &mut Ui,
+    data: &AppData,
+    sort_column: &mut Option<usize>,
+    sort_ascending: &mut bool,
+) {
+    const HEADERS: &[&str] = &[
+        "Name", "Last Name", "Lvl", "Class", "Race", "Type", "Owner", "Invis", "Speed", "X",
+        "Y", "Z", "Dist", "ID", "Time",
+    ];
+
     let player_pos = data.player_pos();
 
     let mut spawns: Vec<_> = data
@@ -12,89 +22,171 @@ pub fn show(ui: &mut Ui, data: &AppData) {
         .filter(|s| Some(s.id) != data.self_id)
         .collect();
 
-    if let Some((px, py, _)) = player_pos {
+    // Apply sorting
+    if let Some(col) = sort_column {
+        spawns.sort_by(|a, b| {
+            let cmp = match col {
+                0 => a.name.cmp(&b.name),
+                1 => a.last_name.cmp(&b.last_name),
+                2 => a.level.cmp(&b.level),
+                3 => (class_name(a.class)).cmp(class_name(b.class)),
+                4 => data.game_data.race_name(a.race).cmp(data.game_data.race_name(b.race)),
+                5 => {
+                    let cat_a = spawn_category_str(a.spawn_category);
+                    let cat_b = spawn_category_str(b.spawn_category);
+                    cat_a.cmp(cat_b)
+                }
+                6 => {
+                    let owner_a = owner_name_str(data, a.owner_id);
+                    let owner_b = owner_name_str(data, b.owner_id);
+                    owner_a.cmp(owner_b)
+                }
+                7 => (a.hidden != 0).cmp(&(b.hidden != 0)),
+                8 => a.speed.partial_cmp(&b.speed).unwrap_or(std::cmp::Ordering::Equal),
+                9 => a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal),
+                10 => a.y.partial_cmp(&b.y).unwrap_or(std::cmp::Ordering::Equal),
+                11 => a.z.partial_cmp(&b.z).unwrap_or(std::cmp::Ordering::Equal),
+                12 => {
+                    if let (Some((px, py, _)), Some((px2, py2, _))) = (player_pos, player_pos) {
+                        let da = a.distance_2d(px, py);
+                        let db = b.distance_2d(px2, py2);
+                        da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+                    } else {
+                        std::cmp::Ordering::Equal
+                    }
+                }
+                13 => a.id.cmp(&b.id),
+                14 => a.first_seen.cmp(&b.first_seen),
+                _ => std::cmp::Ordering::Equal,
+            };
+            if *sort_ascending {
+                cmp
+            } else {
+                cmp.reverse()
+            }
+        });
+    } else if let Some((px, py, _)) = player_pos {
         spawns.sort_by(|a, b| {
             let da = a.distance_2d(px, py);
             let db = b.distance_2d(px, py);
             da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
         });
-    } else {
-        spawns.sort_by(|a, b| a.name.cmp(&b.name));
     }
 
+    // Per-column widths (px). Header and data rows use the same array.
+    const COL_W: &[f32] = &[
+        90.0, // Name
+        70.0, // Last Name
+        28.0, // Lvl
+        36.0, // Class
+        70.0, // Race
+        36.0, // Type
+        70.0, // Owner
+        28.0, // Invis
+        42.0, // Speed
+        58.0, // X
+        58.0, // Y
+        58.0, // Z
+        42.0, // Dist
+        40.0, // ID
+        62.0, // Time
+    ];
+    let row_h = ui.text_style_height(&egui::TextStyle::Body) + 4.0;
+
+    // Frozen header row
+    ui.horizontal(|ui| {
+        for (col_idx, (header, &w)) in HEADERS.iter().zip(COL_W.iter()).enumerate() {
+            let indicator = match sort_column {
+                Some(c) if *c == col_idx => if *sort_ascending { " ▲" } else { " ▼" },
+                _ => "",
+            };
+            let label = format!("{}{}", header, indicator);
+            let btn = egui::Button::new(egui::RichText::new(label).strong());
+            if ui.add_sized([w, row_h], btn).clicked() {
+                if *sort_column == Some(col_idx) {
+                    *sort_ascending = !*sort_ascending;
+                } else {
+                    *sort_column = Some(col_idx);
+                    *sort_ascending = true;
+                }
+            }
+        }
+    });
+
+    ui.separator();
+
+    // Data rows (scrolled)
     egui::ScrollArea::both()
         .id_salt("spawn_scroll")
+        .auto_shrink([false; 2])
         .show(ui, |ui| {
-            egui::Grid::new("spawn_list")
-                .num_columns(14)
-                .striped(true)
-                .min_col_width(28.0)
-                .show(ui, |ui| {
-                    ui.strong("Name");
-                    ui.strong("Last Name");
-                    ui.strong("Lvl");
-                    ui.strong("Class");
-                    ui.strong("Race");
-                    ui.strong("Type");
-                    ui.strong("Owner");
-                    ui.strong("Invis");
-                    ui.strong("Speed");
-                    ui.strong("X");
-                    ui.strong("Y");
-                    ui.strong("Z");
-                    ui.strong("Dist");
-                    ui.strong("ID");
-                    ui.strong("Time");
-                    ui.end_row();
+            for s in &spawns {
+                let dist_str = match player_pos {
+                    Some((px, py, _)) => format!("{:.0}", s.distance_2d(px, py)),
+                    None => "-".to_owned(),
+                };
+                let color = if s.is_danger {
+                    egui::Color32::from_rgb(255, 80, 80)
+                } else if s.is_caution {
+                    egui::Color32::from_rgb(255, 160, 0)
+                } else if s.is_hunt {
+                    egui::Color32::from_rgb(0, 220, 120)
+                } else if s.is_alert {
+                    egui::Color32::from_rgb(200, 0, 255)
+                } else {
+                    ui.visuals().text_color()
+                };
 
-                    for s in &spawns {
-                        let dist_str = match player_pos {
-                            Some((px, py, _)) => format!("{:.0}", s.distance_2d(px, py)),
-                            None => "-".to_owned(),
-                        };
-                        let cat = match s.spawn_category {
-                            SpawnCategory::Pc => "PC",
-                            SpawnCategory::Npc => "NPC",
-                            SpawnCategory::Corpse => "Cor",
-                            SpawnCategory::Pet => "Pet",
-                            SpawnCategory::Merc => "Mrc",
-                        };
-                        let color = if s.is_danger {
-                            egui::Color32::from_rgb(255, 80, 80)
-                        } else if s.is_caution {
-                            egui::Color32::from_rgb(255, 160, 0)
-                        } else if s.is_hunt {
-                            egui::Color32::from_rgb(0, 220, 120)
-                        } else if s.is_alert {
-                            egui::Color32::from_rgb(200, 0, 255)
-                        } else {
-                            ui.visuals().text_color()
-                        };
+                let cells: [String; 15] = [
+                    s.name.clone(),
+                    s.last_name.clone(),
+                    s.level.to_string(),
+                    class_name(s.class).to_owned(),
+                    data.game_data.race_name(s.race).to_owned(),
+                    spawn_category_str(s.spawn_category).to_owned(),
+                    owner_name_str(data, s.owner_id).to_owned(),
+                    if s.hidden != 0 { "Y".to_owned() } else { String::new() },
+                    format!("{:.1}", s.speed),
+                    format!("{:.2}", s.x),
+                    format!("{:.2}", s.y),
+                    format!("{:.2}", s.z),
+                    dist_str,
+                    s.id.to_string(),
+                    s.first_seen.format("%H:%M:%S").to_string(),
+                ];
 
-                        ui.colored_label(color, &s.name);
-                        ui.label(&s.last_name);
-                        ui.label(s.level.to_string());
-                        ui.label(class_name(s.class));
-                        ui.label(data.game_data.race_name(s.race));
-                        ui.label(cat);
-                        let owner_name = if s.owner_id != 0 {
-                            data.spawns.get(s.owner_id)
-                                .map(|o| o.name.as_str())
-                                .unwrap_or("?")
-                        } else {
-                            ""
-                        };
-                        ui.label(owner_name);
-                        ui.label(if s.hidden != 0 { "Y" } else { "" });
-                        ui.label(format!("{:.1}", s.speed));
-                        ui.label(format!("{:.0}", s.x));
-                        ui.label(format!("{:.0}", s.y));
-                        ui.label(format!("{:.0}", s.z));
-                        ui.label(dist_str);
-                        ui.label(s.id.to_string());
-                        ui.label(s.first_seen.format("%H:%M:%S").to_string());
-                        ui.end_row();
+                ui.horizontal(|ui| {
+                    for (i, text) in cells.iter().enumerate() {
+                        let cell_color = if i == 0 { color } else { ui.visuals().text_color() };
+                        ui.add_sized(
+                            [COL_W[i], row_h],
+                            egui::Label::new(
+                                egui::RichText::new(text).color(cell_color)
+                            ).truncate(),
+                        );
                     }
                 });
+            }
         });
+}
+
+fn spawn_category_str(cat: SpawnCategory) -> &'static str {
+    match cat {
+        SpawnCategory::Pc => "PC",
+        SpawnCategory::Npc => "NPC",
+        SpawnCategory::Corpse => "Cor",
+        SpawnCategory::Pet => "Pet",
+        SpawnCategory::Merc => "Mrc",
+    }
+}
+
+fn owner_name_str<'a>(data: &'a AppData, owner_id: u32) -> &'a str {
+    if owner_id != 0 {
+        data.spawns
+            .get(owner_id)
+            .map(|o| o.name.as_str())
+            .unwrap_or("?")
+    } else {
+        ""
+    }
 }

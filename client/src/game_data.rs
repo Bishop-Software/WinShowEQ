@@ -7,31 +7,62 @@ pub struct GameData {
     races: HashMap<u32, String>,
 }
 
+/// Common EQ install locations to probe when no path is configured.
+static EQ_CANDIDATE_DIRS: &[&str] = &[
+    r"C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest",
+    r"C:\Users\Public\Sony Online Entertainment\Installed Games\EverQuest",
+    r"C:\Program Files (x86)\Sony Online Entertainment\EverQuest",
+    r"C:\Program Files\EverQuest",
+];
+
 impl GameData {
     /// Load from an EQ installation directory.
-    /// Returns `None` if the file is missing or unreadable.
+    /// If `eq_dir` is empty or the file is missing there, tries common install locations.
+    /// Returns `None` if `dbstr_us.txt` cannot be found anywhere.
     pub fn load(eq_dir: &str) -> Option<Self> {
-        if eq_dir.is_empty() {
-            return None;
+        // If the user pointed at eqgame.exe rather than the directory, use its parent.
+        let resolved_dir;
+        let eq_dir = if !eq_dir.is_empty() {
+            let p = Path::new(eq_dir);
+            if p.is_file() {
+                resolved_dir = p.parent()?.to_string_lossy().into_owned();
+                resolved_dir.as_str()
+            } else {
+                eq_dir
+            }
+        } else {
+            eq_dir
+        };
+
+        let candidates: Vec<&str> = if eq_dir.is_empty() {
+            EQ_CANDIDATE_DIRS.to_vec()
+        } else {
+            std::iter::once(eq_dir)
+                .chain(EQ_CANDIDATE_DIRS.iter().copied())
+                .collect()
+        };
+
+        for dir in candidates {
+            let path = Path::new(dir).join("dbstr_us.txt");
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                return Some(Self::parse(&content));
+            }
         }
-        let path = Path::new(eq_dir).join("dbstr_us.txt");
-        let content = std::fs::read_to_string(&path).ok()?;
-        Some(Self::parse(&content))
+        None
     }
 
     fn parse(content: &str) -> Self {
         let mut races = HashMap::new();
         for line in content.lines() {
-            // Format: type^id^text^flags^
+            // Format: race_id^type^text  (type 11 = singular race name)
             let mut parts = line.splitn(4, '^');
+            let Some(race_id_str) = parts.next() else { continue };
             let Some(type_str) = parts.next() else { continue };
-            let Some(id_str) = parts.next() else { continue };
             let Some(text) = parts.next() else { continue };
-            // id=11 is the singular race name within each race-type block
-            if id_str != "11" {
+            if type_str != "11" {
                 continue;
             }
-            let Ok(race_id) = type_str.trim().parse::<u32>() else { continue };
+            let Ok(race_id) = race_id_str.trim().parse::<u32>() else { continue };
             if !text.is_empty() {
                 races.insert(race_id, text.to_owned());
             }

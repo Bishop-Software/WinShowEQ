@@ -62,6 +62,8 @@ pub struct MainApp {
     stop: Arc<AtomicBool>,
     server_addr: Arc<Mutex<Option<SocketAddr>>>,
     prev_zone: String,
+    spawn_sort_column: Option<usize>,
+    spawn_sort_ascending: bool,
 }
 
 impl MainApp {
@@ -107,6 +109,8 @@ impl MainApp {
             stop,
             server_addr: addr_cell,
             prev_zone: String::new(),
+            spawn_sort_column: None,
+            spawn_sort_ascending: true,
         }
     }
 
@@ -256,7 +260,12 @@ impl eframe::App for MainApp {
                 let data = self.data.lock().unwrap();
                 ui.heading(format!("Spawns ({})", data.spawns.len()));
                 ui.separator();
-                spawn_list::show(ui, &data);
+                spawn_list::show(
+                    ui,
+                    &data,
+                    &mut self.spawn_sort_column,
+                    &mut self.spawn_sort_ascending,
+                );
             });
 
         // Bottom panel: timers / ground tabs
