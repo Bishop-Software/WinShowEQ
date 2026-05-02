@@ -16,6 +16,7 @@ use crate::game_data::GameData;
 use crate::logger::{LogLevel, Logger};
 use crate::net::ServerConnection;
 use crate::protocol::decode_packet;
+use crate::ui::about::AboutDialog;
 use crate::ui::ground_list;
 use crate::ui::login::LoginDialog;
 use crate::ui::map_pane::MapPane;
@@ -76,6 +77,7 @@ pub struct MainApp {
     map_pane: MapPane,
     login: LoginDialog,
     options: OptionsDialog,
+    about: AboutDialog,
     dock_state: DockState<Tab>,
     add_note: AddNoteDialog,
     add_timer: AddTimerDialog,
@@ -127,6 +129,7 @@ impl MainApp {
 
         let login = LoginDialog::new(server_addr);
         let options = OptionsDialog::new(&config, false);
+        let about = AboutDialog::new();
 
         Self {
             data,
@@ -136,6 +139,7 @@ impl MainApp {
             map_pane: MapPane::default(),
             login,
             options,
+            about,
             dock_state: build_dock_state(),
             add_note: AddNoteDialog::default(),
             add_timer: AddTimerDialog::default(),
@@ -302,6 +306,7 @@ impl eframe::App for MainApp {
             }
             let _ = self.config.save(&self.config_path);
         }
+        self.about.show(&ctx);
 
         // "Add Note" floating dialog
         if self.add_note.open {
@@ -430,6 +435,12 @@ impl eframe::App for MainApp {
                     self.add_note.open = true;
                     self.add_note.text.clear();
                     self.add_note.override_pos = None;
+                    ui.close();
+                }
+            });
+            ui.menu_button("Help", |ui| {
+                if ui.button("About…").clicked() {
+                    self.about.open = true;
                     ui.close();
                 }
             });
