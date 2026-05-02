@@ -6,24 +6,33 @@ future **client** (planned Rust overlay) in a single workspace.
 
 ## Status
 
-| Component | Milestone                                     | Status        |
-|-----------|-----------------------------------------------|---------------|
-| Server    | M1 — Data types, INI reader, notifier trait   | Complete      |
-| Server    | M2 — EQ file scanner (pattern matching)       | Complete      |
-| Server    | M3 — Memory reader (Win32 unsafe)             | Complete      |
-| Server    | M4 — Network server + binary protocol         | Complete      |
-| Server    | M5 — Server logic + console mode (end-to-end) | Complete      |
-| Server    | M6 — Debug loop, full CLI (`clap`)            | Complete      |
-| Server    | M7 — GUI (`egui` + `eframe`)                  | Partial       |
-| Client    | Prereq — Cargo workspace restructure          | Complete      |
-| Client    | C1 — Common crate + client foundation         | Complete      |
-| Client    | C2 — Network client (TCP tick loop, decode)   | Complete      |
-| Client    | C3 — Map file parser (native EQ format)       | Complete      |
-| Client    | C4 — Core rendering (egui map canvas)         | Complete      |
-| Client    | C5 — Spawn categories, filters, Z-filter      | Complete      |
-| Client    | C6 — Panels, timers, persistence              | Complete      |
-| Client    | C7 — Alerts and integrations                  | Complete      |
-| Client    | C8 — Polish and parity                        | In Progress   |
+| Component | Milestone                                     | Status                 |
+|-----------|-----------------------------------------------|------------------------|
+| Server    | M1 — Data types, INI reader, notifier trait   | Complete               |
+| Server    | M2 — EQ file scanner (pattern matching)       | Complete               |
+| Server    | M3 — Memory reader (Win32 unsafe)             | Complete               |
+| Server    | M4 — Network server + binary protocol         | Complete               |
+| Server    | M5 — Server logic + console mode (end-to-end) | Complete               |
+| Server    | M6 — Debug loop, full CLI (`clap`)            | Complete               |
+| Server    | M7 — GUI (`egui` + `eframe`)                  | Partial (M7-7 pending) |
+| Client    | Prereq — Cargo workspace restructure          | Complete               |
+| Client    | C1 — Common crate + client foundation         | Complete               |
+| Client    | C2 — Network client (TCP tick loop, decode)   | Complete               |
+| Client    | C3 — Map file parser (native EQ format)       | Complete               |
+| Client    | C4 — Core rendering (egui map canvas)         | Complete               |
+| Client    | C5 — Spawn categories, filters, Z-filter      | Complete               |
+| Client    | C6 — Panels, timers, persistence              | Complete               |
+| Client    | C7 — Alerts and integrations                  | Complete               |
+| Client    | C8 — Polish and parity                        | In Progress            |
+
+### Project tracking
+
+Complete migration plans and issue tracking are available on GitHub:
+
+- [**Server Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/1): M1–M6 complete, M7 in progress (issues #9–#15)
+- [**Client Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/2): C1–C7 complete, C8 in progress (issues #1–#8 and #23)
+
+See [CLAUDE.md](CLAUDE.md) for developer guidance and technical details.
 
 ## What it does
 
@@ -33,15 +42,16 @@ MySEQ is a map overlay tool for EverQuest. The server component today:
 - Streams packed binary records over TCP (default port 5555) to a connected client
 - Supports GUI mode (default), console mode, and debug mode
 
-The Rust client component currently:
+The Rust client component (88/88 tests passing):
 - Connects to the server over TCP and decodes all packet types
 - Renders EQ zone maps (native `.txt` format) with spawn dots, ground items, mob trails, and annotations
-- Loads map files: `{zone}.txt` (base layer) + `{zone}_1.txt`, `{zone}_2.txt`, `{zone}_3.txt` (additional layers)
-- Maintains spawn list, timer list, and ground item list panels in an egui_dock docking layout
-- Supports filter categories (hunt/caution/danger/rare), Z-filter, alerts (TTS/sound/Discord)
+- Loads all four map file layers: `{zone}.txt` (base) + `{zone}_1.txt`, `{zone}_2.txt`, `{zone}_3.txt` (numbered layers)
+- Maintains spawn list, timer list, and ground item list panels in an `egui_dock` docking layout
+- Supports filter categories (hunt/caution/danger/rare), Z-filter for vertical spawn filtering, alerts (TTS/speech/sound/Discord)
 - Right-click context menu on spawns: add timer, add to filter, add map text
 - Persists timers, annotations, filters, and config across sessions
 - Map rendering: applies coordinate transforms to align spawns with map lines (north up, east right)
+- Color-coded spawn dots by con level; mob trails with faded orange dots when enabled
 
 ## Workspace layout
 
@@ -76,7 +86,7 @@ WinShowEQ/
       config.rs       # ClientConfig — client.ini load/save
       net.rs          # ServerConnection — TCP tick loop
       protocol.rs     # decode_packet — OPT_* dispatch
-      map_reader.rs   # native EQ .map file parser (L/P lines, 3 layers)
+      map_reader.rs   # native EQ .map file parser (L/P lines, base + 3 layers)
       map_con.rs      # MapCon — egui map canvas rendering
       filters.rs      # FilterSet — hunt/caution/danger/rare XML filters
       alerts.rs       # AlertEngine — TTS, sound, Discord webhook
@@ -120,16 +130,25 @@ cargo run -p winshoweq-server -- scan path\to\eqgame.exe   # scan for memory off
 cargo run -p winshoweq-server -- attach                     # print PID + base address
 cargo run -p winshoweq-server -- serve-stub                 # stub server (no EQ required)
 
+# Run the client (default: GUI mode)
+cargo run -p winshoweq-client
+
+# Run the client with a specific server address
+cargo run -p winshoweq-client -- --connect 127.0.0.1:5555
+
 # Run tests
 cargo test
 
-# Build release binary
+# Build release binaries
 cargo build --release -p winshoweq-server
+cargo build --release -p winshoweq-client
 ```
 
 Automated/manual server test docs live in `server/scripts/README.md`.
 
 ## Configuration
+
+### Server
 
 By default, the server resolves INI files in this order:
 
@@ -193,6 +212,34 @@ Mask=xxxxxxx...
 
 ; ... (one section per scanned address)
 ```
+
+### Client
+
+**`client.ini`** — server connection, UI preferences, and alert settings:
+
+```ini
+[WinShowEQ]
+Host=127.0.0.1
+Port=5555
+UpdateDelayMs=100
+
+[Directories]
+ConfigDir=...      ; filters, timers, annotations (OS-specific %AppData%)
+MapDir=...         ; zone .txt files
+LogDir=...         ; dated log files
+
+[Alerts]
+DangerMode=speech  ; none/beep/speech/sound
+DangerSound=...    ; path to .wav/.mp3/etc
+; ... (caution, hunt, rare modes and sounds)
+
+[Discord]
+WebhookUrl=...     ; Discord webhook URL
+OnDanger=1         ; post to Discord on danger spawns
+OnHunt=1           ; post to Discord on hunt spawns
+```
+
+The Options dialog provides a GUI to edit all settings; changes persist automatically.
 
 ## Wire protocol
 

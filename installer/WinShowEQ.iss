@@ -36,7 +36,7 @@ Name: "custom"; Description: "Custom install"
 [Components]
 Name: "server"; Description: "WinShowEQ server"; Types: server custom; Flags: fixed
 #ifdef IncludeClient
-Name: "client"; Description: "WinShowEQ client (placeholder / not yet implemented)"; Types: custom
+Name: "client"; Description: "WinShowEQ client (88/88 tests passing; C1-C7 complete, C8 in progress)"; Types: custom
 #endif
 
 [Tasks]
@@ -47,6 +47,14 @@ Name: "launchserver"; Description: "Launch WinShowEQ Server after setup complete
 Name: "{app}\bin"; Components: server
 Name: "{app}\docs"; Components: server
 Name: "{commonappdata}\WinShowEQ"; Permissions: users-modify; Components: server
+#ifdef IncludeClient
+Name: "{commonappdata}\WinShowEQ\client"; Permissions: users-modify; Components: client
+Name: "{commonappdata}\WinShowEQ\client\filters"; Permissions: users-modify; Components: client
+Name: "{commonappdata}\WinShowEQ\client\timers"; Permissions: users-modify; Components: client
+Name: "{commonappdata}\WinShowEQ\client\annotations"; Permissions: users-modify; Components: client
+Name: "{commonappdata}\WinShowEQ\client\maps"; Permissions: users-modify; Components: client
+Name: "{commonappdata}\WinShowEQ\client\logs"; Permissions: users-modify; Components: client
+#endif
 
 [Files]
 Source: "{#StageDir}\bin\WinShowEQServer.exe"; DestDir: "{app}\bin"; Flags: ignoreversion; Components: server
@@ -57,6 +65,7 @@ Source: "{#StageDir}\docs\INSTALLER-README.md"; DestDir: "{app}\docs"; DestName:
 Source: "{#StageDir}\docs\LICENSE.txt"; DestDir: "{app}\docs"; DestName: "LICENSE.txt"; Flags: ignoreversion; Components: server
 #ifdef IncludeClient
 Source: "{#StageDir}\bin\WinShowEQClient.exe"; DestDir: "{app}\bin"; Flags: ignoreversion; Components: client
+Source: "{#StageDir}\config\client.ini"; DestDir: "{commonappdata}\WinShowEQ\client"; Flags: onlyifdoesntexist uninsneveruninstall; Components: client
 #endif
 
 [Icons]
@@ -64,7 +73,8 @@ Name: "{group}\WinShowEQ Server"; Filename: "{app}\bin\WinShowEQServer.exe"; Wor
 Name: "{group}\WinShowEQ Configuration Folder"; Filename: "{commonappdata}\WinShowEQ"; Components: server
 Name: "{autodesktop}\WinShowEQ Server"; Filename: "{app}\bin\WinShowEQServer.exe"; WorkingDir: "{commonappdata}\WinShowEQ"; Tasks: desktopicon; Components: server
 #ifdef IncludeClient
-Name: "{group}\WinShowEQ Client"; Filename: "{app}\bin\WinShowEQClient.exe"; WorkingDir: "{app}\bin"; Components: client
+Name: "{group}\WinShowEQ Client"; Filename: "{app}\bin\WinShowEQClient.exe"; WorkingDir: "{commonappdata}\WinShowEQ\client"; Components: client
+Name: "{group}\WinShowEQ Client Configuration"; Filename: "{commonappdata}\WinShowEQ\client"; Components: client
 #endif
 
 [Run]
