@@ -124,8 +124,11 @@ fn parse_lines(lines: impl Iterator<Item = String>) -> Result<MapData, MapError>
 pub fn load_zone(dir: &Path, zone: &str) -> Result<MapData, MapError> {
     let mut combined = MapData::default();
     let mut found = false;
-    for n in 1..=3u8 {
-        let path = dir.join(format!("{zone}_{n}.txt"));
+    // Base layer (no suffix) + up to three numbered layers.
+    let candidates: Vec<std::path::PathBuf> = std::iter::once(dir.join(format!("{zone}.txt")))
+        .chain((1..=3u8).map(|n| dir.join(format!("{zone}_{n}.txt"))))
+        .collect();
+    for path in candidates {
         if path.exists() {
             combined.merge(load_layer(&path)?);
             found = true;
@@ -138,10 +141,10 @@ pub fn load_zone(dir: &Path, zone: &str) -> Result<MapData, MapError> {
 
 fn parse_map_line(rest: &str) -> Option<MapLine> {
     let mut t = Tokenizer::new(rest);
-    let x1 = -t.f32()?;
+    let x1 = t.f32()?;
     let y1 = -t.f32()?;
     let z1 = t.f32()?;
-    let x2 = -t.f32()?;
+    let x2 = t.f32()?;
     let y2 = -t.f32()?;
     let z2 = t.f32()?;
     let r = t.u8()?;
@@ -156,7 +159,7 @@ fn parse_map_line(rest: &str) -> Option<MapLine> {
 
 fn parse_map_label(rest: &str) -> Option<MapLabel> {
     let mut t = Tokenizer::new(rest);
-    let x = -t.f32()?;
+    let x = t.f32()?;
     let y = -t.f32()?;
     let z = t.f32()?;
     let r = t.u8()?;
@@ -235,14 +238,14 @@ unknown line here
     }
 
     #[test]
-    fn line_coords_negated() {
+    fn line_coords_y_negated() {
         let d = parse_str(SAMPLE);
-        // Input: L -100,-200,0,100,-200,0 → X/Y negated: (100, 200) and (-100, 200)
+        // Input: L -100,-200,0,100,-200,0 → Y negated only: (-100, 200) and (100, 200)
         let l = &d.lines[0];
-        assert!((l.p1.x - 100.0).abs() < 0.01);
+        assert!((l.p1.x - (-100.0)).abs() < 0.01);
         assert!((l.p1.y - 200.0).abs() < 0.01);
         assert!((l.p1.z - 0.0).abs() < 0.01);
-        assert!((l.p2.x - (-100.0)).abs() < 0.01);
+        assert!((l.p2.x - 100.0).abs() < 0.01);
         assert!((l.p2.y - 200.0).abs() < 0.01);
     }
 
@@ -263,11 +266,11 @@ unknown line here
     }
 
     #[test]
-    fn label_coords_negated() {
+    fn label_coords_y_negated() {
         let d = parse_str(SAMPLE);
-        // Input: P -75,-150,0 → X/Y negated: (75, 150, 0)
+        // Input: P -75,-150,0 → Y negated only: (-75, 150, 0)
         let lbl = &d.labels[0];
-        assert!((lbl.pos.x - 75.0).abs() < 0.01);
+        assert!((lbl.pos.x - (-75.0)).abs() < 0.01);
         assert!((lbl.pos.y - 150.0).abs() < 0.01);
     }
 
@@ -281,7 +284,7 @@ unknown line here
     fn bounding_box_correct() {
         let d = parse_str(SAMPLE);
         let (min, max) = d.bounding_box().unwrap();
-        // lines: (100,200,0)↔(-100,200,0) and (100,200,0)↔(100,-200,0)
+        // lines: (-100,200,0)↔(100,200,0) and (-100,200,0)↔(-100,-200,0)
         assert!((min.y - (-200.0)).abs() < 0.01);
         assert!((max.y - 200.0).abs() < 0.01);
         assert!((min.x - (-100.0)).abs() < 0.01);
@@ -322,10 +325,22 @@ unknown line here
     fn load_zone_reads_layers() {
         use std::io::Write;
         let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("testzone_1.txt");
-        let mut f = std::fs::File::create(&p).unwrap();
+        // base layer + _1 layer = 2 lines total
+        let mut f = std::fs::File::create(dir.path().join("testzone.txt")).unwrap();
         writeln!(f, "L 0,0,0,10,10,0,255,0,0").unwrap();
+        let mut f = std::fs::File::create(dir.path().join("testzone_1.txt")).unwrap();
+        writeln!(f, "L 1,1,0,2,2,0,0,255,0").unwrap();
         let data = load_zone(dir.path(), "testzone").unwrap();
+        assert_eq!(data.lines.len(), 2);
+    }
+
+    #[test]
+    fn load_zone_base_only() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let mut f = std::fs::File::create(dir.path().join("testzone2.txt")).unwrap();
+        writeln!(f, "L 0,0,0,1,1,0,255,0,0").unwrap();
+        let data = load_zone(dir.path(), "testzone2").unwrap();
         assert_eq!(data.lines.len(), 1);
     }
 }

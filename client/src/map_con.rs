@@ -82,10 +82,12 @@ impl<'a> MapCon<'a> {
     }
 }
 
-/// Transform EQ spawn coordinates to map coordinate space (negate X and Y).
+/// Transform EQ spawn coordinates to map coordinate space.
+/// Negate X only: wire spawn.X = -file_x (opposite sign from map file first coord).
+/// Wire spawn.Y = -file_y which matches MapLine.y (map_reader negates Y on load), so Y is unchanged.
 #[inline]
 fn eq_to_map(eq_x: f32, eq_y: f32) -> (f32, f32) {
-    (-eq_x, -eq_y)
+    (-eq_x, eq_y)
 }
 
 fn draw_mob_trails(ctx: &DrawCtx, data: &AppData) {
@@ -103,6 +105,17 @@ fn draw_mob_trails(ctx: &DrawCtx, data: &AppData) {
     }
 }
 
+/// Map files sometimes store black (0,0,0) which is invisible on the black canvas background.
+/// Substitute a visible dark gray in that case.
+#[inline]
+fn map_color(r: u8, g: u8, b: u8) -> Color32 {
+    if r == 0 && g == 0 && b == 0 {
+        Color32::from_rgb(100, 100, 100)
+    } else {
+        Color32::from_rgb(r, g, b)
+    }
+}
+
 fn draw_map_lines(ctx: &DrawCtx, map: &MapData) {
     for line in &map.lines {
         let p1 = ctx.to_screen(line.p1.x, line.p1.y);
@@ -111,7 +124,7 @@ fn draw_map_lines(ctx: &DrawCtx, map: &MapData) {
             let [r, g, b] = line.color;
             ctx.painter.line_segment(
                 [p1, p2],
-                Stroke::new(1.0, Color32::from_rgb(r, g, b)),
+                Stroke::new(1.0, map_color(r, g, b)),
             );
         }
     }
@@ -134,7 +147,7 @@ fn draw_labels(ctx: &DrawCtx, map: &MapData) {
             egui::Align2::CENTER_CENTER,
             &label.text,
             FontId::proportional(font_size),
-            Color32::from_rgb(r, g, b),
+            map_color(r, g, b),
         );
     }
 }
@@ -167,12 +180,12 @@ fn draw_self(ctx: &DrawCtx, data: &AppData) {
     ctx.painter.circle_filled(pos, SELF_RADIUS, Color32::WHITE);
     ctx.painter.circle_stroke(pos, SELF_RADIUS, Stroke::new(1.5, Color32::BLACK));
 
-    // Direction arrow — EQ heading: 0 = north, 512 = full circle, increases clockwise.
-    // North on screen = -Y, east = +X.
+    // Direction arrow — EQ heading: 0 = north, 128 = west, 256 = south, 384 = east,
+    // 512 = full circle. Increases counter-clockwise. Matches C# MySEQ xSin/xCos convention.
     let heading_rad = s.heading * std::f32::consts::TAU / 512.0;
     let arrow_len = SELF_RADIUS * 2.5;
     let tip = Pos2::new(
-        pos.x + heading_rad.sin() * arrow_len,
+        pos.x - heading_rad.sin() * arrow_len,
         pos.y - heading_rad.cos() * arrow_len,
     );
     ctx.painter.line_segment([pos, tip], Stroke::new(2.0, Color32::WHITE));

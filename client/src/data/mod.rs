@@ -9,7 +9,6 @@ use std::collections::{HashMap, VecDeque};
 use crate::alerts::AlertEngine;
 use crate::filters::FilterSet;
 use crate::game_data::GameData;
-use crate::logger::Logger;
 use crate::map_reader::MapData;
 use crate::protocol::Packet;
 use annotations::AnnotationStore;
@@ -78,7 +77,7 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
                     .spawns
                     .get(id)
                     .filter(|s| (s.x - new_x).abs() > 0.5 || (s.y - new_y).abs() > 0.5)
-                    .map(|s| (-s.x, -s.y));
+                    .map(|s| (-s.x, s.y));
                 if let Some(pt) = trail_pt {
                     let trail = data.trails.entry(id).or_default();
                     trail.push_back(pt);

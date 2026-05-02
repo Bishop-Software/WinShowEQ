@@ -35,10 +35,13 @@ MySEQ is a map overlay tool for EverQuest. The server component today:
 
 The Rust client component currently:
 - Connects to the server over TCP and decodes all packet types
-- Renders EQ zone maps with spawn dots, ground items, mob trails, and annotations
-- Maintains spawn list, timer list, and ground item list panels (floating windows)
-- Supports filter categories (hunt/caution/danger/alert), Z-filter, alerts (TTS/sound/Discord)
+- Renders EQ zone maps (native `.txt` format) with spawn dots, ground items, mob trails, and annotations
+- Loads map files: `{zone}.txt` (base layer) + `{zone}_1.txt`, `{zone}_2.txt`, `{zone}_3.txt` (additional layers)
+- Maintains spawn list, timer list, and ground item list panels in an egui_dock docking layout
+- Supports filter categories (hunt/caution/danger/rare), Z-filter, alerts (TTS/sound/Discord)
+- Right-click context menu on spawns: add timer, add to filter, add map text
 - Persists timers, annotations, filters, and config across sessions
+- Map rendering: applies coordinate transforms to align spawns with map lines (north up, east right)
 
 ## Workspace layout
 
@@ -75,7 +78,7 @@ WinShowEQ/
       protocol.rs     # decode_packet — OPT_* dispatch
       map_reader.rs   # native EQ .map file parser (L/P lines, 3 layers)
       map_con.rs      # MapCon — egui map canvas rendering
-      filters.rs      # FilterSet — hunt/caution/danger/alert XML filters
+      filters.rs      # FilterSet — hunt/caution/danger/rare XML filters
       alerts.rs       # AlertEngine — TTS, sound, Discord webhook
       logger.rs       # Logger — dated log files
       game_data.rs    # GameData — race/class name lookup from EQ data files
@@ -87,7 +90,7 @@ WinShowEQ/
         world.rs      # InGameTime
         annotations.rs # AnnotationStore — per-zone map notes
       ui/
-        main_window.rs # MainApp: eframe::App — floating window layout
+        main_window.rs # MainApp: eframe::App — egui_dock docking layout
         map_pane.rs   # MapPane — Z-filter + map canvas host
         spawn_list.rs # sortable spawn table
         timer_list.rs # timer countdown table
