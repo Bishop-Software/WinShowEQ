@@ -8,6 +8,7 @@ pub fn show(ui: &mut Ui, data: &AppData) {
 
     egui::ScrollArea::vertical()
         .id_salt("ground_scroll")
+        .auto_shrink([false; 2])
         .show(ui, |ui| {
             egui::Grid::new("ground_list")
                 .num_columns(4)

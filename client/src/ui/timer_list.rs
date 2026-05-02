@@ -7,6 +7,7 @@ pub fn show(ui: &mut Ui, timers: &mut TimerStore) {
 
     egui::ScrollArea::vertical()
         .id_salt("timer_scroll")
+        .auto_shrink([false; 2])
         .show(ui, |ui| {
             egui::Grid::new("timer_list")
                 .num_columns(3)
