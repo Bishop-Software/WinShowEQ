@@ -13,7 +13,7 @@ pub enum SpawnAction {
 
 pub fn show(
     ui: &mut Ui,
-    data: &AppData,
+    data: &mut AppData,
     sort_column: &mut Option<usize>,
     sort_ascending: &mut bool,
 ) -> Option<SpawnAction> {
@@ -81,36 +81,37 @@ pub fn show(
         });
     }
 
-    // Per-column widths (px). Header and data rows use the same array.
-    const COL_W: &[f32] = &[
-        90.0, // Name
-        70.0, // Last Name
-        28.0, // Lvl
-        36.0, // Class
-        70.0, // Race
-        36.0, // Type
-        70.0, // Owner
-        28.0, // Invis
-        42.0, // Speed
-        58.0, // X
-        58.0, // Y
-        58.0, // Z
-        42.0, // Dist
-        40.0, // ID
-        62.0, // Time
-    ];
+    let mut col_widths = data.spawn_list_column_widths.clone();
     let row_h = ui.text_style_height(&egui::TextStyle::Body) + 4.0;
 
-    // Frozen header row
+    // Frozen header row with resizable columns
     ui.horizontal(|ui| {
-        for (col_idx, (header, &w)) in HEADERS.iter().zip(COL_W.iter()).enumerate() {
+        for (col_idx, (header, width)) in HEADERS.iter().zip(col_widths.iter_mut()).enumerate() {
             let indicator = match sort_column {
                 Some(c) if *c == col_idx => if *sort_ascending { " ▲" } else { " ▼" },
                 _ => "",
             };
-            let label = format!("{}{}", header, indicator);
-            let btn = egui::Button::new(egui::RichText::new(label).strong());
-            if ui.add_sized([w, row_h], btn).clicked() {
+            let label_text = format!("{}{}", header, indicator);
+
+            // Allocate space for the header cell and detect clicks
+            let header_rect = ui.allocate_space(egui::vec2(*width, row_h)).1;
+            let header_resp = ui.interact(header_rect, ui.id().with("header").with(col_idx), egui::Sense::click());
+
+            // Display header as plain text (not a button)
+            let text_color = if header_resp.hovered() {
+                egui::Color32::WHITE
+            } else {
+                ui.visuals().text_color()
+            };
+            ui.painter().text(
+                header_rect.left_top() + egui::vec2(4.0, 2.0),
+                egui::Align2::LEFT_TOP,
+                label_text,
+                egui::FontId::default(),
+                text_color,
+            );
+
+            if header_resp.clicked() {
                 if *sort_column == Some(col_idx) {
                     *sort_ascending = !*sort_ascending;
                 } else {
@@ -118,8 +119,29 @@ pub fn show(
                     *sort_ascending = true;
                 }
             }
+
+            // Add resize handle between columns (except after last column)
+            if col_idx < HEADERS.len() - 1 {
+                let sep_width = 4.0;
+                let sep_rect = ui.allocate_space(egui::vec2(sep_width, row_h)).1;
+                let sep_sense = ui.interact(
+                    sep_rect,
+                    ui.id().with("resize").with(col_idx),
+                    egui::Sense::drag(),
+                );
+                if sep_sense.dragged() {
+                    let delta = sep_sense.drag_delta().x;
+                    *width = (*width + delta).max(30.0);
+                }
+                if sep_sense.hovered() {
+                    ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::ResizeHorizontal);
+                }
+            }
         }
     });
+
+    // Store updated column widths back to data
+    data.spawn_list_column_widths = col_widths.clone();
 
     ui.separator();
 
@@ -169,11 +191,16 @@ pub fn show(
                     for (i, text) in cells.iter().enumerate() {
                         let cell_color = if i == 0 { color } else { ui.visuals().text_color() };
                         ui.add_sized(
-                            [COL_W[i], row_h],
+                            [col_widths[i], row_h],
                             egui::Label::new(
                                 egui::RichText::new(text).color(cell_color)
                             ).truncate(),
                         );
+
+                        // Add matching resize handle spacing (except after last column)
+                        if i < cells.len() - 1 {
+                            ui.allocate_space(egui::vec2(4.0, row_h));
+                        }
                     }
                 }).response.rect;
 
@@ -236,13 +263,13 @@ fn spawn_category_str(cat: SpawnCategory) -> &'static str {
     match cat {
         SpawnCategory::Pc => "PC",
         SpawnCategory::Npc => "NPC",
-        SpawnCategory::Corpse => "Cor",
+        SpawnCategory::Corpse => "Corpse",
         SpawnCategory::Pet => "Pet",
-        SpawnCategory::Merc => "Mrc",
+        SpawnCategory::Merc => "Merc",
     }
 }
 
-fn owner_name_str<'a>(data: &'a AppData, owner_id: u32) -> &'a str {
+fn owner_name_str(data: &AppData, owner_id: u32) -> &str {
     if owner_id != 0 {
         data.spawns
             .get(owner_id)

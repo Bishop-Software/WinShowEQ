@@ -87,6 +87,10 @@ pub struct MainApp {
     prev_zone: String,
     spawn_sort_column: Option<usize>,
     spawn_sort_ascending: bool,
+    timer_sort_column: Option<usize>,
+    timer_sort_ascending: bool,
+    ground_sort_column: Option<usize>,
+    ground_sort_ascending: bool,
 }
 
 /// Build the initial dock layout: Spawns (top-left) + Timers/Ground tabs (bottom-left) + Map (right).
@@ -100,10 +104,19 @@ fn build_dock_state() -> DockState<Tab> {
 
 impl MainApp {
     pub fn new(
-        _cc: &eframe::CreationContext<'_>,
+        cc: &eframe::CreationContext<'_>,
         server_addr: Option<SocketAddr>,
         config_path: PathBuf,
     ) -> Self {
+        // Configure Arial font for better Unicode support (arrows, international text)
+        let mut fonts = egui::FontDefinitions::default();
+        let font_data = egui::FontData::from_static(include_bytes!("../../assets/Arial.ttf"));
+        fonts.font_data.insert("arial".to_owned(), std::sync::Arc::new(font_data));
+        fonts.families.get_mut(&egui::FontFamily::Proportional)
+            .unwrap()
+            .insert(0, "arial".to_owned());
+        cc.egui_ctx.set_fonts(fonts);
+
         let config = ClientConfig::load(&config_path);
         let logger = Logger::new(&config.log_dir);
         logger.set_enabled(config.log_enabled);
@@ -149,6 +162,10 @@ impl MainApp {
             prev_zone: String::new(),
             spawn_sort_column: None,
             spawn_sort_ascending: true,
+            timer_sort_column: None,
+            timer_sort_ascending: true,
+            ground_sort_column: None,
+            ground_sort_ascending: true,
         }
     }
 
@@ -212,6 +229,10 @@ struct WinseqTabViewer<'a> {
     map_pane: &'a mut MapPane,
     spawn_sort_column: &'a mut Option<usize>,
     spawn_sort_ascending: &'a mut bool,
+    timer_sort_column: &'a mut Option<usize>,
+    timer_sort_ascending: &'a mut bool,
+    ground_sort_column: &'a mut Option<usize>,
+    ground_sort_ascending: &'a mut bool,
     spawn_action: &'a mut Option<SpawnAction>,
 }
 
@@ -230,23 +251,23 @@ impl<'a> TabViewer for WinseqTabViewer<'a> {
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
         match tab {
             Tab::Spawns => {
-                let data = self.data.lock().unwrap();
+                let mut data = self.data.lock().unwrap();
                 ui.label(format!("Spawns ({})", data.spawns.len()));
                 ui.separator();
                 *self.spawn_action = spawn_list::show(
                     ui,
-                    &data,
+                    &mut data,
                     self.spawn_sort_column,
                     self.spawn_sort_ascending,
                 );
             }
             Tab::Timers => {
                 let mut data = self.data.lock().unwrap();
-                timer_list::show(ui, &mut data.timers);
+                timer_list::show(ui, &mut data, &mut self.timer_sort_column, &mut self.timer_sort_ascending);
             }
             Tab::Ground => {
-                let data = self.data.lock().unwrap();
-                ground_list::show(ui, &data);
+                let mut data = self.data.lock().unwrap();
+                ground_list::show(ui, &mut data, &mut self.ground_sort_column, &mut self.ground_sort_ascending);
             }
             Tab::Map => {
                 let data = self.data.lock().unwrap();
@@ -452,6 +473,10 @@ impl eframe::App for MainApp {
             map_pane: &mut self.map_pane,
             spawn_sort_column: &mut self.spawn_sort_column,
             spawn_sort_ascending: &mut self.spawn_sort_ascending,
+            timer_sort_column: &mut self.timer_sort_column,
+            timer_sort_ascending: &mut self.timer_sort_ascending,
+            ground_sort_column: &mut self.ground_sort_column,
+            ground_sort_ascending: &mut self.ground_sort_ascending,
             spawn_action: &mut self.pending_spawn_action,
         };
         DockArea::new(&mut self.dock_state).show_inside(ui, &mut viewer);

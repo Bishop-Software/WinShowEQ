@@ -1,49 +1,149 @@
 use egui::Ui;
 
-use crate::data::timers::TimerStore;
+use crate::data::AppData;
 
-pub fn show(ui: &mut Ui, timers: &mut TimerStore) {
+pub fn show(
+    ui: &mut Ui,
+    data: &mut AppData,
+    sort_column: &mut Option<usize>,
+    sort_ascending: &mut bool,
+) {
+    const HEADERS: &[&str] = &["Name", "Loc", "Countdown"];
+    let row_h = ui.text_style_height(&egui::TextStyle::Body) + 4.0;
+    let mut col_widths = data.timer_list_column_widths.clone();
+
+    // Header row with resizable columns
+    ui.horizontal(|ui| {
+        for (col_idx, (header, width)) in HEADERS.iter().zip(col_widths.iter_mut()).enumerate() {
+            let indicator = match sort_column {
+                Some(c) if *c == col_idx => if *sort_ascending { " ▲" } else { " ▼" },
+                _ => "",
+            };
+            let label = format!("{}{}", header, indicator);
+
+            // Allocate space for header and detect clicks
+            let header_rect = ui.allocate_space(egui::vec2(*width, row_h)).1;
+            let header_resp = ui.interact(header_rect, ui.id().with("header").with(col_idx), egui::Sense::click());
+
+            // Display header as plain text
+            let text_color = if header_resp.hovered() {
+                egui::Color32::WHITE
+            } else {
+                ui.visuals().text_color()
+            };
+            ui.painter().text(
+                header_rect.left_top() + egui::vec2(4.0, 2.0),
+                egui::Align2::LEFT_TOP,
+                &label,
+                egui::FontId::default(),
+                text_color,
+            );
+
+            if header_resp.clicked() {
+                if *sort_column == Some(col_idx) {
+                    *sort_ascending = !*sort_ascending;
+                } else {
+                    *sort_column = Some(col_idx);
+                    *sort_ascending = true;
+                }
+            }
+
+            // Resize handle between columns (except after last column)
+            if col_idx < HEADERS.len() - 1 {
+                let sep_width = 4.0;
+                let sep_rect = ui.allocate_space(egui::vec2(sep_width, row_h)).1;
+                let sep_sense = ui.interact(
+                    sep_rect,
+                    ui.id().with("resize").with(col_idx),
+                    egui::Sense::drag(),
+                );
+                if sep_sense.dragged() {
+                    let delta = sep_sense.drag_delta().x;
+                    *width = (*width + delta).max(30.0);
+                }
+                if sep_sense.hovered() {
+                    ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::ResizeHorizontal);
+                }
+            }
+        }
+    });
+
+    data.timer_list_column_widths = col_widths.clone();
+    ui.separator();
+
     let mut remove_idx: Option<usize> = None;
 
+    // Collect and sort timers
+    let mut timers_with_idx: Vec<_> = data.timers.iter().enumerate().collect();
+    if let Some(col) = sort_column {
+        timers_with_idx.sort_by(|a, b| {
+            let cmp = match col {
+                0 => a.1.name.cmp(&b.1.name),
+                1 => {
+                    let a_loc = (a.1.x as i32, a.1.y as i32);
+                    let b_loc = (b.1.x as i32, b.1.y as i32);
+                    a_loc.cmp(&b_loc)
+                }
+                2 => a.1.secs_remaining().partial_cmp(&b.1.secs_remaining()).unwrap_or(std::cmp::Ordering::Equal),
+                _ => std::cmp::Ordering::Equal,
+            };
+            if *sort_ascending { cmp } else { cmp.reverse() }
+        });
+    }
+
+    // Data rows
     egui::ScrollArea::vertical()
         .id_salt("timer_scroll")
         .auto_shrink([false; 2])
         .show(ui, |ui| {
-            egui::Grid::new("timer_list")
-                .num_columns(3)
-                .striped(true)
-                .min_col_width(60.0)
-                .show(ui, |ui| {
-                    ui.strong("Name");
-                    ui.strong("Loc");
-                    ui.strong("Countdown");
-                    ui.end_row();
+            for (i, t) in timers_with_idx {
+                let countdown = t.countdown_str();
+                let color = if t.is_spawned() {
+                    egui::Color32::from_rgb(255, 80, 80)
+                } else if t.secs_remaining() < 60 {
+                    egui::Color32::from_rgb(255, 210, 0)
+                } else {
+                    ui.visuals().text_color()
+                };
 
-                    for (i, t) in timers.iter().enumerate() {
-                        let countdown = t.countdown_str();
-                        let color = if t.is_spawned() {
-                            egui::Color32::from_rgb(255, 80, 80)
-                        } else if t.secs_remaining() < 60 {
-                            egui::Color32::from_rgb(255, 210, 0)
-                        } else {
-                            ui.visuals().text_color()
-                        };
+                let row_rect = ui.horizontal(|ui| {
+                    let cells = [
+                        t.name.clone(),
+                        format!("{:.0},{:.0}", t.x, t.y),
+                        countdown,
+                    ];
 
-                        ui.label(&t.name);
-                        ui.label(format!("{:.0},{:.0}", t.x, t.y));
-                        let resp = ui.colored_label(color, &countdown);
-                        resp.context_menu(|ui| {
-                            if ui.button("Remove timer").clicked() {
-                                remove_idx = Some(i);
-                                ui.close();
-                            }
-                        });
-                        ui.end_row();
+                    for (col_idx, text) in cells.iter().enumerate() {
+                        ui.add_sized(
+                            [col_widths[col_idx], row_h],
+                            egui::Label::new(
+                                if col_idx == 2 {
+                                    egui::RichText::new(text).color(color)
+                                } else {
+                                    egui::RichText::new(text)
+                                }
+                            ).truncate(),
+                        );
+
+                        // Add matching resize handle spacing
+                        if col_idx < cells.len() - 1 {
+                            ui.allocate_space(egui::vec2(4.0, row_h));
+                        }
+                    }
+                }).response.rect;
+
+                // Right-click context menu
+                let row_resp = ui.interact(row_rect, ui.id().with("timer").with(i), egui::Sense::click());
+                row_resp.context_menu(|ui| {
+                    if ui.button("Remove timer").clicked() {
+                        remove_idx = Some(i);
+                        ui.close();
                     }
                 });
+            }
         });
 
     if let Some(idx) = remove_idx {
-        timers.remove(idx);
+        data.timers.remove(idx);
     }
 }

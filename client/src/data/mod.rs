@@ -20,7 +20,6 @@ use world::InGameTime;
 const MAX_TRAIL_LEN: usize = 25;
 
 /// Central in-memory state for the client, updated each tick.
-#[derive(Default)]
 pub struct AppData {
     pub spawns: SpawnStore,
     pub ground: GroundStore,
@@ -37,6 +36,61 @@ pub struct AppData {
     pub alert_engine: AlertEngine,
     pub annotations: AnnotationStore,
     pub game_data: GameData,
+    /// Spawn list column widths (in pixels); 15 columns matching spawn_list headers.
+    pub spawn_list_column_widths: Vec<f32>,
+    /// Timer list column widths (in pixels); 3 columns: Name, Loc, Countdown
+    pub timer_list_column_widths: Vec<f32>,
+    /// Ground list column widths (in pixels); 4 columns: Item, X, Y, Z
+    pub ground_list_column_widths: Vec<f32>,
+}
+
+impl Default for AppData {
+    fn default() -> Self {
+        Self {
+            spawns: SpawnStore::default(),
+            ground: GroundStore::default(),
+            timers: TimerStore::default(),
+            map: MapData::default(),
+            world_time: InGameTime::default(),
+            zone_name: String::new(),
+            target_id: None,
+            self_id: None,
+            filters: FilterSet::default(),
+            trails: HashMap::new(),
+            trails_enabled: false,
+            alert_engine: AlertEngine::default(),
+            annotations: AnnotationStore::default(),
+            game_data: GameData::default(),
+            spawn_list_column_widths: vec![
+                90.0, // Name
+                70.0, // Last Name
+                28.0, // Lvl
+                36.0, // Class
+                70.0, // Race
+                36.0, // Type
+                70.0, // Owner
+                28.0, // Invis
+                42.0, // Speed
+                58.0, // X
+                58.0, // Y
+                58.0, // Z
+                42.0, // Dist
+                40.0, // ID
+                62.0, // Time
+            ],
+            timer_list_column_widths: vec![
+                120.0, // Name
+                80.0,  // Loc
+                100.0, // Countdown
+            ],
+            ground_list_column_widths: vec![
+                150.0, // Item
+                60.0,  // X
+                60.0,  // Y
+                60.0,  // Z
+            ],
+        }
+    }
 }
 
 impl AppData {
