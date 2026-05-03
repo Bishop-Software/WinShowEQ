@@ -224,7 +224,7 @@ impl MainApp {
 // TabViewer — renders each panel's content, created fresh each frame.
 // ---------------------------------------------------------------------------
 
-struct WinseqTabViewer<'a> {
+struct WinSeqTabViewer<'a> {
     data: &'a Arc<Mutex<AppData>>,
     map_pane: &'a mut MapPane,
     spawn_sort_column: &'a mut Option<usize>,
@@ -236,7 +236,7 @@ struct WinseqTabViewer<'a> {
     spawn_action: &'a mut Option<SpawnAction>,
 }
 
-impl<'a> TabViewer for WinseqTabViewer<'a> {
+impl<'a> TabViewer for WinSeqTabViewer<'a> {
     type Tab = Tab;
 
     fn title(&mut self, tab: &mut Tab) -> egui::WidgetText {
@@ -459,6 +459,12 @@ impl eframe::App for MainApp {
                     ui.close();
                 }
             });
+            ui.menu_button("Edit", |ui| {
+            });
+            ui.menu_button("View", |ui| {
+            });
+            ui.menu_button("Map", |ui| {
+            });
             ui.menu_button("Help", |ui| {
                 if ui.button("About…").clicked() {
                     self.about.open = true;
@@ -468,7 +474,7 @@ impl eframe::App for MainApp {
         });
 
         // Docked panel layout
-        let mut viewer = WinseqTabViewer {
+        let mut viewer = WinSeqTabViewer {
             data: &self.data,
             map_pane: &mut self.map_pane,
             spawn_sort_column: &mut self.spawn_sort_column,
