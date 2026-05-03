@@ -27,7 +27,7 @@ impl MapPane {
             ui.checkbox(&mut self.z_filter_enabled, "Z Filter");
             if self.z_filter_enabled {
                 ui.add(
-                    egui::Slider::new(&mut self.z_range, 5.0..=500.0)
+                    egui::Slider::new(&mut self.z_range, 0.0..=3500.0)
                         .prefix("±")
                         .suffix(" z"),
                 );
