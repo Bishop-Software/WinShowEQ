@@ -326,9 +326,9 @@ unknown line here
         use std::io::Write;
         let dir = tempfile::tempdir().unwrap();
         // base layer + _1 layer = 2 lines total
-        let mut f = std::fs::File::create(dir.path().join("testzone.txt")).unwrap();
+        let mut f = File::create(dir.path().join("testzone.txt")).unwrap();
         writeln!(f, "L 0,0,0,10,10,0,255,0,0").unwrap();
-        let mut f = std::fs::File::create(dir.path().join("testzone_1.txt")).unwrap();
+        let mut f = File::create(dir.path().join("testzone_1.txt")).unwrap();
         writeln!(f, "L 1,1,0,2,2,0,0,255,0").unwrap();
         let data = load_zone(dir.path(), "testzone").unwrap();
         assert_eq!(data.lines.len(), 2);
@@ -338,7 +338,7 @@ unknown line here
     fn load_zone_base_only() {
         use std::io::Write;
         let dir = tempfile::tempdir().unwrap();
-        let mut f = std::fs::File::create(dir.path().join("testzone2.txt")).unwrap();
+        let mut f = File::create(dir.path().join("testzone2.txt")).unwrap();
         writeln!(f, "L 0,0,0,1,1,0,255,0,0").unwrap();
         let data = load_zone(dir.path(), "testzone2").unwrap();
         assert_eq!(data.lines.len(), 1);

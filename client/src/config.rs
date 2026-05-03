@@ -83,9 +83,9 @@ impl ClientConfig {
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         use std::io::Write as _;
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent)?;
         }
-        let mut f = std::fs::File::create(path)?;
+        let mut f = fs::File::create(path)?;
         writeln!(f, "[WinShowEQ]")?;
         writeln!(f, "Server={}", self.server_ip)?;
         writeln!(f, "Port={}", self.server_port)?;

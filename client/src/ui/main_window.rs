@@ -111,7 +111,7 @@ impl MainApp {
         // Configure Arial font for better Unicode support (arrows, international text)
         let mut fonts = egui::FontDefinitions::default();
         let font_data = egui::FontData::from_static(include_bytes!("../../assets/Arial.ttf"));
-        fonts.font_data.insert("arial".to_owned(), std::sync::Arc::new(font_data));
+        fonts.font_data.insert("arial".to_owned(), Arc::new(font_data));
         fonts.families.get_mut(&egui::FontFamily::Proportional)
             .unwrap()
             .insert(0, "arial".to_owned());

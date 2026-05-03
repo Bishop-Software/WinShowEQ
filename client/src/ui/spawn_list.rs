@@ -37,7 +37,7 @@ pub fn show(
                 0 => a.name.cmp(&b.name),
                 1 => a.last_name.cmp(&b.last_name),
                 2 => a.level.cmp(&b.level),
-                3 => (class_name(a.class)).cmp(class_name(b.class)),
+                3 => class_name(a.class).cmp(class_name(b.class)),
                 4 => data.game_data.race_name(a.race).cmp(data.game_data.race_name(b.race)),
                 5 => {
                     let cat_a = spawn_category_str(a.spawn_category);
