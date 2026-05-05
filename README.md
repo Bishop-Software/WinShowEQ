@@ -30,7 +30,7 @@ future **client** (planned Rust overlay) in a single workspace.
 Complete migration plans and issue tracking are available on GitHub:
 
 - [**Server Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/1): M1–M6 complete, M7 in progress (issues #9–#15)
-- [**Client Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/2): C1–C7 complete, C8 in progress (issues #1–#8 and #23)
+- [**Client Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/2): C1–C7 complete, C8 in progress (issues #1–#8 and #23; #2 and #3 closed)
 
 See [CLAUDE.md](CLAUDE.md) for developer guidance and technical details.
 
@@ -53,6 +53,8 @@ The Rust client component (88/88 tests passing):
 - Map rendering: applies coordinate transforms to align spawns with map lines (north up, east right)
 - Color-coded spawn dots by con level; mob trails with faded orange dots when enabled
 - Shift+click on map draws a bearing/distance line from player to clicked point (distance in EQ units, degrees, cardinal direction); ESC or plain click clears it
+- Ctrl+F (or Edit > Find Spawn) opens a search dialog: case-insensitive partial name match, results table (Name/Lvl/Class/X/Y/Z), click a result to jump the map to that spawn; all matches highlighted with a white ring on the map and a cyan accent bar in the spawn list; ESC or close clears highlights
+- Left-click a row in the spawn list to select it: gold ring on the map dot and gold accent bar in the list; click the same row again to deselect
 - Help menu with About dialog (version, credits, clickable library links)
 
 ## Workspace layout
@@ -109,6 +111,7 @@ WinShowEQ/
         ground_list.rs # ground item table (name, X, Y, Z)
         options.rs    # settings dialog with folder browse buttons (rfd)
         login.rs      # connect dialog
+        search_dialog.rs # Ctrl+F spawn search with live highlighting
 ```
 
 ## Building and running
