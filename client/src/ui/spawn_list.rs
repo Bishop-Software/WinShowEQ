@@ -194,11 +194,13 @@ pub fn show(
                 let row_rect = ui.horizontal(|ui| {
                     for (i, text) in cells.iter().enumerate() {
                         let cell_color = if i == 0 { color } else { ui.visuals().text_color() };
-                        ui.add_sized(
-                            [col_widths[i], row_h],
-                            egui::Label::new(
-                                egui::RichText::new(text).color(cell_color)
-                            ).truncate(),
+                        let (_, cell_rect) = ui.allocate_space(egui::vec2(col_widths[i], row_h));
+                        ui.painter().with_clip_rect(cell_rect).text(
+                            egui::pos2(cell_rect.min.x + 4.0, cell_rect.center().y),
+                            egui::Align2::LEFT_CENTER,
+                            text,
+                            egui::FontId::default(),
+                            cell_color,
                         );
 
                         // Add matching resize handle spacing (except after last column)

@@ -114,15 +114,14 @@ pub fn show(
                     ];
 
                     for (col_idx, text) in cells.iter().enumerate() {
-                        ui.add_sized(
-                            [col_widths[col_idx], row_h],
-                            egui::Label::new(
-                                if col_idx == 2 {
-                                    egui::RichText::new(text).color(color)
-                                } else {
-                                    egui::RichText::new(text)
-                                }
-                            ).truncate(),
+                        let cell_color = if col_idx == 2 { color } else { ui.visuals().text_color() };
+                        let (_, cell_rect) = ui.allocate_space(egui::vec2(col_widths[col_idx], row_h));
+                        ui.painter().with_clip_rect(cell_rect).text(
+                            egui::pos2(cell_rect.min.x + 4.0, cell_rect.center().y),
+                            egui::Align2::LEFT_CENTER,
+                            text,
+                            egui::FontId::default(),
+                            cell_color,
                         );
 
                         // Add matching resize handle spacing

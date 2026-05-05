@@ -102,9 +102,13 @@ pub fn show(
 
                 ui.horizontal(|ui| {
                     for (col_idx, text) in cells.iter().enumerate() {
-                        ui.add_sized(
-                            [col_widths[col_idx], row_h],
-                            egui::Label::new(text).truncate(),
+                        let (_, cell_rect) = ui.allocate_space(egui::vec2(col_widths[col_idx], row_h));
+                        ui.painter().with_clip_rect(cell_rect).text(
+                            egui::pos2(cell_rect.min.x + 4.0, cell_rect.center().y),
+                            egui::Align2::LEFT_CENTER,
+                            text,
+                            egui::FontId::default(),
+                            ui.visuals().text_color(),
                         );
 
                         // Add matching resize handle spacing
