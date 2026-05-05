@@ -314,8 +314,21 @@ fn draw_hud(ctx: &DrawCtx, _ui: &mut Ui, data: &AppData) {
             time_pos,
             egui::Align2::LEFT_TOP,
             data.world_time.display(),
-            font,
+            font.clone(),
             Color32::from_rgb(200, 200, 150),
+        );
+    }
+
+    if let Some(pos) = data.player_pos() {
+        // EQ /loc order is Y, X, Z
+        let loc_text = format!("/loc {:.0}, {:.0}, {:.0}", pos.1, pos.0, pos.2);
+        let loc_pos = top_left + Vec2::new(0.0, 36.0);
+        ctx.painter.text(
+            loc_pos,
+            egui::Align2::LEFT_TOP,
+            loc_text,
+            font,
+            Color32::from_rgb(150, 220, 150),
         );
     }
 }
