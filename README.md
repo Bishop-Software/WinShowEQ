@@ -91,7 +91,7 @@ WinShowEQ/
       net.rs          # ServerConnection — TCP tick loop
       protocol.rs     # decode_packet — OPT_* dispatch
       map_reader.rs   # native EQ .map file parser (L/P lines, base + 3 layers)
-      map_con.rs      # MapCon — egui map canvas rendering
+      map_canvas.rs   # MapCon — egui map canvas rendering
       filters.rs      # FilterSet — hunt/caution/danger/rare XML filters
       alerts.rs       # AlertEngine — TTS, sound, Discord webhook
       logger.rs       # Logger — dated log files

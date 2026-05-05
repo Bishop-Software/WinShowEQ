@@ -4,7 +4,7 @@ mod data;
 mod game_data;
 mod filters;
 mod logger;
-mod map_con;
+mod map_canvas;
 mod map_reader;
 mod net;
 mod protocol;

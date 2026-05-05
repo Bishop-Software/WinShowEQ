@@ -1,7 +1,7 @@
 use egui::Ui;
 
 use crate::data::AppData;
-use crate::map_con::{MapCon, MapState};
+use crate::map_canvas::{MapCon, MapState};
 
 /// Wrapper around `MapCon` that owns the camera state and Z-filter controls.
 pub struct MapPane {

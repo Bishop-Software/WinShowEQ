@@ -351,7 +351,7 @@ impl eframe::App for MainApp {
             let mut data = self.data.lock().unwrap();
             if let Some(spawn_id) = self.search.show(&ctx, &mut data) {
                 if let Some(s) = data.spawns.get(spawn_id) {
-                    let (mx, my) = crate::map_con::eq_to_map_pub(s.x, s.y);
+                    let (mx, my) = crate::map_canvas::eq_to_map_pub(s.x, s.y);
                     self.map_pane.state.pending_center = Some((mx, my));
                 }
             }
