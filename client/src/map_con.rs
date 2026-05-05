@@ -1,7 +1,7 @@
 use egui::{Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 
 use crate::data::AppData;
-use crate::data::spawns::{con_color, ConColor, SpawnCategory, SpawnInfo};
+use crate::data::spawns::{class_name, con_color, ConColor, SpawnCategory, SpawnInfo};
 use crate::map_reader::MapData;
 
 const SPAWN_RADIUS: f32 = 4.0;
@@ -103,6 +103,10 @@ impl<'a> MapCon<'a> {
             draw_bearing_line(&ctx, self.data, target);
         }
         draw_hud(&ctx, ui, self.data);
+
+        if let Some(hover_pos) = response.hover_pos() {
+            draw_hover_tooltip(ui, &ctx, self.data, hover_pos, z_filter);
+        }
     }
 
     /// World-space focus point (map coords) — the player's position, or origin.
@@ -331,6 +335,78 @@ fn draw_hud(ctx: &DrawCtx, _ui: &mut Ui, data: &AppData) {
             Color32::from_rgb(150, 220, 150),
         );
     }
+}
+
+enum HoverHit<'a> {
+    Spawn(&'a SpawnInfo),
+    Ground(&'a crate::data::ground::GroundItem),
+}
+
+fn draw_hover_tooltip(ui: &mut Ui, ctx: &DrawCtx, data: &AppData, hover_pos: Pos2, z_filter: Option<(f32, f32)>) {
+    const HOVER_RADIUS: f32 = 8.0;
+    let mut best_dist = f32::MAX;
+    let mut hit: Option<HoverHit<'_>> = None;
+
+    for spawn in data.spawns.iter() {
+        if Some(spawn.id) == data.self_id {
+            continue;
+        }
+        if z_filtered(spawn.z, z_filter) {
+            continue;
+        }
+        let (mx, my) = eq_to_map(spawn.x, spawn.y);
+        let screen_pos = ctx.to_screen(mx, my);
+        if !ctx.is_visible(screen_pos) {
+            continue;
+        }
+        let dist = hover_pos.distance(screen_pos);
+        if dist <= HOVER_RADIUS && dist < best_dist {
+            best_dist = dist;
+            hit = Some(HoverHit::Spawn(spawn));
+        }
+    }
+
+    for item in data.ground.iter() {
+        if z_filtered(item.z, z_filter) {
+            continue;
+        }
+        let (mx, my) = eq_to_map(item.x, item.y);
+        let screen_pos = ctx.to_screen(mx, my);
+        if !ctx.is_visible(screen_pos) {
+            continue;
+        }
+        let dist = hover_pos.distance(screen_pos);
+        if dist <= HOVER_RADIUS && dist < best_dist {
+            best_dist = dist;
+            hit = Some(HoverHit::Ground(item));
+        }
+    }
+
+    let Some(hit) = hit else { return };
+
+    let player = data.self_id.and_then(|id| data.spawns.get(id));
+    let player_dist = |x: f32, y: f32| -> String {
+        player.map(|s| {
+            let dx = x - s.x;
+            let dy = y - s.y;
+            format!("{:.0}", (dx * dx + dy * dy).sqrt())
+        }).unwrap_or_else(|| "?".to_owned())
+    };
+
+    egui::show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), egui::Id::new("map_hover_tooltip"), |ui| {
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+        match hit {
+            HoverHit::Spawn(s) => {
+                ui.label(format!("{} ({})", s.name, s.level));
+                ui.label(class_name(s.class));
+                ui.label(format!("Dist: {}", player_dist(s.x, s.y)));
+            }
+            HoverHit::Ground(g) => {
+                ui.label(&g.name);
+                ui.label(format!("Dist: {}", player_dist(g.x, g.y)));
+            }
+        }
+    });
 }
 
 fn draw_bearing_line(ctx: &DrawCtx, data: &AppData, target: (f32, f32)) {
