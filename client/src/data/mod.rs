@@ -4,7 +4,7 @@ pub mod spawns;
 pub mod timers;
 pub mod world;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::alerts::AlertEngine;
 use crate::filters::FilterSet;
@@ -42,6 +42,10 @@ pub struct AppData {
     pub timer_list_column_widths: Vec<f32>,
     /// Ground list column widths (in pixels); 4 columns: Item, X, Y, Z
     pub ground_list_column_widths: Vec<f32>,
+    /// Spawn IDs currently highlighted by the search dialog.
+    pub marked_ids: HashSet<u32>,
+    /// Single spawn selected by clicking a row in the spawn list.
+    pub selected_id: Option<u32>,
 }
 
 impl Default for AppData {
@@ -89,6 +93,8 @@ impl Default for AppData {
                 60.0,  // Y
                 60.0,  // Z
             ],
+            marked_ids: HashSet::new(),
+            selected_id: None,
         }
     }
 }

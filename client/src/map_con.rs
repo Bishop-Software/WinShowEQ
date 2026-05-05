@@ -15,11 +15,15 @@ const ZOOM_MAX: f32 = 20.0;
 pub struct MapState {
     pub zoom: f32,
     pub pan: Vec2,
+    /// Shift-clicked target in map-space coords; `None` when no bearing line is active.
+    pub bearing_target: Option<(f32, f32)>,
+    /// If set, the view snaps to center on these map-space coords on the next frame.
+    pub pending_center: Option<(f32, f32)>,
 }
 
 impl Default for MapState {
     fn default() -> Self {
-        Self { zoom: 1.0, pan: Vec2::ZERO }
+        Self { zoom: 1.0, pan: Vec2::ZERO, bearing_target: None, pending_center: None }
     }
 }
 
@@ -51,6 +55,31 @@ impl<'a> MapCon<'a> {
             self.state.zoom = (self.state.zoom * factor).clamp(ZOOM_MIN, ZOOM_MAX);
         }
 
+        // Snap view to a search result if requested.
+        if let Some((wx, wy)) = self.state.pending_center.take() {
+            let focus = self.focus_world();
+            self.state.pan.x = -(wx - focus.0) * self.state.zoom;
+            self.state.pan.y = (wy - focus.1) * self.state.zoom;
+        }
+
+        // Shift+left-click → set bearing target; plain click or ESC → clear it.
+        let (shift_held, esc_pressed) = ui.input(|i| (i.modifiers.shift, i.key_pressed(egui::Key::Escape)));
+        if esc_pressed {
+            self.state.bearing_target = None;
+        } else if response.clicked_by(egui::PointerButton::Primary) {
+            if shift_held {
+                if let Some(screen_pos) = response.interact_pointer_pos() {
+                    let center = response.rect.center();
+                    let focus = self.focus_world();
+                    let wx = focus.0 + (screen_pos.x - center.x - self.state.pan.x) / self.state.zoom;
+                    let wy = focus.1 + (center.y + self.state.pan.y - screen_pos.y) / self.state.zoom;
+                    self.state.bearing_target = Some((wx, wy));
+                }
+            } else {
+                self.state.bearing_target = None;
+            }
+        }
+
         painter.rect_filled(response.rect, 0.0, Color32::BLACK);
 
         let focus = self.focus_world();
@@ -70,6 +99,9 @@ impl<'a> MapCon<'a> {
         draw_spawns(&ctx, self.data, z_filter);
         draw_self(&ctx, self.data);
         draw_annotations(&ctx, self.data);
+        if let Some(target) = self.state.bearing_target {
+            draw_bearing_line(&ctx, self.data, target);
+        }
         draw_hud(&ctx, ui, self.data);
     }
 
@@ -88,6 +120,12 @@ impl<'a> MapCon<'a> {
 #[inline]
 fn eq_to_map(eq_x: f32, eq_y: f32) -> (f32, f32) {
     (-eq_x, eq_y)
+}
+
+/// Public re-export of the EQ→map coordinate transform for callers outside this module.
+#[inline]
+pub fn eq_to_map_pub(eq_x: f32, eq_y: f32) -> (f32, f32) {
+    eq_to_map(eq_x, eq_y)
 }
 
 fn draw_mob_trails(ctx: &DrawCtx, data: &AppData) {
@@ -168,6 +206,11 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>) {
         }
         let color = spawn_color(spawn, player_level);
         ctx.painter.circle_filled(pos, SPAWN_RADIUS, color);
+        if data.selected_id == Some(spawn.id) {
+            ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 4.0, Stroke::new(2.0, Color32::from_rgb(255, 200, 0)));
+        } else if data.marked_ids.contains(&spawn.id) {
+            ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 3.0, Stroke::new(1.5, Color32::WHITE));
+        }
     }
 }
 
@@ -275,6 +318,45 @@ fn draw_hud(ctx: &DrawCtx, _ui: &mut Ui, data: &AppData) {
             Color32::from_rgb(200, 200, 150),
         );
     }
+}
+
+fn draw_bearing_line(ctx: &DrawCtx, data: &AppData, target: (f32, f32)) {
+    let Some(id) = data.self_id else { return };
+    let Some(s) = data.spawns.get(id) else { return };
+    let (player_mx, player_my) = eq_to_map(s.x, s.y);
+    let (target_mx, target_my) = target;
+
+    let player_screen = ctx.to_screen(player_mx, player_my);
+    let target_screen = ctx.to_screen(target_mx, target_my);
+
+    let color = Color32::from_rgb(255, 220, 0);
+    ctx.painter.line_segment([player_screen, target_screen], Stroke::new(1.5, color));
+
+    // Small crosshair circle at target
+    ctx.painter.circle_stroke(target_screen, 5.0, Stroke::new(1.5, color));
+
+    // Distance in EQ units (map-space distance == EQ-space distance; eq_to_map only flips sign)
+    let dx = target_mx - player_mx;
+    let dy = target_my - player_my;
+    let distance = (dx * dx + dy * dy).sqrt();
+
+    // Bearing: angle clockwise from north. Map north = +y, east = +x.
+    let bearing_deg = dx.atan2(dy).to_degrees();
+    let bearing_deg = if bearing_deg < 0.0 { bearing_deg + 360.0 } else { bearing_deg };
+
+    let label = format!("{:.0} units  {:.0}°  {}", distance, bearing_deg, to_cardinal(bearing_deg));
+    ctx.painter.text(
+        target_screen + Vec2::new(8.0, -8.0),
+        egui::Align2::LEFT_BOTTOM,
+        &label,
+        FontId::proportional(12.0),
+        color,
+    );
+}
+
+fn to_cardinal(degrees: f32) -> &'static str {
+    let idx = ((degrees + 22.5) / 45.0) as usize % 8;
+    ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][idx]
 }
 
 /// Returns true if `z` is outside the filter range and should be hidden.

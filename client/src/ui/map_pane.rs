@@ -5,7 +5,7 @@ use crate::map_con::{MapCon, MapState};
 
 /// Wrapper around `MapCon` that owns the camera state and Z-filter controls.
 pub struct MapPane {
-    state: MapState,
+    pub state: MapState,
     z_filter_enabled: bool,
     z_range: f32,
 }

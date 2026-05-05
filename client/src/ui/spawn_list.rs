@@ -23,6 +23,7 @@ pub fn show(
     ];
 
     let player_pos = data.player_pos();
+    let current_selected = data.selected_id; // Copy before spawns borrows data
 
     let mut spawns: Vec<_> = data
         .spawns
@@ -146,6 +147,7 @@ pub fn show(
     ui.separator();
 
     let mut action: Option<SpawnAction> = None;
+    let mut pending_select: Option<u32> = None;
 
     // Data rows (scrolled)
     egui::ScrollArea::both()
@@ -187,6 +189,8 @@ pub fn show(
                     s.first_seen.format("%H:%M:%S").to_string(),
                 ];
 
+                let is_marked = data.marked_ids.contains(&s.id);
+
                 let row_rect = ui.horizontal(|ui| {
                     for (i, text) in cells.iter().enumerate() {
                         let cell_color = if i == 0 { color } else { ui.visuals().text_color() };
@@ -204,12 +208,28 @@ pub fn show(
                     }
                 }).response.rect;
 
+                let is_selected = current_selected == Some(s.id);
+
+                // Left accent bar: gold for selected, cyan for search-marked
+                if is_selected {
+                    let bar = egui::Rect::from_min_size(row_rect.min, egui::vec2(3.0, row_rect.height()));
+                    ui.painter().rect_filled(bar, 0.0, egui::Color32::from_rgb(255, 200, 0));
+                } else if is_marked {
+                    let bar = egui::Rect::from_min_size(row_rect.min, egui::vec2(3.0, row_rect.height()));
+                    ui.painter().rect_filled(bar, 0.0, egui::Color32::from_rgb(0, 200, 255));
+                }
+
                 // Capture name/pos before the closure borrows s
                 let spawn_name = s.name.clone();
                 let (sx, sy, sz) = (s.x, s.y, s.z);
+                let spawn_id = s.id;
 
                 // ui.interact() gives the rect a click sense so context_menu fires on right-click
                 let row_resp = ui.interact(row_rect, ui.id().with(s.id), egui::Sense::click());
+
+                if row_resp.clicked_by(egui::PointerButton::Primary) {
+                    pending_select = Some(spawn_id);
+                }
                 row_resp.context_menu(|ui| {
                     if ui.button("Add Timer…").clicked() {
                         action = Some(SpawnAction::AddTimer {
@@ -255,6 +275,15 @@ pub fn show(
                 });
             }
         });
+
+    drop(spawns);
+    if let Some(id) = pending_select {
+        if data.selected_id == Some(id) {
+            data.selected_id = None; // click same row again to deselect
+        } else {
+            data.selected_id = Some(id);
+        }
+    }
 
     action
 }

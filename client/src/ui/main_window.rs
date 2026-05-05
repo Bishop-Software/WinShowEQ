@@ -21,6 +21,7 @@ use crate::ui::ground_list;
 use crate::ui::login::LoginDialog;
 use crate::ui::map_pane::MapPane;
 use crate::ui::options::OptionsDialog;
+use crate::ui::search_dialog::SearchDialog;
 use crate::ui::spawn_list::{self, SpawnAction};
 use crate::ui::timer_list;
 
@@ -91,14 +92,16 @@ pub struct MainApp {
     timer_sort_ascending: bool,
     ground_sort_column: Option<usize>,
     ground_sort_ascending: bool,
+    search: SearchDialog,
 }
 
-/// Build the initial dock layout: Spawns (top-left) + Timers/Ground tabs (bottom-left) + Map (right).
+/// Build the initial dock layout: Spawns (top-left) + Timers (middle-left) + Ground (bottom-left) + Map (right).
 fn build_dock_state() -> DockState<Tab> {
     let mut state = DockState::new(vec![Tab::Map]);
     let surface = state.main_surface_mut();
-    let [left, _] = surface.split_left(NodeIndex::root(), 0.35, vec![Tab::Spawns]);
-    surface.split_below(left, 0.6, vec![Tab::Timers, Tab::Ground]);
+    let [_, spawns] = surface.split_left(NodeIndex::root(), 0.35, vec![Tab::Spawns]);
+    let [_, timers] = surface.split_below(spawns, 0.40, vec![Tab::Timers]);
+    surface.split_below(timers, 0.50, vec![Tab::Ground]);
     state
 }
 
@@ -166,6 +169,7 @@ impl MainApp {
             timer_sort_ascending: true,
             ground_sort_column: None,
             ground_sort_ascending: true,
+            search: SearchDialog::default(),
         }
     }
 
@@ -329,6 +333,22 @@ impl eframe::App for MainApp {
         }
         self.about.show(&ctx);
 
+        // Ctrl+F opens spawn search
+        if ctx.input(|i| i.key_pressed(egui::Key::F) && i.modifiers.ctrl) {
+            self.search.open();
+        }
+
+        // Search dialog — runs outside the DockArea lock so it can mutate AppData directly
+        {
+            let mut data = self.data.lock().unwrap();
+            if let Some(spawn_id) = self.search.show(&ctx, &mut data) {
+                if let Some(s) = data.spawns.get(spawn_id) {
+                    let (mx, my) = crate::map_con::eq_to_map_pub(s.x, s.y);
+                    self.map_pane.state.pending_center = Some((mx, my));
+                }
+            }
+        }
+
         // "Add Note" floating dialog
         if self.add_note.open {
             let mut open = true;
@@ -460,6 +480,10 @@ impl eframe::App for MainApp {
                 }
             });
             ui.menu_button("Edit", |ui| {
+                if ui.button("Find Spawn…  Ctrl+F").clicked() {
+                    self.search.open();
+                    ui.close();
+                }
             });
             ui.menu_button("View", |ui| {
             });

@@ -52,6 +52,7 @@ The Rust client component (88/88 tests passing):
 - Persists timers, annotations, filters, and config across sessions
 - Map rendering: applies coordinate transforms to align spawns with map lines (north up, east right)
 - Color-coded spawn dots by con level; mob trails with faded orange dots when enabled
+- Shift+click on map draws a bearing/distance line from player to clicked point (distance in EQ units, degrees, cardinal direction); ESC or plain click clears it
 - Help menu with About dialog (version, credits, clickable library links)
 
 ## Workspace layout
