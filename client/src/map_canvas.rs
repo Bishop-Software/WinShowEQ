@@ -1,7 +1,7 @@
 use egui::{Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 
 use crate::data::AppData;
-use crate::data::spawns::{class_name, con_color, ConColor, SpawnCategory, SpawnInfo};
+use crate::data::spawns::{con_color, ConColor, SpawnCategory, SpawnInfo};
 use crate::map_reader::MapData;
 
 const SPAWN_RADIUS: f32 = 4.0;
@@ -398,7 +398,7 @@ fn draw_hover_tooltip(ui: &mut Ui, ctx: &DrawCtx, data: &AppData, hover_pos: Pos
         match hit {
             HoverHit::Spawn(s) => {
                 ui.label(format!("{} ({})", s.name, s.level));
-                ui.label(class_name(s.class));
+                ui.label(data.game_data.class_name(s.class));
                 ui.label(format!("Dist: {}", player_dist(s.x, s.y)));
             }
             HoverHit::Ground(g) => {

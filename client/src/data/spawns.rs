@@ -245,22 +245,12 @@ impl SpawnStore {
     }
 }
 
-pub fn class_name(class: u8) -> &'static str {
-    match class {
-        1 => "WAR", 2 => "CLR", 3 => "PAL", 4 => "RNG", 5 => "SHD",
-        6 => "DRU", 7 => "MNK", 8 => "BRD", 9 => "ROG", 10 => "SHM",
-        11 => "NEC", 12 => "WIZ", 13 => "MAG", 14 => "ENC", 15 => "BST",
-        16 => "BER", 20 => "BNK", 21 => "MCH", 40 => "GBK", 71 => "MRC",
-        _ => "---",
-    }
-}
-
 pub fn race_name(race: u32) -> &'static str {
     match race {
-        1 => "Human", 2 => "Barb", 3 => "Erud", 4 => "WElf",
-        5 => "HElf", 6 => "DElf", 7 => "HalfElf", 8 => "Dwarf",
+        1 => "Human", 2 => "Barbarian", 3 => "Erudite", 4 => "Wood Elf",
+        5 => "High Elf", 6 => "Dark Elf", 7 => "Half Elf", 8 => "Dwarf",
         9 => "Troll", 10 => "Ogre", 11 => "Halfling", 12 => "Gnome",
-        13 => "Iksar", 14 => "VahShir", 15 => "Froglok", 16 => "Drakkin",
+        13 => "Iksar", 14 => "Vah Shir", 15 => "Froglok", 16 => "Drakkin",
         _ => "---",
     }
 }

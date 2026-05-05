@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use serde_json;
+
 /// EQ string database parsed from dbstr_us.txt.
 /// Race entries follow the pattern: `race_id^11^RaceName^0^`
 pub struct GameData {
     races: HashMap<u32, String>,
+    classes: HashMap<u8, String>,
 }
 
 /// Common EQ install locations to probe when no path is configured.
@@ -67,7 +70,40 @@ impl GameData {
                 races.insert(race_id, text.to_owned());
             }
         }
-        Self { races }
+        Self { races, classes: HashMap::new() }
+    }
+
+    /// Load class names from a JSON file mapping class ID strings to names.
+    /// Silently ignored if the file is missing or malformed.
+    pub fn load_classes(&mut self, path: &std::path::Path) {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
+                self.classes = map
+                    .into_iter()
+                    .filter_map(|(k, v)| k.parse::<u8>().ok().map(|id| (id, v)))
+                    .collect();
+            }
+        }
+    }
+
+    /// Return the display name for a class byte value.
+    /// Uses the loaded Classes.json when available; falls back to a static table.
+    /// Unknown IDs render as "ID# Unknown" to aid adding new entries to Classes.json.
+    pub fn class_name(&self, class: u8) -> String {
+        if !self.classes.is_empty() {
+            return self.classes.get(&class)
+                .cloned()
+                .unwrap_or_else(|| format!("{} Unknown", class));
+        }
+        match class {
+            1 => "Warrior", 2 => "Cleric", 3 => "Paladin", 4 => "Ranger",
+            5 => "Shadow Knight", 6 => "Druid", 7 => "Monk", 8 => "Bard",
+            9 => "Rogue", 10 => "Shaman", 11 => "Necromancer", 12 => "Wizard",
+            13 => "Magician", 14 => "Enchanter", 15 => "Beastlord", 16 => "Berserker",
+            40 => "Banker", 41 => "Shopkeeper", 66 => "Guild Banker",
+            71 => "Mercenary Liaison",
+            _ => return format!("{} Unknown", class),
+        }.to_owned()
     }
 
     pub fn race_name(&self, id: u32) -> &str {
@@ -80,7 +116,7 @@ impl GameData {
 
 impl Default for GameData {
     fn default() -> Self {
-        Self { races: HashMap::new() }
+        Self { races: HashMap::new(), classes: HashMap::new() }
     }
 }
 

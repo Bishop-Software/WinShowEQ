@@ -1,7 +1,6 @@
 use egui::{Context, Key, ScrollArea, TextEdit};
 
 use crate::data::AppData;
-use crate::data::spawns::class_name;
 
 struct SearchResult {
     id: u32,
@@ -125,7 +124,7 @@ impl SearchDialog {
                                 ui.add_sized(
                                     [COL_CLASS, row_h],
                                     egui::Label::new(
-                                        egui::RichText::new(class_name(r.class)).color(dim_color),
+                                        egui::RichText::new(data.game_data.class_name(r.class)).color(dim_color),
                                     ).truncate(),
                                 );
                                 for coord in [r.x, r.y, r.z] {

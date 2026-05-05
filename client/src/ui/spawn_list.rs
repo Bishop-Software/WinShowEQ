@@ -1,7 +1,7 @@
 use egui::Ui;
 
 use crate::data::AppData;
-use crate::data::spawns::{SpawnCategory, class_name};
+use crate::data::spawns::SpawnCategory;
 use crate::filters::FilterCategory;
 
 /// Action returned when the user selects a context menu item on a spawn row.
@@ -38,7 +38,7 @@ pub fn show(
                 0 => a.name.cmp(&b.name),
                 1 => a.last_name.cmp(&b.last_name),
                 2 => a.level.cmp(&b.level),
-                3 => class_name(a.class).cmp(class_name(b.class)),
+                3 => data.game_data.class_name(a.class).cmp(&data.game_data.class_name(b.class)),
                 4 => data.game_data.race_name(a.race).cmp(data.game_data.race_name(b.race)),
                 5 => {
                     let cat_a = spawn_category_str(a.spawn_category);
@@ -175,7 +175,7 @@ pub fn show(
                     s.name.clone(),
                     s.last_name.clone(),
                     s.level.to_string(),
-                    class_name(s.class).to_owned(),
+                    data.game_data.class_name(s.class),
                     data.game_data.race_name(s.race).to_owned(),
                     spawn_category_str(s.spawn_category).to_owned(),
                     owner_name_str(data, s.owner_id).to_owned(),
