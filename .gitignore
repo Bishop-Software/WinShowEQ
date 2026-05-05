@@ -3,8 +3,11 @@
 # Matches the Claude allow-list strategy
 # ============================================================
 
-# Logs
+# client generated folders
+/cfg/
 /logs/
+/filters/
+/timers/
 
 # Internal Documentation
 /design
@@ -126,4 +129,5 @@ CLAUDE.md
 # Server config files
 !server/myseqserver.ini
 !server/patterns.ini
+
 
