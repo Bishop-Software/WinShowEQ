@@ -148,6 +148,9 @@ impl FilterSet {
     /// Serialize to a `seqfilters` XML file.
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         use std::io::Write as _;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         let mut f = std::fs::File::create(path)?;
         writeln!(f, "<seqfilters>")?;
         for cat in [

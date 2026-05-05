@@ -48,9 +48,9 @@ impl<'a> MapCon<'a> {
             self.state.pan += response.drag_delta();
         }
 
-        // Scroll to zoom
+        // Scroll to zoom — guard with hovered() so scroll in other panels doesn't zoom the map
         let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-        if scroll != 0.0 {
+        if scroll != 0.0 && response.hovered() {
             let factor = if scroll > 0.0 { ZOOM_STEP } else { 1.0 / ZOOM_STEP };
             self.state.zoom = (self.state.zoom * factor).clamp(ZOOM_MIN, ZOOM_MAX);
         }

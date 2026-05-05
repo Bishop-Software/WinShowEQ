@@ -134,6 +134,11 @@ impl MainApp {
             if let Some(gd) = GameData::load(&config.eq_path) {
                 d.game_data = gd;
             }
+            d.filters = crate::filters::FilterSet::load(
+                &std::path::Path::new(&config.filter_dir).join("seqfilters.xml"),
+            );
+            let filters = d.filters.clone();
+            d.spawns.reclassify_all(&filters);
         }
 
         start_network_thread(
@@ -214,6 +219,9 @@ impl MainApp {
                 data.filters.add(category, name);
                 let filters = data.filters.clone();
                 data.spawns.reclassify_all(&filters);
+                let _ = data.filters.save(
+                    &std::path::Path::new(&self.config.filter_dir).join("seqfilters.xml"),
+                );
             }
             SpawnAction::AddMapText { x, y, z } => {
                 self.add_note.open = true;

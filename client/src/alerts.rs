@@ -110,7 +110,7 @@ impl AlertEngine {
         };
 
         // Spoken text matches C# format: "Hunt Mob, Fippy, is up."
-        let spoken = format!("{} Mob, {}, is up.", category, spawn.name);
+        let spoken = format!("{} Mob, {}, is up.", category, tts_name(&spawn.name));
 
         match mode {
             AlertMode::None => return None,
@@ -200,6 +200,14 @@ fn play_wav_file(path: &str) {
     };
     sink.append(source);
     sink.sleep_until_end();
+}
+
+/// Convert a raw EQ spawn name to a TTS-friendly string.
+/// Replaces underscores with spaces and strips trailing instance-number suffixes.
+fn tts_name(name: &str) -> String {
+    let base = name.trim_end_matches(|c: char| c.is_ascii_digit());
+    let base = base.trim_end_matches('_');
+    base.replace('_', " ")
 }
 
 fn post_discord(url: &str, message: &str) {
