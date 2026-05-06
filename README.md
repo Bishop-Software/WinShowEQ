@@ -6,24 +6,24 @@ future **client** (planned Rust overlay) in a single workspace.
 
 ## Status
 
-| Component | Milestone                                     | Status                 |
-|-----------|-----------------------------------------------|------------------------|
-| Server    | M1 — Data types, INI reader, notifier trait   | Complete               |
-| Server    | M2 — EQ file scanner (pattern matching)       | Complete               |
-| Server    | M3 — Memory reader (Win32 unsafe)             | Complete               |
-| Server    | M4 — Network server + binary protocol         | Complete               |
-| Server    | M5 — Server logic + console mode (end-to-end) | Complete               |
-| Server    | M6 — Debug loop, full CLI (`clap`)            | Complete               |
-| Server    | M7 — GUI (`egui` + `eframe`)                  | Partial (M7-7 pending) |
-| Client    | Prereq — Cargo workspace restructure          | Complete               |
-| Client    | C1 — Common crate + client foundation         | Complete               |
-| Client    | C2 — Network client (TCP tick loop, decode)   | Complete               |
-| Client    | C3 — Map file parser (native EQ format)       | Complete               |
-| Client    | C4 — Core rendering (egui map canvas)         | Complete               |
-| Client    | C5 — Spawn categories, filters, Z-filter      | Complete               |
-| Client    | C6 — Panels, timers, persistence              | Complete               |
-| Client    | C7 — Alerts and integrations                  | Complete               |
-| Client    | C8 — Polish and parity                        | In Progress            |
+| Component | Milestone                                     | Status   |
+|-----------|-----------------------------------------------|----------|
+| Server    | M1 — Data types, INI reader, notifier trait   | Complete |
+| Server    | M2 — EQ file scanner (pattern matching)       | Complete |
+| Server    | M3 — Memory reader (Win32 unsafe)             | Complete |
+| Server    | M4 — Network server + binary protocol         | Complete |
+| Server    | M5 — Server logic + console mode (end-to-end) | Complete |
+| Server    | M6 — Debug loop, full CLI (`clap`)            | Complete |
+| Server    | M7 — GUI (`egui` + `eframe`)                  | Complete |
+| Client    | Prereq — Cargo workspace restructure          | Complete |
+| Client    | C1 — Common crate + client foundation         | Complete |
+| Client    | C2 — Network client (TCP tick loop, decode)   | Complete |
+| Client    | C3 — Map file parser (native EQ format)       | Complete |
+| Client    | C4 — Core rendering (egui map canvas)         | Complete |
+| Client    | C5 — Spawn categories, filters, Z-filter      | Complete |
+| Client    | C6 — Panels, timers, persistence              | Complete |
+| Client    | C7 — Alerts and integrations                  | Complete |
+| Client    | C8 — Polish and parity                        | Complete |
 
 ### Project tracking
 
@@ -77,6 +77,7 @@ The Rust client component (93/93 tests passing):
 - View menu: panel visibility toggles (Spawns/Timers/Ground Items) with checkbox indicators
 - Map menu: Center on Player, Zoom In/Out, Mob Trails toggle
 - Help menu with About dialog (version, credits, clickable library links)
+- F1 (or Help → Help) opens a tabbed Help window: Keyboard Shortcuts, Map Controls, Spawn List, Timers, Alerts
 
 ## Workspace layout
 

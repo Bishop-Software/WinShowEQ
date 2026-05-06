@@ -19,6 +19,7 @@ use crate::net::ServerConnection;
 use crate::protocol::decode_packet;
 use crate::ui::about::AboutDialog;
 use crate::ui::ground_list;
+use crate::ui::help::HelpDialog;
 use crate::ui::login::LoginDialog;
 use crate::ui::map_pane::MapPane;
 use crate::ui::options::OptionsDialog;
@@ -80,6 +81,7 @@ pub struct MainApp {
     login: LoginDialog,
     options: OptionsDialog,
     about: AboutDialog,
+    help: HelpDialog,
     dock_state: DockState<Tab>,
     hidden_panels: HashSet<Tab>,
     add_note: AddNoteDialog,
@@ -156,6 +158,7 @@ impl MainApp {
         let login = LoginDialog::new(server_addr);
         let options = OptionsDialog::new(&config, false);
         let about = AboutDialog::new();
+        let help = HelpDialog::default();
 
         Self {
             data,
@@ -166,6 +169,7 @@ impl MainApp {
             login,
             options,
             about,
+            help,
             dock_state: build_dock_state(),
             hidden_panels: HashSet::new(),
             add_note: AddNoteDialog::default(),
@@ -369,10 +373,14 @@ impl eframe::App for MainApp {
             let _ = self.config.save(&self.config_path);
         }
         self.about.show(&ctx);
+        self.help.show(&ctx);
 
-        // Ctrl+F opens spawn search
+        // Ctrl+F opens spawn search; F1 opens help
         if ctx.input(|i| i.key_pressed(egui::Key::F) && i.modifiers.ctrl) {
             self.search.open();
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
+            self.help.open = true;
         }
 
         // Global keyboard shortcuts
@@ -594,6 +602,11 @@ impl eframe::App for MainApp {
                 }
             });
             ui.menu_button("Help", |ui| {
+                if ui.button("Help  F1").clicked() {
+                    self.help.open = true;
+                    ui.close();
+                }
+                ui.separator();
                 if ui.button("About…").clicked() {
                     self.about.open = true;
                     ui.close();

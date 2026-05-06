@@ -1,5 +1,6 @@
 pub mod about;
 pub mod ground_list;
+pub mod help;
 pub mod login;
 pub mod main_window;
 pub mod map_pane;
