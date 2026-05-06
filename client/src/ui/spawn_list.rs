@@ -9,6 +9,7 @@ pub enum SpawnAction {
     AddTimer { name: String, x: f32, y: f32, z: f32 },
     AddToFilter { name: String, category: FilterCategory },
     AddMapText { x: f32, y: f32, z: f32 },
+    CenterMap { id: u32, x: f32, y: f32 },
 }
 
 pub fn show(
@@ -24,6 +25,7 @@ pub fn show(
 
     let player_pos = data.player_pos();
     let current_selected = data.selected_id; // Copy before spawns borrows data
+    let current_target = data.target_id;
 
     let mut spawns: Vec<_> = data
         .spawns
@@ -221,6 +223,13 @@ pub fn show(
                     ui.painter().rect_filled(bar, 0.0, egui::Color32::from_rgb(0, 200, 255));
                 }
 
+                // Right accent bar: orange for current target
+                if current_target == Some(s.id) {
+                    let bar_min = egui::pos2(row_rect.max.x - 3.0, row_rect.min.y);
+                    let bar = egui::Rect::from_min_size(bar_min, egui::vec2(3.0, row_rect.height()));
+                    ui.painter().rect_filled(bar, 0.0, egui::Color32::from_rgb(255, 120, 0));
+                }
+
                 // Capture name/pos before the closure borrows s
                 let spawn_name = s.name.clone();
                 let (sx, sy, sz) = (s.x, s.y, s.z);
@@ -229,7 +238,11 @@ pub fn show(
                 // ui.interact() gives the rect a click sense so context_menu fires on right-click
                 let row_resp = ui.interact(row_rect, ui.id().with(s.id), egui::Sense::click());
 
-                if row_resp.clicked_by(egui::PointerButton::Primary) {
+                if row_resp.double_clicked_by(egui::PointerButton::Primary) {
+                    action = Some(SpawnAction::CenterMap { id: spawn_id, x: sx, y: sy });
+                    // Don't touch pending_select — selection is force-set in handle_spawn_action
+                    // to avoid the double-toggle that egui's click+double_click sequence causes.
+                } else if row_resp.clicked_by(egui::PointerButton::Primary) {
                     pending_select = Some(spawn_id);
                 }
                 row_resp.context_menu(|ui| {

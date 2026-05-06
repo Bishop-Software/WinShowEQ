@@ -215,6 +215,9 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>) {
         } else if data.marked_ids.contains(&spawn.id) {
             ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 3.0, Stroke::new(1.5, Color32::WHITE));
         }
+        if data.target_id == Some(spawn.id) {
+            ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 6.0, Stroke::new(2.0, Color32::from_rgb(255, 120, 0)));
+        }
     }
 }
 

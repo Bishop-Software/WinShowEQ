@@ -224,6 +224,12 @@ impl MainApp {
                     &std::path::Path::new(&self.config.filter_dir).join("seqfilters.xml"),
                 );
             }
+            SpawnAction::CenterMap { id, x, y } => {
+                let (mx, my) = crate::map_canvas::eq_to_map_pub(x, y);
+                self.map_pane.state.pending_center = Some((mx, my));
+                let mut data = self.data.lock().unwrap();
+                data.selected_id = Some(id);
+            }
             SpawnAction::AddMapText { x, y, z } => {
                 self.add_note.open = true;
                 self.add_note.text.clear();
