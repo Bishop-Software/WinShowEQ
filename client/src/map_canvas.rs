@@ -2,6 +2,7 @@ use egui::{Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 
 use crate::data::AppData;
 use crate::data::spawns::{con_color, ConColor, SpawnCategory, SpawnInfo};
+use crate::game_data::GameData;
 use crate::map_reader::MapData;
 
 const SPAWN_RADIUS: f32 = 4.0;
@@ -208,7 +209,7 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>) {
         if !ctx.is_visible(pos) {
             continue;
         }
-        let color = spawn_color(spawn, player_level);
+        let color = spawn_color(spawn, player_level, &data.game_data);
         ctx.painter.circle_filled(pos, SPAWN_RADIUS, color);
         if data.selected_id == Some(spawn.id) {
             ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 4.0, Stroke::new(2.0, Color32::from_rgb(255, 200, 0)));
@@ -460,8 +461,8 @@ fn z_filtered(z: f32, filter: Option<(f32, f32)>) -> bool {
     }
 }
 
-/// Spawn dot color: filter flags take priority over category/con color.
-fn spawn_color(spawn: &SpawnInfo, player_level: u8) -> Color32 {
+/// Spawn dot color: filter flags take priority, then named color overrides, then con-color.
+fn spawn_color(spawn: &SpawnInfo, player_level: u8, game_data: &GameData) -> Color32 {
     if spawn.is_danger {
         return Color32::from_rgb(255, 50, 50);
     }
@@ -473,6 +474,9 @@ fn spawn_color(spawn: &SpawnInfo, player_level: u8) -> Color32 {
     }
     if spawn.is_rare {
         return Color32::from_rgb(220, 0, 255);
+    }
+    if let Some([r, g, b]) = game_data.spawn_color_override(&spawn.name) {
+        return Color32::from_rgb(r, g, b);
     }
     match spawn.spawn_category {
         SpawnCategory::Pc => Color32::from_rgb(0, 200, 255),

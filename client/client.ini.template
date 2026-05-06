@@ -7,6 +7,8 @@ UpdateDelayMs=100
 ConfigDir=
 MapDir=
 LogDir=
+FilterDir=
+MapDir=
 
 [Alerts]
 DangerMode=speech

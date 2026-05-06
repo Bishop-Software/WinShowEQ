@@ -8,6 +8,12 @@ use serde_json;
 pub struct GameData {
     races: HashMap<u32, String>,
     classes: HashMap<u8, String>,
+    /// Named color palette loaded from `cfg/colors.json`. Key → [r, g, b].
+    color_palette: HashMap<String, [u8; 3]>,
+    /// Resolved spawn-name overrides: lowercase spawn name → [r, g, b].
+    /// Populated by `load_spawn_colors` using entries from `cfg/spawn_colors.json`
+    /// resolved against `color_palette`.
+    spawn_colors: HashMap<String, [u8; 3]>,
 }
 
 /// Common EQ install locations to probe when no path is configured.
@@ -70,12 +76,12 @@ impl GameData {
                 races.insert(race_id, text.to_owned());
             }
         }
-        Self { races, classes: HashMap::new() }
+        Self { races, classes: HashMap::new(), color_palette: HashMap::new(), spawn_colors: HashMap::new() }
     }
 
     /// Load class names from a JSON file mapping class ID strings to names.
     /// Silently ignored if the file is missing or malformed.
-    pub fn load_classes(&mut self, path: &std::path::Path) {
+    pub fn load_classes(&mut self, path: &Path) {
         if let Ok(content) = std::fs::read_to_string(path) {
             if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
                 self.classes = map
@@ -86,9 +92,55 @@ impl GameData {
         }
     }
 
+    /// Load the named color palette from `colors.json`.
+    /// Format: `{ "key": { "rgb": [r, g, b], ... }, ... }`.
+    /// Silently ignored if the file is missing or malformed.
+    pub fn load_color_palette(&mut self, path: &Path) {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(map) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) {
+                self.color_palette = map
+                    .into_iter()
+                    .filter_map(|(k, v)| {
+                        let arr = v.get("rgb")?.as_array()?;
+                        if arr.len() == 3 {
+                            let r = arr[0].as_u64()? as u8;
+                            let g = arr[1].as_u64()? as u8;
+                            let b = arr[2].as_u64()? as u8;
+                            Some((k, [r, g, b]))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+            }
+        }
+    }
+
+    /// Load spawn color overrides from `spawn_colors.json`.
+    /// Format: `{ "Spawn Name": "color_key" }` where `color_key` is a key in `colors.json`.
+    /// Requires `load_color_palette` to have been called first.
+    /// Silently ignored if the file is missing or malformed.
+    pub fn load_spawn_colors(&mut self, path: &Path) {
+        self.spawn_colors.clear();
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
+                for (name, color_key) in map {
+                    if let Some(&rgb) = self.color_palette.get(&color_key) {
+                        self.spawn_colors.insert(name.to_lowercase(), rgb);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Return a custom RGB color for `name` if one is configured in `spawn_colors.json`.
+    pub fn spawn_color_override(&self, name: &str) -> Option<[u8; 3]> {
+        self.spawn_colors.get(&name.to_lowercase()).copied()
+    }
+
     /// Return the display name for a class byte value.
-    /// Uses the loaded Classes.json when available; falls back to a static table.
-    /// Unknown IDs render as "ID# Unknown" to aid adding new entries to Classes.json.
+    /// Uses the loaded classes.json when available; falls back to a static table.
+    /// Unknown IDs render as "ID# Unknown" to aid adding new entries to classes.json.
     pub fn class_name(&self, class: u8) -> String {
         if !self.classes.is_empty() {
             return self.classes.get(&class)
@@ -116,7 +168,12 @@ impl GameData {
 
 impl Default for GameData {
     fn default() -> Self {
-        Self { races: HashMap::new(), classes: HashMap::new() }
+        Self {
+            races: HashMap::new(),
+            classes: HashMap::new(),
+            color_palette: HashMap::new(),
+            spawn_colors: HashMap::new(),
+        }
     }
 }
 
@@ -164,5 +221,79 @@ mod tests {
         let gd = GameData::default();
         // race 999 not in fallback table
         assert_eq!(gd.race_name(999), "---");
+    }
+
+    #[test]
+    fn spawn_color_override_resolves_via_palette() {
+        use std::io::Write as _;
+        let dir = std::env::temp_dir();
+
+        let palette_path = dir.join("test_colors.json");
+        let mut f = std::fs::File::create(&palette_path).unwrap();
+        write!(f, r##"{{"flame": {{"name": "Flame", "hex": "#e25822", "rgb": [226, 88, 34]}}}}"##).unwrap();
+
+        let overrides_path = dir.join("test_spawn_colors.json");
+        let mut f = std::fs::File::create(&overrides_path).unwrap();
+        write!(f, r#"{{"Fippy Darkpaw": "flame"}}"#).unwrap();
+
+        let mut gd = GameData::default();
+        gd.load_color_palette(&palette_path);
+        gd.load_spawn_colors(&overrides_path);
+
+        assert_eq!(gd.spawn_color_override("Fippy Darkpaw"), Some([226, 88, 34]));
+    }
+
+    #[test]
+    fn spawn_color_override_is_case_insensitive() {
+        use std::io::Write as _;
+        let dir = std::env::temp_dir();
+
+        let palette_path = dir.join("test_colors2.json");
+        let mut f = std::fs::File::create(&palette_path).unwrap();
+        write!(f, r##"{{"cobalt": {{"name": "Cobalt", "hex": "#0047ab", "rgb": [0, 71, 171]}}}}"##).unwrap();
+
+        let overrides_path = dir.join("test_spawn_colors2.json");
+        let mut f = std::fs::File::create(&overrides_path).unwrap();
+        write!(f, r#"{{"Lord Nagafen": "cobalt"}}"#).unwrap();
+
+        let mut gd = GameData::default();
+        gd.load_color_palette(&palette_path);
+        gd.load_spawn_colors(&overrides_path);
+
+        assert_eq!(gd.spawn_color_override("lord nagafen"), Some([0, 71, 171]));
+        assert_eq!(gd.spawn_color_override("LORD NAGAFEN"), Some([0, 71, 171]));
+    }
+
+    #[test]
+    fn spawn_color_override_returns_none_for_unknown_name() {
+        let gd = GameData::default();
+        assert_eq!(gd.spawn_color_override("Nobody"), None);
+    }
+
+    #[test]
+    fn spawn_color_override_missing_files_are_silent() {
+        let mut gd = GameData::default();
+        gd.load_color_palette(std::path::Path::new("nonexistent_colors.json"));
+        gd.load_spawn_colors(std::path::Path::new("nonexistent_spawn_colors.json"));
+        assert_eq!(gd.spawn_color_override("Fippy Darkpaw"), None);
+    }
+
+    #[test]
+    fn spawn_color_override_ignores_unknown_color_key() {
+        use std::io::Write as _;
+        let dir = std::env::temp_dir();
+
+        let palette_path = dir.join("test_colors3.json");
+        std::fs::write(&palette_path, r#"{}"#).unwrap();
+
+        let overrides_path = dir.join("test_spawn_colors3.json");
+        let mut f = std::fs::File::create(&overrides_path).unwrap();
+        write!(f, r#"{{"Fippy Darkpaw": "nonexistent_color"}}"#).unwrap();
+
+        let mut gd = GameData::default();
+        gd.load_color_palette(&palette_path);
+        gd.load_spawn_colors(&overrides_path);
+
+        assert_eq!(gd.spawn_color_override("Fippy Darkpaw"), None);
     }
 }

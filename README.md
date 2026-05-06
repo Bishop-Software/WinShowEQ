@@ -95,7 +95,7 @@ WinShowEQ/
       filters.rs      # FilterSet — hunt/caution/danger/rare XML filters
       alerts.rs       # AlertEngine — TTS, sound, Discord webhook
       logger.rs       # Logger — dated log files
-      game_data.rs    # GameData — race name lookup (dbstr_us.txt) + class name lookup (cfg/Classes.json)
+      game_data.rs    # GameData — race name lookup (dbstr_us.txt) + class name lookup (cfg/classes.json)
       data/
         mod.rs        # AppData aggregate, apply_packet
         spawns.rs     # SpawnInfo, SpawnStore, SpawnCategory, con colors

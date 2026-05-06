@@ -134,7 +134,9 @@ impl MainApp {
             if let Some(gd) = GameData::load(&config.eq_path) {
                 d.game_data = gd;
             }
-            d.game_data.load_classes(&std::path::Path::new(&config.cfg_dir).join("Classes.json"));
+            d.game_data.load_classes(&std::path::Path::new(&config.cfg_dir).join("classes.json"));
+            d.game_data.load_color_palette(&std::path::Path::new(&config.cfg_dir).join("colors.json"));
+            d.game_data.load_spawn_colors(&std::path::Path::new(&config.cfg_dir).join("spawn_colors.json"));
             d.filters = crate::filters::FilterSet::load(
                 &std::path::Path::new(&config.filter_dir).join("seqfilters.xml"),
             );
@@ -343,7 +345,9 @@ impl eframe::App for MainApp {
                 if let Some(gd) = GameData::load(&self.config.eq_path) {
                     data.game_data = gd;
                 }
-                data.game_data.load_classes(&std::path::Path::new(&self.config.cfg_dir).join("Classes.json"));
+                data.game_data.load_classes(&std::path::Path::new(&self.config.cfg_dir).join("classes.json"));
+                data.game_data.load_color_palette(&std::path::Path::new(&self.config.cfg_dir).join("colors.json"));
+                data.game_data.load_spawn_colors(&std::path::Path::new(&self.config.cfg_dir).join("spawn_colors.json"));
             }
             let _ = self.config.save(&self.config_path);
         }
