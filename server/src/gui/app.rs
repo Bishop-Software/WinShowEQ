@@ -65,6 +65,8 @@ pub struct WinShowEQApp {
     menu_start_min: CheckMenuItem,
     menu_exit: MenuItem,
     window_visible: bool,
+    first_frame: bool,
+    prev_log_len: usize,
     offset_finder: OffsetFinderState,
 }
 
@@ -114,6 +116,8 @@ impl WinShowEQApp {
             menu_start_min,
             menu_exit,
             window_visible: !start_minimized,
+            first_frame: true,
+            prev_log_len: 0,
             offset_finder: OffsetFinderState::with_exe_path(saved_exe_path),
         }
     }
@@ -391,6 +395,11 @@ impl eframe::App for WinShowEQApp {
         // Keep polling even when the window is hidden.
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
 
+        // with_visible(false) in NativeOptions is unreliable on Windows; force-hide on first frame.
+        if std::mem::replace(&mut self.first_frame, false) && !self.window_visible {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        }
+
         // X button closes the app. Exit via tray menu also closes.
         if ctx.input(|i| i.viewport().close_requested()) {
             // Let eframe close naturally — no CancelClose intercept.
@@ -544,12 +553,17 @@ impl eframe::App for WinShowEQApp {
                 ui.separator();
 
                 // ── Log pane ──────────────────────────────────────────────────────────
+                let new_log_entry = log.len() > self.prev_log_len;
+                self.prev_log_len = log.len();
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .stick_to_bottom(true)
                     .show(ui, |ui| {
                         for line in &log {
                             ui.label(RichText::new(line).monospace());
+                        }
+                        if new_log_entry {
+                            ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
                         }
                     });
 
