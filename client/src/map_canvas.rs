@@ -210,14 +210,30 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>) {
             continue;
         }
         let color = spawn_color(spawn, player_level, &data.game_data);
-        ctx.painter.circle_filled(pos, SPAWN_RADIUS, color);
-        if data.selected_id == Some(spawn.id) {
-            ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 4.0, Stroke::new(2.0, Color32::from_rgb(255, 200, 0)));
-        } else if data.marked_ids.contains(&spawn.id) {
-            ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 3.0, Stroke::new(1.5, Color32::WHITE));
-        }
-        if data.target_id == Some(spawn.id) {
-            ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 6.0, Stroke::new(2.0, Color32::from_rgb(255, 120, 0)));
+        let is_pc = spawn.spawn_category == SpawnCategory::Pc;
+        if is_pc {
+            let r = SPAWN_RADIUS;
+            let sq = egui::Rect::from_center_size(pos, egui::Vec2::splat(r * 2.0));
+            ctx.painter.rect_filled(sq, 0.0, color);
+            ctx.painter.rect_stroke(sq, 0.0, Stroke::new(1.0, Color32::from_rgb(255, 0, 255)), egui::StrokeKind::Middle);
+            if data.selected_id == Some(spawn.id) {
+                ctx.painter.rect_stroke(sq.expand(4.0), 0.0, Stroke::new(2.0, Color32::from_rgb(255, 200, 0)), egui::StrokeKind::Outside);
+            } else if data.marked_ids.contains(&spawn.id) {
+                ctx.painter.rect_stroke(sq.expand(3.0), 0.0, Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Outside);
+            }
+            if data.target_id == Some(spawn.id) {
+                ctx.painter.rect_stroke(sq.expand(6.0), 0.0, Stroke::new(2.0, Color32::from_rgb(255, 120, 0)), egui::StrokeKind::Outside);
+            }
+        } else {
+            ctx.painter.circle_filled(pos, SPAWN_RADIUS, color);
+            if data.selected_id == Some(spawn.id) {
+                ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 4.0, Stroke::new(2.0, Color32::from_rgb(255, 200, 0)));
+            } else if data.marked_ids.contains(&spawn.id) {
+                ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 3.0, Stroke::new(1.5, Color32::WHITE));
+            }
+            if data.target_id == Some(spawn.id) {
+                ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 6.0, Stroke::new(2.0, Color32::from_rgb(255, 120, 0)));
+            }
         }
     }
 }
@@ -479,9 +495,9 @@ fn spawn_color(spawn: &SpawnInfo, player_level: u8, game_data: &GameData) -> Col
         return Color32::from_rgb(r, g, b);
     }
     match spawn.spawn_category {
-        SpawnCategory::Pc => Color32::from_rgb(0, 200, 255),
+        SpawnCategory::Pc => con_to_color(con_color(player_level, spawn.level)),
         SpawnCategory::Corpse => Color32::from_rgb(80, 40, 40),
-        SpawnCategory::Pet | SpawnCategory::Merc => Color32::from_rgb(160, 160, 160),
+        SpawnCategory::Pet | SpawnCategory::Merc => con_to_color(con_color(player_level, spawn.level)),
         SpawnCategory::Npc => con_to_color(con_color(player_level, spawn.level)),
     }
 }
