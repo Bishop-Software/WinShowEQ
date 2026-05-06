@@ -110,6 +110,7 @@ impl OptionsDialog {
                 .with_inner_size([510.0, 700.0])
                 .with_resizable(false),
             |ctx, _class| {
+                #[allow(deprecated)]
                 egui::Panel::bottom("options_buttons").show(ctx, |ui| {
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
@@ -137,7 +138,6 @@ impl OptionsDialog {
                                 eq_path: self.eq_path.clone(),
                                 log_enabled: self.log_enabled,
                                 log_level: self.log_level.clone(),
-                                ..self.base_config.clone()
                             });
                             self.open = false;
                         }
@@ -148,6 +148,7 @@ impl OptionsDialog {
                     ui.add_space(4.0);
                 });
 
+                #[allow(deprecated)]
                 egui::CentralPanel::default().show(ctx, |ui| {
                     egui::Grid::new("options_grid")
                         .num_columns(2)
@@ -170,55 +171,50 @@ impl OptionsDialog {
                             ui.strong("Config path:");
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.cfg_dir);
-                                if ui.button("Browse…").clicked() {
-                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                if ui.button("Browse…").clicked()
+                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
                                         self.cfg_dir = path.display().to_string();
                                     }
-                                }
                             });
                             ui.end_row();
 
                             ui.strong("Timer path:");
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.timer_dir);
-                                if ui.button("Browse…").clicked() {
-                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                if ui.button("Browse…").clicked()
+                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
                                         self.timer_dir = path.display().to_string();
                                     }
-                                }
                             });
                             ui.end_row();
 
                             ui.strong("Log path:");
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.log_dir);
-                                if ui.button("Browse…").clicked() {
-                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                if ui.button("Browse…").clicked()
+                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
                                         self.log_dir = path.display().to_string();
                                     }
-                                }
                             });
                             ui.end_row();
 
                             ui.strong("Filter path:");
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.filter_dir);
-                                if ui.button("Browse…").clicked() {
-                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                if ui.button("Browse…").clicked()
+                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
                                         self.filter_dir = path.display().to_string();
                                     }
-                                }
                             });
                             ui.end_row();
 
                             ui.strong("Map path:");
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.map_dir);
-                                if ui.button("Browse…").clicked() {
-                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                if ui.button("Browse…").clicked()
+                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
                                         self.map_dir = path.display().to_string();
                                     }
-                                }
                             });
                             ui.end_row();
 
@@ -380,11 +376,10 @@ impl OptionsDialog {
                             ui.strong("EQ install path:");
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.eq_path);
-                                if ui.button("Browse…").clicked() {
-                                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                if ui.button("Browse…").clicked()
+                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
                                         self.eq_path = path.display().to_string();
                                     }
-                                }
                             });
                             ui.end_row();
                         });

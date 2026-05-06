@@ -94,10 +94,12 @@ impl TimerStore {
         self.timers.iter()
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.timers.len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.timers.is_empty()
     }

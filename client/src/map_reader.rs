@@ -38,6 +38,7 @@ impl MapData {
     }
 
     /// Axis-aligned bounding box over all line endpoints. Returns None for empty maps.
+    #[allow(dead_code)]
     pub fn bounding_box(&self) -> Option<(MapPoint, MapPoint) > {
         let mut pts = self.lines.iter().flat_map(|l| [l.p1, l.p2]);
         let first = pts.next()?;
@@ -91,6 +92,7 @@ pub fn load_layer(path: &Path) -> Result<MapData, MapError> {
 }
 
 /// Parse native EQ map layer text from an in-memory string (useful for tests).
+#[allow(dead_code)]
 pub fn parse_str(src: &str) -> MapData {
     parse_lines(src.lines().map(str::to_owned)).unwrap_or_default()
 }

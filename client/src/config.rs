@@ -134,16 +134,14 @@ impl ClientConfig {
             if let Some(v) = winshoweq.get("server") {
                 cfg.server_ip = v.clone();
             }
-            if let Some(v) = winshoweq.get("port") {
-                if let Ok(n) = v.parse() {
+            if let Some(v) = winshoweq.get("port")
+                && let Ok(n) = v.parse() {
                     cfg.server_port = n;
                 }
-            }
-            if let Some(v) = winshoweq.get("rate") {
-                if let Ok(n) = v.parse() {
+            if let Some(v) = winshoweq.get("rate")
+                && let Ok(n) = v.parse() {
                     cfg.update_delay_ms = n;
                 }
-            }
         }
 
         if let Some(dirs) = sections.get("directories") {
@@ -181,9 +179,8 @@ impl ClientConfig {
             if let Some(v) = discord.get("onhunt") { cfg.discord_on_hunt = v == "1"; }
         }
 
-        if let Some(eq) = sections.get("eq") {
-            if let Some(v) = eq.get("path") { cfg.eq_path = v.clone(); }
-        }
+        if let Some(eq) = sections.get("eq")
+            && let Some(v) = eq.get("path") { cfg.eq_path = v.clone(); }
 
         if let Some(logging) = sections.get("logging") {
             if let Some(v) = logging.get("enabled") { cfg.log_enabled = v != "0"; }

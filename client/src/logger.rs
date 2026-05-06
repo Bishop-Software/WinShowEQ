@@ -72,6 +72,7 @@ impl Logger {
     }
 
     /// Builder-style level setter (used in tests and startup).
+    #[allow(dead_code)]
     pub fn with_level(self, level: LogLevel) -> Self {
         self.min_level.store(level as u8, Ordering::Relaxed);
         self
@@ -87,10 +88,12 @@ impl Logger {
         self.min_level.store(level as u8, Ordering::Relaxed);
     }
 
+    #[allow(dead_code)]
     pub fn is_enabled(&self) -> bool {
         self.enabled.load(Ordering::Relaxed)
     }
 
+    #[allow(dead_code)]
     pub fn level(&self) -> LogLevel {
         match self.min_level.load(Ordering::Relaxed) {
             0 => LogLevel::Debug,
@@ -100,9 +103,11 @@ impl Logger {
         }
     }
 
+    #[allow(dead_code)]
     pub fn debug(&self, msg: &str) { self.write(LogLevel::Debug, msg); }
     pub fn info(&self,  msg: &str) { self.write(LogLevel::Info,  msg); }
     pub fn warn(&self,  msg: &str) { self.write(LogLevel::Warn,  msg); }
+    #[allow(dead_code)]
     pub fn error(&self, msg: &str) { self.write(LogLevel::Error, msg); }
 
     fn write(&self, level: LogLevel, msg: &str) {

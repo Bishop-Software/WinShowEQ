@@ -97,12 +97,15 @@ pub struct SpawnInfo {
     pub heading: f32,
     pub speed: f32,
     pub owner_id: u32,
+    #[allow(dead_code)]
     pub spawn_type: u8,
     pub class: u8,
     pub race: u32,
     pub level: u8,
     pub hidden: u8,
+    #[allow(dead_code)]
     pub primary: u32,
+    #[allow(dead_code)]
     pub offhand: u32,
     pub spawn_category: SpawnCategory,
     /// Wall-clock time when this spawn was first seen in the zone.
@@ -182,11 +185,13 @@ pub struct SpawnStore {
 }
 
 impl SpawnStore {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Insert or replace the spawn described by `rec`.
+    #[allow(dead_code)]
     pub fn upsert(&mut self, rec: &SpawnRecord) {
         let mut info = SpawnInfo::from_record(rec);
         if let Some(existing) = self.spawns.get(&info.id) {
@@ -220,10 +225,12 @@ impl SpawnStore {
         self.spawns.insert(info.id, info);
     }
 
+    #[allow(dead_code)]
     pub fn remove(&mut self, id: u32) {
         self.spawns.remove(&id);
     }
 
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.spawns.clear();
     }
@@ -240,11 +247,13 @@ impl SpawnStore {
         self.spawns.len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.spawns.is_empty()
     }
 }
 
+#[allow(dead_code)]
 pub fn race_name(race: u32) -> &'static str {
     match race {
         1 => "Human", 2 => "Barbarian", 3 => "Erudite", 4 => "Wood Elf",

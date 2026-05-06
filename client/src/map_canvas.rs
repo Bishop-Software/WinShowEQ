@@ -413,6 +413,7 @@ fn draw_hover_tooltip(ui: &mut Ui, ctx: &DrawCtx, data: &AppData, hover_pos: Pos
         }).unwrap_or_else(|| "?".to_owned())
     };
 
+    #[allow(deprecated)]
     egui::show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), egui::Id::new("map_hover_tooltip"), |ui| {
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
         match hit {

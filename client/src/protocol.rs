@@ -6,6 +6,7 @@ use crate::data::world::InGameTime;
 
 /// Decoded form of a wire SpawnRecord, dispatched by the `flags` field.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum Packet {
     /// Regular NPC or PC spawn update.
     Spawn(SpawnRecord),
@@ -46,6 +47,7 @@ pub fn name_from_bytes(bytes: &[u8; 30]) -> String {
 }
 
 /// Extract a null-terminated string from a 22-byte last_name field.
+#[allow(dead_code)]
 pub fn last_name_from_bytes(bytes: &[u8; 22]) -> String {
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     String::from_utf8_lossy(&bytes[..end]).into_owned()

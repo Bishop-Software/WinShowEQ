@@ -14,6 +14,7 @@ pub struct ServerConnection {
 
 impl ServerConnection {
     /// Connect with the default 100 ms read timeout.
+    #[allow(dead_code)]
     pub fn connect(addr: SocketAddr) -> io::Result<Self> {
         Self::connect_with_timeout(addr, 100)
     }
@@ -47,6 +48,7 @@ impl ServerConnection {
         Ok(records)
     }
 
+    #[allow(dead_code)]
     pub fn disconnect(self) {
         let _ = self.stream.shutdown(std::net::Shutdown::Both);
     }

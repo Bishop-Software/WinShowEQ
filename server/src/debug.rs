@@ -340,10 +340,7 @@ impl DebugLoop {
         let mut spawn_count = 0u32;
         let mut last_prev = 0u64;
 
-        loop {
-            let Ok(buf) = mem.read_bytes(ptr, buf_size) else {
-                break;
-            };
+        while let Ok(buf) = mem.read_bytes(ptr, buf_size) {
             let p_prev = read_u64_at(&buf, self.spawn_off.prev);
             let p_next = read_u64_at(&buf, self.spawn_off.next);
             last_prev = p_prev;
@@ -405,12 +402,11 @@ impl DebugLoop {
             };
             let scan_end = buf.len().saturating_sub(7);
             for i in 0..scan_end {
-                if let Ok(bytes) = buf[i..i + 8].try_into() {
-                    if u64::from_le_bytes(bytes) == search {
+                if let Ok(bytes) = buf[i..i + 8].try_into()
+                    && u64::from_le_bytes(bytes) == search {
                         let found = mem.actual_to_canonical(pos + i as u64);
                         println!(" Pointer match found for 0x{:X} at 0x{:X}", search, found);
                     }
-                }
             }
             pos += CHUNK as u64;
         }
@@ -451,62 +447,53 @@ impl DebugLoop {
                 for (i, &b) in buf.iter().enumerate() {
                     if b == first_byte {
                         let addr = p_mem + i as u64;
-                        if let Ok(full) = mem.read_bytes(addr, 30) {
-                            if parse_string_bytes(&full) == search {
+                        if let Ok(full) = mem.read_bytes(addr, 30)
+                            && parse_string_bytes(&full) == search {
                                 println!(
                                     " Pointer match found at 0x{:X}",
                                     mem.actual_to_canonical(addr)
                                 );
                             }
-                        }
                     }
                 }
                 p_mem += CHUNK as u64;
             }
         } else if ot == OT_TARGET || ot == OT_SELF {
             while p_mem < p_end {
-                if let Ok(p_deep) = mem.read_pointer(p_mem) {
-                    if p_deep != 0 && p_deep < p_mem {
-                        if let Ok(s) = mem.read_string(p_deep + name_off, 64) {
-                            if s == search {
+                if let Ok(p_deep) = mem.read_pointer(p_mem)
+                    && p_deep != 0 && p_deep < p_mem
+                        && let Ok(s) = mem.read_string(p_deep + name_off, 64)
+                            && s == search {
                                 println!(
                                     " Pointer match found at 0x{:X}",
                                     mem.actual_to_canonical(p_mem)
                                 );
                             }
-                        }
-                    }
-                }
                 p_mem += 8;
             }
         } else if ot == OT_GROUND {
             while p_mem < p_end {
-                if let Ok(p_deep2) = mem.read_pointer(p_mem) {
-                    if p_deep2 != 0 && p_deep2 < p_mem {
-                        if let Ok(s) = mem.read_string(p_deep2 + name_off, 64) {
-                            if s.starts_with(search) {
+                if let Ok(p_deep2) = mem.read_pointer(p_mem)
+                    && p_deep2 != 0 && p_deep2 < p_mem {
+                        if let Ok(s) = mem.read_string(p_deep2 + name_off, 64)
+                            && s.starts_with(search) {
                                 println!(
                                     " Pointer match found at 0x{:X}. Full string is {}",
                                     mem.actual_to_canonical(p_mem),
                                     s
                                 );
                             }
-                        }
-                        if let Ok(p_deep) = mem.read_pointer(p_deep2) {
-                            if p_deep != 0 && p_deep < p_mem {
-                                if let Ok(s) = mem.read_string(p_deep + name_off, 64) {
-                                    if s.starts_with(search) {
+                        if let Ok(p_deep) = mem.read_pointer(p_deep2)
+                            && p_deep != 0 && p_deep < p_mem
+                                && let Ok(s) = mem.read_string(p_deep + name_off, 64)
+                                    && s.starts_with(search) {
                                         println!(
                                             " Pointer match found at 0x{:X}. Full string is {}",
                                             mem.actual_to_canonical(p_mem),
                                             s
                                         );
                                     }
-                                }
-                            }
-                        }
                     }
-                }
                 p_mem += 8;
             }
         }
@@ -656,8 +643,8 @@ impl DebugLoop {
         let mut p_mem = p_start;
         let p_end = p_start + size * 4;
         while p_mem < p_end {
-            if let Ok(p_deep) = mem.read_pointer(p_mem) {
-                if p_deep != 0 && p_deep < p_mem {
+            if let Ok(p_deep) = mem.read_pointer(p_mem)
+                && p_deep != 0 && p_deep < p_mem {
                     let d_temp: u8 = mem.read(p_deep + day_off).unwrap_or(0);
                     let m_temp: u8 = mem.read(p_deep + month_off).unwrap_or(0);
                     let y_temp: u32 = if race8 {
@@ -675,7 +662,6 @@ impl DebugLoop {
                         );
                     }
                 }
-            }
             p_mem += 4;
         }
     }

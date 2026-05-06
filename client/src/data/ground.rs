@@ -3,6 +3,7 @@ use common::{OPT_GROUND, SpawnRecord};
 /// A ground item decoded from an OPT_GROUND SpawnRecord.
 #[derive(Debug, Clone)]
 pub struct GroundItem {
+    #[allow(dead_code)]
     pub id: u32,
     pub name: String,
     pub x: f32,
@@ -28,6 +29,7 @@ pub struct GroundStore {
 }
 
 impl GroundStore {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
@@ -48,10 +50,12 @@ impl GroundStore {
         self.items.iter()
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.items.len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }

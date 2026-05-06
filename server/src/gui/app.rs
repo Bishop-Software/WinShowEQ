@@ -195,14 +195,12 @@ impl WinShowEQApp {
         }
 
         // Poll for a completed background scan each frame.
-        if self.offset_finder.scanning {
-            if let Ok(mut guard) = self.offset_finder.pending.lock() {
-                if let Some(result) = guard.take() {
+        if self.offset_finder.scanning
+            && let Ok(mut guard) = self.offset_finder.pending.lock()
+                && let Some(result) = guard.take() {
                     self.offset_finder.display_text = result;
                     self.offset_finder.scanning = false;
                 }
-            }
-        }
 
         let mut open = true;
         let mut start_scan: Option<(ScanKind, bool)> = None;
@@ -325,12 +323,11 @@ impl WinShowEQApp {
         self.offset_finder.exe_path = exe_path;
 
         // Browse must run outside the egui closure so it can block for the dialog.
-        if do_browse {
-            if let Some(path) = browse_for_exe() {
+        if do_browse
+            && let Some(path) = browse_for_exe() {
                 self.offset_finder.exe_path = path;
                 self.save_exe_path();
             }
-        }
 
         if let Some((kind, write_out)) = start_scan {
             self.save_exe_path();

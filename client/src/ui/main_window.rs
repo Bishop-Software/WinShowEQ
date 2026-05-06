@@ -305,11 +305,11 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
             }
             Tab::Timers => {
                 let mut data = self.data.lock().unwrap();
-                timer_list::show(ui, &mut data, &mut self.timer_sort_column, &mut self.timer_sort_ascending);
+                timer_list::show(ui, &mut data, self.timer_sort_column, self.timer_sort_ascending);
             }
             Tab::Ground => {
                 let mut data = self.data.lock().unwrap();
-                ground_list::show(ui, &mut data, &mut self.ground_sort_column, &mut self.ground_sort_ascending);
+                ground_list::show(ui, &mut data, self.ground_sort_column, self.ground_sort_ascending);
             }
             Tab::Map => {
                 let data = self.data.lock().unwrap();
@@ -416,12 +416,11 @@ impl eframe::App for MainApp {
         // Search dialog — runs outside the DockArea lock so it can mutate AppData directly
         {
             let mut data = self.data.lock().unwrap();
-            if let Some(spawn_id) = self.search.show(&ctx, &mut data) {
-                if let Some(s) = data.spawns.get(spawn_id) {
+            if let Some(spawn_id) = self.search.show(&ctx, &mut data)
+                && let Some(s) = data.spawns.get(spawn_id) {
                     let (mx, my) = crate::map_canvas::eq_to_map_pub(s.x, s.y);
                     self.map_pane.state.pending_center = Some((mx, my));
                 }
-            }
         }
 
         // "Add Note" floating dialog
@@ -444,7 +443,7 @@ impl eframe::App for MainApp {
                             let color = egui::Color32::from_rgb(r, g, b);
                             let selected = self.add_note.color_idx == i;
                             if ui
-                                .add(egui::SelectableLabel::new(
+                                .add(egui::Button::selectable(
                                     selected,
                                     egui::RichText::new(*name).color(color),
                                 ))

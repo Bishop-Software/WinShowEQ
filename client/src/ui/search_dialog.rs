@@ -12,6 +12,7 @@ struct SearchResult {
     z: f32,
 }
 
+#[derive(Default)]
 pub struct SearchDialog {
     pub open: bool,
     query: String,
@@ -19,16 +20,6 @@ pub struct SearchDialog {
     needs_focus: bool,
 }
 
-impl Default for SearchDialog {
-    fn default() -> Self {
-        Self {
-            open: false,
-            query: String::new(),
-            results: Vec::new(),
-            needs_focus: false,
-        }
-    }
-}
 
 impl SearchDialog {
     /// Show the search dialog. Returns `Some(spawn_id)` if the user clicked a result row.

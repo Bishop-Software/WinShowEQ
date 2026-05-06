@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use serde_json;
 
 /// EQ string database parsed from dbstr_us.txt.
 /// Race entries follow the pattern: `race_id^11^RaceName^0^`
+#[derive(Default)]
 pub struct GameData {
     races: HashMap<u32, String>,
     classes: HashMap<u8, String>,
@@ -82,22 +82,21 @@ impl GameData {
     /// Load class names from a JSON file mapping class ID strings to names.
     /// Silently ignored if the file is missing or malformed.
     pub fn load_classes(&mut self, path: &Path) {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
+        if let Ok(content) = std::fs::read_to_string(path)
+            && let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
                 self.classes = map
                     .into_iter()
                     .filter_map(|(k, v)| k.parse::<u8>().ok().map(|id| (id, v)))
                     .collect();
             }
-        }
     }
 
     /// Load the named color palette from `colors.json`.
     /// Format: `{ "key": { "rgb": [r, g, b], ... }, ... }`.
     /// Silently ignored if the file is missing or malformed.
     pub fn load_color_palette(&mut self, path: &Path) {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(map) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) {
+        if let Ok(content) = std::fs::read_to_string(path)
+            && let Ok(map) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) {
                 self.color_palette = map
                     .into_iter()
                     .filter_map(|(k, v)| {
@@ -113,7 +112,6 @@ impl GameData {
                     })
                     .collect();
             }
-        }
     }
 
     /// Load spawn color overrides from `spawn_colors.json`.
@@ -122,15 +120,14 @@ impl GameData {
     /// Silently ignored if the file is missing or malformed.
     pub fn load_spawn_colors(&mut self, path: &Path) {
         self.spawn_colors.clear();
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
+        if let Ok(content) = std::fs::read_to_string(path)
+            && let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
                 for (name, color_key) in map {
                     if let Some(&rgb) = self.color_palette.get(&color_key) {
                         self.spawn_colors.insert(name.to_lowercase(), rgb);
                     }
                 }
             }
-        }
     }
 
     /// Return a custom RGB color for `name` if one is configured in `spawn_colors.json`.
@@ -166,16 +163,6 @@ impl GameData {
     }
 }
 
-impl Default for GameData {
-    fn default() -> Self {
-        Self {
-            races: HashMap::new(),
-            classes: HashMap::new(),
-            color_palette: HashMap::new(),
-            spawn_colors: HashMap::new(),
-        }
-    }
-}
 
 /// Minimal fallback table for when dbstr_us.txt is not available.
 /// Covers playable PC races only (indices match spawn race IDs).

@@ -29,10 +29,12 @@ impl AnnotationStore {
         self.items.push(MapAnnotation { id, text, x, y, z, color, size });
     }
 
+    #[allow(dead_code)]
     pub fn remove(&mut self, id: u32) {
         self.items.retain(|a| a.id != id);
     }
 
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.items.clear();
         self.next_id = 0;

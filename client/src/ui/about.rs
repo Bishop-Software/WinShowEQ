@@ -105,7 +105,7 @@ impl AboutDialog {
 #[cfg(target_os = "windows")]
 fn open_url(url: &str) -> std::io::Result<()> {
     std::process::Command::new("cmd")
-        .args(&["/C", "start", url])
+        .args(["/C", "start", url])
         .spawn()?;
     Ok(())
 }

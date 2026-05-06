@@ -241,7 +241,7 @@ impl MemReader {
     /// Like `read_string` but returns an empty string unless the first character is alphanumeric.
     pub fn read_alnum_string(&self, addr: u64, max_len: usize) -> Result<String, MemError> {
         let s = self.read_string(addr, max_len)?;
-        if s.chars().next().map_or(false, |c| c.is_alphanumeric()) {
+        if s.chars().next().is_some_and(|c| c.is_alphanumeric()) {
             Ok(s)
         } else {
             Ok(String::new())
@@ -422,7 +422,7 @@ unsafe fn clamp_to_region(handle: HANDLE, addr: u64, requested: usize) -> usize 
         return requested;
     }
     let bytes_into_region = addr.saturating_sub(info.BaseAddress as u64) as usize;
-    let bytes_remaining = (info.RegionSize as usize).saturating_sub(bytes_into_region);
+    let bytes_remaining = info.RegionSize.saturating_sub(bytes_into_region);
     requested.min(bytes_remaining)
 }
 

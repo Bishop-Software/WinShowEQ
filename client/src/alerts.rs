@@ -27,6 +27,7 @@ impl AlertMode {
         }
     }
 
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::None => "none",
@@ -91,11 +92,10 @@ impl AlertEngine {
         if self.alerted.contains(&spawn.id) {
             return None;
         }
-        if let Some(until) = self.suppress_until {
-            if Instant::now() < until {
+        if let Some(until) = self.suppress_until
+            && Instant::now() < until {
                 return None;
             }
-        }
 
         let (mode, category) = if spawn.is_danger {
             (&self.danger_mode, "Danger")

@@ -82,10 +82,7 @@ impl FilterSet {
                     b"item" => self.insert_from_element(&e, current),
                     _ => {}
                 },
-                Event::Empty(e) => match e.name().as_ref() {
-                    b"item" => self.insert_from_element(&e, current),
-                    _ => {}
-                },
+                Event::Empty(e) if e.name().as_ref() == b"item" => self.insert_from_element(&e, current),
                 Event::End(e) => match e.name().as_ref() {
                     b"hunt" | b"caution" | b"danger" | b"alert" => current = None,
                     _ => {}
@@ -129,6 +126,7 @@ impl FilterSet {
     }
 
     /// Merge another FilterSet into this one (higher-priority wins on conflict).
+    #[allow(dead_code)]
     pub fn merge(&mut self, other: FilterSet) {
         for (name, cat) in other.entries {
             self.add(cat, name);
@@ -141,6 +139,7 @@ impl FilterSet {
     }
 
     /// Remove an entry by name (case-insensitive).
+    #[allow(dead_code)]
     pub fn remove(&mut self, name: &str) {
         self.entries.remove(&name.to_lowercase());
     }
@@ -180,10 +179,12 @@ impl FilterSet {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
