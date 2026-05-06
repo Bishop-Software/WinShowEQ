@@ -13,6 +13,7 @@ pub struct OptionsDialog {
     server_ip: String,
     server_port: String,
     update_delay: String,
+    auto_connect: bool,
     // Directories
     cfg_dir: String,
     timer_dir: String,
@@ -48,6 +49,7 @@ impl OptionsDialog {
             server_ip: cfg.server_ip.clone(),
             server_port: cfg.server_port.to_string(),
             update_delay: cfg.update_delay_ms.to_string(),
+            auto_connect: cfg.auto_connect,
             cfg_dir: cfg.cfg_dir.clone(),
             timer_dir: cfg.timer_dir.clone(),
             log_dir: cfg.log_dir.clone(),
@@ -75,6 +77,7 @@ impl OptionsDialog {
         self.server_ip = cfg.server_ip.clone();
         self.server_port = cfg.server_port.to_string();
         self.update_delay = cfg.update_delay_ms.to_string();
+        self.auto_connect = cfg.auto_connect;
         self.cfg_dir = cfg.cfg_dir.clone();
         self.timer_dir = cfg.timer_dir.clone();
         self.log_dir = cfg.log_dir.clone();
@@ -107,7 +110,7 @@ impl OptionsDialog {
             egui::ViewportId::from_hash_of("options_dialog"),
             egui::ViewportBuilder::default()
                 .with_title("Options")
-                .with_inner_size([510.0, 700.0])
+                .with_inner_size([550.0, 750.0])
                 .with_resizable(false),
             |ctx, _class| {
                 #[allow(deprecated)]
@@ -138,6 +141,7 @@ impl OptionsDialog {
                                 eq_path: self.eq_path.clone(),
                                 log_enabled: self.log_enabled,
                                 log_level: self.log_level.clone(),
+                                auto_connect: self.auto_connect,
                             });
                             self.open = false;
                         }
@@ -165,6 +169,10 @@ impl OptionsDialog {
 
                             ui.strong("Update delay (ms):");
                             ui.text_edit_singleline(&mut self.update_delay);
+                            ui.end_row();
+
+                            ui.strong("Auto-connect on startup:");
+                            ui.checkbox(&mut self.auto_connect, "");
                             ui.end_row();
 
                             // ── Directories ──────────────────────────────────

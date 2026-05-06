@@ -125,6 +125,13 @@ impl MainApp {
         cc.egui_ctx.set_fonts(fonts);
 
         let config = ClientConfig::load(&config_path);
+        let server_addr = server_addr.or_else(|| {
+            if config.auto_connect {
+                format!("{}:{}", config.server_ip, config.server_port).parse().ok()
+            } else {
+                None
+            }
+        });
         let logger = Logger::new(&config.log_dir);
         logger.set_enabled(config.log_enabled);
         logger.set_level(LogLevel::from_str(&config.log_level));

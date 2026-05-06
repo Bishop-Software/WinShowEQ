@@ -45,6 +45,10 @@ pub struct ClientConfig {
     pub log_enabled: bool,
     /// Minimum log level: "debug" | "info" | "warn" | "error"
     pub log_level: String,
+
+    // ── Startup ───────────────────────────────────────────────────────────────
+    /// Connect to the server automatically on startup without showing the Connect dialog.
+    pub auto_connect: bool,
 }
 
 impl Default for ClientConfig {
@@ -72,6 +76,7 @@ impl Default for ClientConfig {
             eq_path: String::new(),
             log_enabled: true,
             log_level: "info".to_owned(),
+            auto_connect: false,
         }
     }
 }
@@ -90,6 +95,7 @@ impl ClientConfig {
         writeln!(f, "Server={}", self.server_ip)?;
         writeln!(f, "Port={}", self.server_port)?;
         writeln!(f, "Rate={}", self.update_delay_ms)?;
+        writeln!(f, "AutoConnect={}", if self.auto_connect { 1 } else { 0 })?;
         writeln!(f)?;
         writeln!(f, "[Directories]")?;
         writeln!(f, "CfgDir={}", self.cfg_dir)?;
@@ -142,6 +148,9 @@ impl ClientConfig {
                 && let Ok(n) = v.parse() {
                     cfg.update_delay_ms = n;
                 }
+            if let Some(v) = winshoweq.get("autoconnect") {
+                cfg.auto_connect = v == "1";
+            }
         }
 
         if let Some(dirs) = sections.get("directories") {
