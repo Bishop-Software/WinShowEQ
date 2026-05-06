@@ -42,7 +42,7 @@ MySEQ is a map overlay tool for EverQuest. The server component today:
 - Streams packed binary records over TCP (default port 5555) to a connected client
 - Supports GUI mode (default), console mode, and debug mode
 
-The Rust client component (88/88 tests passing):
+The Rust client component (93/93 tests passing):
 - Connects to the server over TCP and decodes all packet types
 - Renders EQ zone maps (native `.txt` format) with spawn dots, ground items, mob trails, and annotations
 - Loads all four map file layers: `{zone}.txt` (base) + `{zone}_1.txt`, `{zone}_2.txt`, `{zone}_3.txt` (numbered layers)
@@ -52,9 +52,30 @@ The Rust client component (88/88 tests passing):
 - Persists timers, annotations, filters, and config across sessions
 - Map rendering: applies coordinate transforms to align spawns with map lines (north up, east right)
 - Color-coded spawn dots by con level; mob trails with faded orange dots when enabled
+- Named spawn color overrides via `cfg/spawn_colors.json` (maps spawn name → color key from `cfg/colors.json`)
 - Shift+click on map draws a bearing/distance line from player to clicked point (distance in EQ units, degrees, cardinal direction); ESC or plain click clears it
 - Ctrl+F (or Edit > Find Spawn) opens a search dialog: case-insensitive partial name match, results table (Name/Lvl/Class/X/Y/Z), click a result to jump the map to that spawn; all matches highlighted with a white ring on the map and a cyan accent bar in the spawn list; ESC or close clears highlights
 - Left-click a row in the spawn list to select it: gold ring on the map dot and gold accent bar in the list; click the same row again to deselect
+- Double-click a spawn row to center the map on that spawn
+- Target indicator: orange right-edge bar in spawn list and orange ring on map for the current EQ target
+- Keyboard shortcuts:
+
+| Key           | Action                     |
+|---------------|----------------------------|
+| `+` / `=`     | Zoom in                    |
+| `-`           | Zoom out                   |
+| Scroll wheel  | Zoom in/out (map focused)  |
+| `Home`        | Center map on player       |
+| `F5`          | Toggle Spawns panel        |
+| `F6`          | Toggle Timers panel        |
+| `F7`          | Toggle Ground Items panel  |
+| `T`           | Toggle mob trails          |
+| `Ctrl+F`      | Find Spawn                 |
+| `Shift+click` | Draw bearing/distance line |
+| `ESC`         | Clear bearing line         |
+
+- View menu: panel visibility toggles (Spawns/Timers/Ground Items) with checkbox indicators
+- Map menu: Center on Player, Zoom In/Out, Mob Trails toggle
 - Help menu with About dialog (version, credits, clickable library links)
 
 ## Workspace layout

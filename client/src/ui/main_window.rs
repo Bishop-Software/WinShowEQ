@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,7 +32,7 @@ const TICK_DELAY_MS: u64 = 250;
 const RECONNECT_DELAY_SECS: u64 = 2;
 
 /// Identifies each dockable panel.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Tab {
     Spawns,
     Timers,
@@ -80,6 +81,7 @@ pub struct MainApp {
     options: OptionsDialog,
     about: AboutDialog,
     dock_state: DockState<Tab>,
+    hidden_panels: HashSet<Tab>,
     add_note: AddNoteDialog,
     add_timer: AddTimerDialog,
     pending_spawn_action: Option<SpawnAction>,
@@ -165,6 +167,7 @@ impl MainApp {
             options,
             about,
             dock_state: build_dock_state(),
+            hidden_panels: HashSet::new(),
             add_note: AddNoteDialog::default(),
             add_timer: AddTimerDialog::default(),
             pending_spawn_action: None,
@@ -237,6 +240,20 @@ impl MainApp {
                 self.add_note.text.clear();
                 self.add_note.override_pos = Some((x, y, z));
             }
+        }
+    }
+
+    /// Show or hide a panel tab. The Map tab is never hidden.
+    fn toggle_panel(&mut self, tab: Tab) {
+        if tab == Tab::Map {
+            return;
+        }
+        if let Some(path) = self.dock_state.find_tab(&tab) {
+            self.dock_state.remove_tab(path);
+            self.hidden_panels.insert(tab);
+        } else {
+            self.hidden_panels.remove(&tab);
+            self.dock_state.push_to_first_leaf(tab);
         }
     }
 }
@@ -356,6 +373,36 @@ impl eframe::App for MainApp {
         // Ctrl+F opens spawn search
         if ctx.input(|i| i.key_pressed(egui::Key::F) && i.modifiers.ctrl) {
             self.search.open();
+        }
+
+        // Global keyboard shortcuts
+        let (zoom_in, zoom_out, center_player, f5, f6, f7, toggle_trails) = ctx.input(|i| (
+            (i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals)) && !i.modifiers.any(),
+            i.key_pressed(egui::Key::Minus) && !i.modifiers.any(),
+            i.key_pressed(egui::Key::Home),
+            i.key_pressed(egui::Key::F5),
+            i.key_pressed(egui::Key::F6),
+            i.key_pressed(egui::Key::F7),
+            i.key_pressed(egui::Key::T) && !i.modifiers.any(),
+        ));
+        if zoom_in {
+            self.map_pane.state.zoom = (self.map_pane.state.zoom * crate::map_canvas::ZOOM_STEP)
+                .clamp(crate::map_canvas::ZOOM_MIN, crate::map_canvas::ZOOM_MAX);
+        }
+        if zoom_out {
+            self.map_pane.state.zoom = (self.map_pane.state.zoom / crate::map_canvas::ZOOM_STEP)
+                .clamp(crate::map_canvas::ZOOM_MIN, crate::map_canvas::ZOOM_MAX);
+        }
+        if center_player {
+            self.map_pane.state.pan = egui::Vec2::ZERO;
+        }
+        if f5 { self.toggle_panel(Tab::Spawns); }
+        if f6 { self.toggle_panel(Tab::Timers); }
+        if f7 { self.toggle_panel(Tab::Ground); }
+        if toggle_trails {
+            let mut data = self.data.lock().unwrap();
+            data.trails_enabled = !data.trails_enabled;
+            self.options.trails_enabled = data.trails_enabled;
         }
 
         // Search dialog — runs outside the DockArea lock so it can mutate AppData directly
@@ -506,8 +553,45 @@ impl eframe::App for MainApp {
                 }
             });
             ui.menu_button("View", |ui| {
+                let mut spawns_visible = !self.hidden_panels.contains(&Tab::Spawns);
+                if ui.checkbox(&mut spawns_visible, "Spawns  F5").clicked() {
+                    self.toggle_panel(Tab::Spawns);
+                    ui.close();
+                }
+                let mut timers_visible = !self.hidden_panels.contains(&Tab::Timers);
+                if ui.checkbox(&mut timers_visible, "Timers  F6").clicked() {
+                    self.toggle_panel(Tab::Timers);
+                    ui.close();
+                }
+                let mut ground_visible = !self.hidden_panels.contains(&Tab::Ground);
+                if ui.checkbox(&mut ground_visible, "Ground Items  F7").clicked() {
+                    self.toggle_panel(Tab::Ground);
+                    ui.close();
+                }
             });
             ui.menu_button("Map", |ui| {
+                if ui.button("Center on Player  Home").clicked() {
+                    self.map_pane.state.pan = egui::Vec2::ZERO;
+                    ui.close();
+                }
+                if ui.button("Zoom In  +").clicked() {
+                    self.map_pane.state.zoom = (self.map_pane.state.zoom * crate::map_canvas::ZOOM_STEP)
+                        .clamp(crate::map_canvas::ZOOM_MIN, crate::map_canvas::ZOOM_MAX);
+                    ui.close();
+                }
+                if ui.button("Zoom Out  −").clicked() {
+                    self.map_pane.state.zoom = (self.map_pane.state.zoom / crate::map_canvas::ZOOM_STEP)
+                        .clamp(crate::map_canvas::ZOOM_MIN, crate::map_canvas::ZOOM_MAX);
+                    ui.close();
+                }
+                ui.separator();
+                let mut trails_on = self.data.lock().unwrap().trails_enabled;
+                if ui.checkbox(&mut trails_on, "Mob Trails  T").clicked() {
+                    let mut data = self.data.lock().unwrap();
+                    data.trails_enabled = !data.trails_enabled;
+                    self.options.trails_enabled = data.trails_enabled;
+                    ui.close();
+                }
             });
             ui.menu_button("Help", |ui| {
                 if ui.button("About…").clicked() {

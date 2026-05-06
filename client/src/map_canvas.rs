@@ -8,9 +8,9 @@ use crate::map_reader::MapData;
 const SPAWN_RADIUS: f32 = 4.0;
 const SELF_RADIUS: f32 = 6.0;
 const GROUND_RADIUS: f32 = 4.0;
-const ZOOM_STEP: f32 = 1.12;
-const ZOOM_MIN: f32 = 0.04;
-const ZOOM_MAX: f32 = 20.0;
+pub(crate) const ZOOM_STEP: f32 = 1.12;
+pub(crate) const ZOOM_MIN: f32 = 0.04;
+pub(crate) const ZOOM_MAX: f32 = 20.0;
 
 /// Persistent camera state for the map canvas.
 pub struct MapState {
