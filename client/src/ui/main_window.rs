@@ -25,6 +25,7 @@ use crate::ui::map_pane::MapPane;
 use crate::ui::options::OptionsDialog;
 use crate::ui::search_dialog::SearchDialog;
 use crate::filters::FilterCategory;
+use crate::map_canvas::MapAction;
 use crate::ui::spawn_list::{self, SpawnAction};
 use crate::ui::timer_list;
 
@@ -96,6 +97,7 @@ pub struct MainApp {
     add_note: AddNoteDialog,
     add_timer: AddTimerDialog,
     pending_spawn_action: Option<SpawnAction>,
+    pending_map_action: Option<MapAction>,
     add_filter_scope: AddFilterScopeDialog,
     stop: Arc<AtomicBool>,
     server_addr: Arc<Mutex<Option<SocketAddr>>>,
@@ -192,6 +194,7 @@ impl MainApp {
             add_note: AddNoteDialog::default(),
             add_timer: AddTimerDialog::default(),
             pending_spawn_action: None,
+            pending_map_action: None,
             add_filter_scope: AddFilterScopeDialog::default(),
             stop,
             server_addr: addr_cell,
@@ -313,6 +316,7 @@ struct WinSeqTabViewer<'a> {
     ground_sort_column: &'a mut Option<usize>,
     ground_sort_ascending: &'a mut bool,
     spawn_action: &'a mut Option<SpawnAction>,
+    map_action: &'a mut Option<MapAction>,
 }
 
 impl<'a> TabViewer for WinSeqTabViewer<'a> {
@@ -350,7 +354,9 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
             }
             Tab::Map => {
                 let data = self.data.lock().unwrap();
-                self.map_pane.show(ui, &data);
+                if let Some(action) = self.map_pane.show(ui, &data) {
+                    *self.map_action = Some(action);
+                }
             }
         }
     }
@@ -704,12 +710,25 @@ impl eframe::App for MainApp {
             ground_sort_column: &mut self.ground_sort_column,
             ground_sort_ascending: &mut self.ground_sort_ascending,
             spawn_action: &mut self.pending_spawn_action,
+            map_action: &mut self.pending_map_action,
         };
         DockArea::new(&mut self.dock_state).show_inside(ui, &mut viewer);
 
         // Handle any spawn context menu action from this frame
         if let Some(action) = self.pending_spawn_action.take() {
             self.handle_spawn_action(action);
+        }
+
+        // Handle any map context menu action from this frame
+        if let Some(action) = self.pending_map_action.take() {
+            match action {
+                MapAction::AddNoteAt { eq_x, eq_y } => {
+                    let eq_z = self.data.lock().unwrap().player_pos().map(|(_, _, z)| z).unwrap_or(0.0);
+                    self.add_note.open = true;
+                    self.add_note.text.clear();
+                    self.add_note.override_pos = Some((eq_x, eq_y, eq_z));
+                }
+            }
         }
     }
 }

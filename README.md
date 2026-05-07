@@ -56,6 +56,7 @@ The Rust client component (93/93 tests passing):
 - Color-coded spawn dots by con level; mob trails with faded orange dots when enabled
 - Named spawn color overrides via `cfg/spawn_colors.json` (maps spawn name → color key from `cfg/colors.json`)
 - Shift+click on map draws a bearing/distance line from player to clicked point (distance in EQ units, degrees, cardinal direction); ESC or plain click clears it
+- Right-click on map canvas opens a context menu: Add Map Note here (pre-fills position), Center map here, Clear bearing line (only shown when active)
 - Ctrl+F (or Edit > Find Spawn) opens a search dialog: case-insensitive partial name match, results table (Name/Lvl/Class/X/Y/Z), click a result to jump the map to that spawn; all matches highlighted with a white ring on the map and a cyan accent bar in the spawn list; ESC or close clears highlights
 - Left-click a row in the spawn list to select it: gold ring on the map dot and gold accent bar in the list; click the same row again to deselect
 - Double-click a spawn row to center the map on that spawn

@@ -12,6 +12,12 @@ pub(crate) const ZOOM_STEP: f32 = 1.12;
 pub(crate) const ZOOM_MIN: f32 = 0.04;
 pub(crate) const ZOOM_MAX: f32 = 20.0;
 
+/// Action produced by the map canvas context menu, to be handled by the caller.
+pub enum MapAction {
+    /// User chose "Add Map Note here" — EQ-space coordinates of the right-click point.
+    AddNoteAt { eq_x: f32, eq_y: f32 },
+}
+
 /// Persistent camera state for the map canvas.
 pub struct MapState {
     pub zoom: f32,
@@ -20,11 +26,19 @@ pub struct MapState {
     pub bearing_target: Option<(f32, f32)>,
     /// If set, the view snaps to center on these map-space coords on the next frame.
     pub pending_center: Option<(f32, f32)>,
+    /// Map-space position saved when the right-click context menu opens.
+    context_menu_pos: Option<(f32, f32)>,
 }
 
 impl Default for MapState {
     fn default() -> Self {
-        Self { zoom: 1.0, pan: Vec2::ZERO, bearing_target: None, pending_center: None }
+        Self {
+            zoom: 1.0,
+            pan: Vec2::ZERO,
+            bearing_target: None,
+            pending_center: None,
+            context_menu_pos: None,
+        }
     }
 }
 
@@ -40,86 +54,120 @@ impl<'a> MapCon<'a> {
     }
 
     /// `z_filter`: if `Some((center_z, range))`, spawns with `|z - center| > range` are hidden.
-    pub fn show(self, ui: &mut Ui, z_filter: Option<(f32, f32)>) {
+    /// Returns `Some(MapAction)` if the context menu produced an action this frame.
+    pub fn show(self, ui: &mut Ui, z_filter: Option<(f32, f32)>) -> Option<MapAction> {
+        let MapCon { data, state } = self;
+
         let size = ui.available_size();
         let (response, painter) = ui.allocate_painter(size, Sense::click_and_drag());
 
         // Drag to pan
         if response.dragged() {
-            self.state.pan += response.drag_delta();
+            state.pan += response.drag_delta();
         }
 
         // Scroll to zoom — guard with hovered() so scroll in other panels doesn't zoom the map
         let scroll = ui.input(|i| i.smooth_scroll_delta.y);
         if scroll != 0.0 && response.hovered() {
             let factor = if scroll > 0.0 { ZOOM_STEP } else { 1.0 / ZOOM_STEP };
-            self.state.zoom = (self.state.zoom * factor).clamp(ZOOM_MIN, ZOOM_MAX);
+            state.zoom = (state.zoom * factor).clamp(ZOOM_MIN, ZOOM_MAX);
         }
 
         // Snap view to a search result if requested.
-        if let Some((wx, wy)) = self.state.pending_center.take() {
-            let focus = self.focus_world();
-            self.state.pan.x = -(wx - focus.0) * self.state.zoom;
-            self.state.pan.y = (wy - focus.1) * self.state.zoom;
+        if let Some((wx, wy)) = state.pending_center.take() {
+            let focus = focus_world(data);
+            state.pan.x = -(wx - focus.0) * state.zoom;
+            state.pan.y = (wy - focus.1) * state.zoom;
         }
 
         // Shift+left-click → set bearing target; plain click or ESC → clear it.
         let (shift_held, esc_pressed) = ui.input(|i| (i.modifiers.shift, i.key_pressed(egui::Key::Escape)));
         if esc_pressed {
-            self.state.bearing_target = None;
+            state.bearing_target = None;
         } else if response.clicked_by(egui::PointerButton::Primary) {
             if shift_held {
                 if let Some(screen_pos) = response.interact_pointer_pos() {
                     let center = response.rect.center();
-                    let focus = self.focus_world();
-                    let wx = focus.0 + (screen_pos.x - center.x - self.state.pan.x) / self.state.zoom;
-                    let wy = focus.1 + (center.y + self.state.pan.y - screen_pos.y) / self.state.zoom;
-                    self.state.bearing_target = Some((wx, wy));
+                    let focus = focus_world(data);
+                    let wx = focus.0 + (screen_pos.x - center.x - state.pan.x) / state.zoom;
+                    let wy = focus.1 + (center.y + state.pan.y - screen_pos.y) / state.zoom;
+                    state.bearing_target = Some((wx, wy));
                 }
             } else {
-                self.state.bearing_target = None;
+                state.bearing_target = None;
             }
+        }
+
+        // Right-click: save map-space position for the context menu.
+        if response.secondary_clicked() && let Some(screen_pos) = response.interact_pointer_pos() {
+            let center = response.rect.center();
+            let focus = focus_world(data);
+            let wx = focus.0 + (screen_pos.x - center.x - state.pan.x) / state.zoom;
+            let wy = focus.1 + (center.y + state.pan.y - screen_pos.y) / state.zoom;
+            state.context_menu_pos = Some((wx, wy));
         }
 
         painter.rect_filled(response.rect, 0.0, Color32::BLACK);
 
-        let focus = self.focus_world();
+        let focus = focus_world(data);
         let ctx = DrawCtx {
             painter: &painter,
             rect: response.rect,
             center: response.rect.center(),
             focus,
-            zoom: self.state.zoom,
-            pan: self.state.pan,
+            zoom: state.zoom,
+            pan: state.pan,
         };
 
-        draw_map_lines(&ctx, &self.data.map);
-        draw_labels(&ctx, &self.data.map);
-        draw_mob_trails(&ctx, self.data);
-        draw_ground_items(&ctx, self.data, z_filter);
-        draw_spawns(&ctx, self.data, z_filter);
-        draw_self(&ctx, self.data);
-        draw_annotations(&ctx, self.data);
-        if let Some(target) = self.state.bearing_target {
-            draw_bearing_line(&ctx, self.data, target);
+        draw_map_lines(&ctx, &data.map);
+        draw_labels(&ctx, &data.map);
+        draw_mob_trails(&ctx, data);
+        draw_ground_items(&ctx, data, z_filter);
+        draw_spawns(&ctx, data, z_filter);
+        draw_self(&ctx, data);
+        draw_annotations(&ctx, data);
+        if let Some(target) = state.bearing_target {
+            draw_bearing_line(&ctx, data, target);
         }
-        draw_hud(&ctx, ui, self.data);
+        draw_hud(&ctx, ui, data);
 
         if let Some(hover_pos) = response.hover_pos() {
-            draw_hover_tooltip(ui, &ctx, self.data, hover_pos, z_filter);
+            draw_hover_tooltip(ui, &ctx, data, hover_pos, z_filter);
         }
+
+        // Context menu (shown on right-click, persists until dismissed).
+        let mut action: Option<MapAction> = None;
+        response.context_menu(|ui| {
+            if let Some((wx, wy)) = state.context_menu_pos {
+                if ui.button("Add Map Note here…").clicked() {
+                    action = Some(MapAction::AddNoteAt { eq_x: -wx, eq_y: wy });
+                    ui.close();
+                }
+                if ui.button("Center map here").clicked() {
+                    state.pending_center = Some((wx, wy));
+                    ui.close();
+                }
+            }
+            if state.bearing_target.is_some() && ui.button("Clear bearing line").clicked() {
+                state.bearing_target = None;
+                ui.close();
+            }
+        });
+
+        action
     }
 
-    /// World-space focus point (map coords) — the player's position, or origin.
-    fn focus_world(&self) -> (f32, f32) {
-        self.data.self_id
-            .and_then(|id| self.data.spawns.get(id))
-            .map(|s| eq_to_map(s.x, s.y))
-            .unwrap_or((0.0, 0.0))
-    }
 }
 
 /// Transform EQ spawn coordinates to map coordinate space.
+/// Player map-space focus point — the player's position in map coords, or origin.
+fn focus_world(data: &AppData) -> (f32, f32) {
+    data.self_id
+        .and_then(|id| data.spawns.get(id))
+        .map(|s| eq_to_map(s.x, s.y))
+        .unwrap_or((0.0, 0.0))
+}
+
 /// Negate X only: wire spawn.X = -file_x (opposite sign from map file first coord).
 /// Wire spawn.Y = -file_y which matches MapLine.y (map_reader negates Y on load), so Y is unchanged.
 #[inline]

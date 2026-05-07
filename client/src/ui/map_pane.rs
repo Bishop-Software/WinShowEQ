@@ -1,7 +1,7 @@
 use egui::Ui;
 
 use crate::data::AppData;
-use crate::map_canvas::{MapCon, MapState};
+use crate::map_canvas::{MapAction, MapCon, MapState};
 
 /// Wrapper around `MapCon` that owns the camera state and Z-filter controls.
 pub struct MapPane {
@@ -21,7 +21,7 @@ impl Default for MapPane {
 }
 
 impl MapPane {
-    pub fn show(&mut self, ui: &mut Ui, data: &AppData) {
+    pub fn show(&mut self, ui: &mut Ui, data: &AppData) -> Option<MapAction> {
         // Controls strip at the top of the panel.
         ui.horizontal(|ui| {
             ui.checkbox(&mut self.z_filter_enabled, "Z Filter");
@@ -53,6 +53,6 @@ impl MapPane {
             None
         };
 
-        MapCon::new(data, &mut self.state).show(ui, z_filter);
+        MapCon::new(data, &mut self.state).show(ui, z_filter)
     }
 }
