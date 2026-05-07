@@ -1,6 +1,5 @@
 param(
     [switch]$SkipBuild,
-    [switch]$IncludeClient,
     [switch]$StageOnly,
     [string]$Version,
     [string]$InnoSetupCompilerPath
@@ -40,9 +39,15 @@ function Invoke-NativeCommand {
     )
 
     Write-Host "`n> $FilePath $($Arguments -join ' ')" -ForegroundColor Cyan
-    $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -NoNewWindow -Wait -PassThru
-    if ($process.ExitCode -ne 0) {
-        throw "Command failed with exit code $($process.ExitCode): $FilePath"
+    Push-Location $WorkingDirectory
+    try {
+        & $FilePath $Arguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "Command failed with exit code ${LASTEXITCODE}: $FilePath"
+        }
+    }
+    finally {
+        Pop-Location
     }
 }
 
@@ -93,22 +98,19 @@ if (-not $Version) {
 Write-Host "Preparing WinShowEQ installer assets..." -ForegroundColor Green
 Write-Host " - Repo root: $repoRoot"
 Write-Host " - Version:   $Version"
-Write-Host " - Client:    $IncludeClient"
 Write-Host " - Stage dir: $stageRoot"
 Write-Host " - Output:    $outputRoot"
 
 if (-not $SkipBuild) {
     Invoke-NativeCommand -FilePath "cargo" -Arguments @("build", "--release", "-p", "winshoweq-server") -WorkingDirectory $repoRoot
-    if ($IncludeClient) {
-        Invoke-NativeCommand -FilePath "cargo" -Arguments @("build", "--release", "-p", "winshoweq-client") -WorkingDirectory $repoRoot
-    }
+    Invoke-NativeCommand -FilePath "cargo" -Arguments @("build", "--release", "-p", "winshoweq-client") -WorkingDirectory $repoRoot
 }
 
 if (-not (Test-Path $serverExe)) {
     throw "Missing server binary: $serverExe"
 }
 
-if ($IncludeClient -and -not (Test-Path $clientExe)) {
+if (-not (Test-Path $clientExe)) {
     throw "Missing client binary: $clientExe"
 }
 
@@ -125,21 +127,16 @@ Copy-Item -Path (Join-Path $repoRoot "README.md") -Destination (Join-Path $stage
 Copy-Item -Path (Join-Path $repoRoot "LICENSE") -Destination (Join-Path $stageRoot "docs\LICENSE.txt")
 Copy-Item -Path (Join-Path $installerDir "README.md") -Destination (Join-Path $stageRoot "docs\INSTALLER-README.md")
 
-if ($IncludeClient) {
-    Copy-Item -Path $clientExe -Destination (Join-Path $stageRoot "bin\WinShowEQClient.exe")
-    Copy-Item -Path (Join-Path $repoRoot "client\client.ini.template") -Destination (Join-Path $stageRoot "config\client.ini")
-    $null = New-Item -ItemType Directory -Path (Join-Path $stageRoot "cfg")
-    Copy-Item -Path (Join-Path $repoRoot "client\cfg\*") -Destination (Join-Path $stageRoot "cfg") -Recurse
-}
+Copy-Item -Path $clientExe -Destination (Join-Path $stageRoot "bin\WinShowEQClient.exe")
+Copy-Item -Path (Join-Path $repoRoot "client\client.ini.template") -Destination (Join-Path $stageRoot "config\client.ini")
+$null = New-Item -ItemType Directory -Path (Join-Path $stageRoot "cfg")
+Copy-Item -Path (Join-Path $repoRoot "client\cfg\*") -Destination (Join-Path $stageRoot "cfg") -Recurse
 
 Write-Host "`nStaging complete." -ForegroundColor Green
 Write-Host " - Server exe: $(Join-Path $stageRoot 'bin\WinShowEQServer.exe')"
+Write-Host " - Client exe: $(Join-Path $stageRoot 'bin\WinShowEQClient.exe')"
 Write-Host " - Config dir: $(Join-Path $stageRoot 'config')"
-if ($IncludeClient) {
-    Write-Host " - Client exe: $(Join-Path $stageRoot 'bin\WinShowEQClient.exe')"
-    Write-Host " - Client ini: $(Join-Path $stageRoot 'config\client.ini')"
-    Write-Host " - Client cfg: $(Join-Path $stageRoot 'cfg')"
-}
+Write-Host " - Client cfg: $(Join-Path $stageRoot 'cfg')"
 
 if ($StageOnly) {
     Write-Host "`n-StageOnly specified; skipping Inno Setup compilation." -ForegroundColor Yellow
@@ -150,11 +147,7 @@ $compilerPath = Resolve-InnoSetupCompiler -ExplicitPath $InnoSetupCompilerPath
 
 Push-Location $installerDir
 try {
-    $compilerArgs = @("/DAppVersion=$Version")
-    if ($IncludeClient) {
-        $compilerArgs += "/DIncludeClient=1"
-    }
-    $compilerArgs += "WinShowEQ.iss"
+    $compilerArgs = @("/DAppVersion=$Version", "WinShowEQ.iss")
 
     Invoke-NativeCommand -FilePath $compilerPath -Arguments $compilerArgs -WorkingDirectory $installerDir
 }

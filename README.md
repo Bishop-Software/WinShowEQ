@@ -2,7 +2,7 @@
 
 Rust rewrite of the [MySEQ](https://sourceforge.net/projects/seq/) EverQuest map overlay tool.
 This repo contains both the **server** (reads EQ memory and streams data over TCP) and the
-future **client** (planned Rust overlay) in a single workspace.
+**client** (Rust map overlay) in a single workspace.
 
 ## Status
 
@@ -29,8 +29,8 @@ future **client** (planned Rust overlay) in a single workspace.
 
 Complete migration plans and issue tracking are available on GitHub:
 
-- [**Server Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/1): M1–M6 complete, M7 in progress (issues #9–#15)
-- [**Client Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/2): C1–C7 complete, C8 in progress (issues #1–#8 and #23; #2 and #3 closed)
+- [**Server Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/1): M1–M7 complete (issues #9–#15)
+- [**Client Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/2): C1–C8 complete (issues #1–#8, #16–#23)
 
 See [CLAUDE.md](CLAUDE.md) for developer guidance and technical details.
 
@@ -42,7 +42,7 @@ MySEQ is a map overlay tool for EverQuest. The server component today:
 - Streams packed binary records over TCP (default port 5555) to a connected client
 - Supports GUI mode (default), console mode, and debug mode
 
-The Rust client component (93/93 tests passing):
+The Rust client component (119/119 tests passing):
 - Connects to the server over TCP and decodes all packet types
 - Renders EQ zone maps (native `.txt` format) with spawn dots, ground items, mob trails, and annotations
 - Loads all four map file layers: `{zone}.txt` (base) + `{zone}_1.txt`, `{zone}_2.txt`, `{zone}_3.txt` (numbered layers)
@@ -57,6 +57,7 @@ The Rust client component (93/93 tests passing):
 - Named spawn color overrides via `cfg/spawn_colors.json` (maps spawn name → color key from `cfg/colors.json`)
 - Shift+click on map draws a bearing/distance line from player to clicked point (distance in EQ units, degrees, cardinal direction); ESC or plain click clears it
 - Right-click on map canvas opens a context menu: Add Map Note here (pre-fills position), Center map here, Clear bearing line (only shown when active)
+- Quick action toolbar below the menu bar: Connect/Disconnect toggle (connects directly using configured host/port), Find Spawn, and Options — each with a PNG icon and hover tooltip
 - Ctrl+F (or Edit > Find Spawn) opens a search dialog: case-insensitive partial name match, results table (Name/Lvl/Class/X/Y/Z), click a result to jump the map to that spawn; all matches highlighted with a white ring on the map and a cyan accent bar in the spawn list; ESC or close clears highlights
 - Left-click a row in the spawn list to select it: gold ring on the map dot and gold accent bar in the list; click the same row again to deselect
 - Double-click a spawn row to center the map on that spawn
@@ -288,8 +289,9 @@ encoding behavior.
 ## Installer
 
 A Windows installer is available via [Inno Setup 6](https://jrsoftware.org/isinfo.php).
-It installs `WinShowEQServer.exe` to `%ProgramFiles%\WinShowEQ\bin` and seeds the default
-INI files into `%ProgramData%\WinShowEQ` (preserved across upgrades and uninstalls).
+It installs both `WinShowEQServer.exe` and `WinShowEQClient.exe` to `%ProgramFiles%\WinShowEQ\bin`
+and seeds config files into `%ProgramData%\WinShowEQ` (preserved across upgrades and uninstalls).
+The default install type is **Server + Client**.
 
 ```powershell
 # Build release and package installer
@@ -300,7 +302,7 @@ pwsh -File .\installer\build-installer.ps1 -StageOnly
 ```
 
 Output lands in `target/installer-output/`. See [`installer/README.md`](installer/README.md)
-for full options including `-SkipBuild`, `-IncludeClient`, and `-InnoSetupCompilerPath`.
+for full options including `-SkipBuild`, `-Version`, and `-InnoSetupCompilerPath`.
 
 ## License
 

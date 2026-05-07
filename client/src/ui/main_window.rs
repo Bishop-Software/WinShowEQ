@@ -218,10 +218,10 @@ impl MainApp {
         if !self.prev_zone.is_empty() {
             let data = self.data.lock().unwrap();
             let _ = data.timers.save(&self.prev_zone, &self.config.timer_dir);
-            let _ = data.annotations.save(&self.prev_zone, &self.config.cfg_dir);
+            let _ = data.annotations.save(&self.prev_zone, &self.config.annotations_dir);
         }
         let new_timers = TimerStore::load(&new_zone, &self.config.timer_dir);
-        let new_annotations = AnnotationStore::load(&new_zone, &self.config.cfg_dir);
+        let new_annotations = AnnotationStore::load(&new_zone, &self.config.annotations_dir);
         // Zone names from EQ are lowercase short names; map files use the same convention.
         let new_map = map_reader::load_zone(
             std::path::Path::new(&self.config.map_dir),
@@ -384,7 +384,7 @@ impl eframe::App for MainApp {
             if !self.prev_zone.is_empty() {
                 let data = self.data.lock().unwrap();
                 let _ = data.timers.save(&self.prev_zone, &self.config.timer_dir);
-                let _ = data.annotations.save(&self.prev_zone, &self.config.cfg_dir);
+                let _ = data.annotations.save(&self.prev_zone, &self.config.annotations_dir);
             }
             self.save_config();
             self.stop.store(true, Ordering::Relaxed);
@@ -714,10 +714,9 @@ impl eframe::App for MainApp {
                 let img = egui::Image::new(egui::include_image!("../../assets/disconnected.png"))
                     .fit_to_exact_size(egui::vec2(24.0, 24.0));
                 let tooltip = format!("Connect to {}:{}", self.config.server_ip, self.config.server_port);
-                if ui.add(egui::Button::image(img)).on_hover_text(tooltip).clicked() {
-                    if let Ok(addr) = format!("{}:{}", self.config.server_ip, self.config.server_port).parse() {
-                        *self.server_addr.lock().unwrap() = Some(addr);
-                    }
+                if ui.add(egui::Button::image(img)).on_hover_text(tooltip).clicked()
+                    && let Ok(addr) = format!("{}:{}", self.config.server_ip, self.config.server_port).parse() {
+                    *self.server_addr.lock().unwrap() = Some(addr);
                 }
             }
             ui.separator();

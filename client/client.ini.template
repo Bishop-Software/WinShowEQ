@@ -4,11 +4,12 @@ Port=5555
 UpdateDelayMs=100
 
 [Directories]
-ConfigDir=
-MapDir=
-LogDir=
-FilterDir=
-MapDir=
+CfgDir=cfg
+TimerDir=timers
+AnnotationsDir=annotations
+LogDir=logs
+FilterDir=filters
+MapDir=maps
 
 [Alerts]
 DangerMode=speech

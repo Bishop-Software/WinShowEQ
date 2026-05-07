@@ -4,6 +4,18 @@ use crate::logger::LogLevel;
 const ALERT_MODES: &[&str] = &["none", "beep", "speech", "sound"];
 const AUDIO_EXTENSIONS: &[&str] = &["wav", "flac", "ogg", "mp3"];
 
+/// Returns the parent directory of a sound file path, or "." if unset/invalid.
+fn sound_dir(path: &str) -> std::path::PathBuf {
+    if path.is_empty() {
+        return std::path::PathBuf::from(".");
+    }
+    std::path::Path::new(path)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+}
+
 pub struct OptionsDialog {
     pub open: bool,
     pub trails_enabled: bool,
@@ -17,6 +29,7 @@ pub struct OptionsDialog {
     // Directories
     cfg_dir: String,
     timer_dir: String,
+    annotations_dir: String,
     log_dir: String,
     filter_dir: String,
     map_dir: String,
@@ -52,6 +65,7 @@ impl OptionsDialog {
             auto_connect: cfg.auto_connect,
             cfg_dir: cfg.cfg_dir.clone(),
             timer_dir: cfg.timer_dir.clone(),
+            annotations_dir: cfg.annotations_dir.clone(),
             log_dir: cfg.log_dir.clone(),
             filter_dir: cfg.filter_dir.clone(),
             map_dir: cfg.map_dir.clone(),
@@ -80,6 +94,7 @@ impl OptionsDialog {
         self.auto_connect = cfg.auto_connect;
         self.cfg_dir = cfg.cfg_dir.clone();
         self.timer_dir = cfg.timer_dir.clone();
+        self.annotations_dir = cfg.annotations_dir.clone();
         self.log_dir = cfg.log_dir.clone();
         self.filter_dir = cfg.filter_dir.clone();
         self.map_dir = cfg.map_dir.clone();
@@ -124,6 +139,7 @@ impl OptionsDialog {
                                 update_delay_ms: self.update_delay.parse().unwrap_or(250),
                                 cfg_dir: self.cfg_dir.clone(),
                                 timer_dir: self.timer_dir.clone(),
+                                annotations_dir: self.annotations_dir.clone(),
                                 log_dir: self.log_dir.clone(),
                                 filter_dir: self.filter_dir.clone(),
                                 map_dir: self.map_dir.clone(),
@@ -180,7 +196,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.cfg_dir);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.cfg_dir).pick_folder() {
                                         self.cfg_dir = path.display().to_string();
                                     }
                             });
@@ -190,8 +206,18 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.timer_dir);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.timer_dir).pick_folder() {
                                         self.timer_dir = path.display().to_string();
+                                    }
+                            });
+                            ui.end_row();
+
+                            ui.strong("Annotations path:");
+                            ui.horizontal(|ui| {
+                                ui.text_edit_singleline(&mut self.annotations_dir);
+                                if ui.button("Browse…").clicked()
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.annotations_dir).pick_folder() {
+                                        self.annotations_dir = path.display().to_string();
                                     }
                             });
                             ui.end_row();
@@ -200,7 +226,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.log_dir);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.log_dir).pick_folder() {
                                         self.log_dir = path.display().to_string();
                                     }
                             });
@@ -210,7 +236,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.filter_dir);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.filter_dir).pick_folder() {
                                         self.filter_dir = path.display().to_string();
                                     }
                             });
@@ -220,7 +246,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.map_dir);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.map_dir).pick_folder() {
                                         self.map_dir = path.display().to_string();
                                     }
                             });
@@ -252,10 +278,9 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.danger_sound);
                                 if ui.button("Browse…").clicked() {
-                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file");
-                                    for ext in AUDIO_EXTENSIONS {
-                                        dialog = dialog.add_filter(*ext, &[*ext]);
-                                    }
+                                    let start = sound_dir(&self.danger_sound);
+                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file").set_directory(start);
+                                    for ext in AUDIO_EXTENSIONS { dialog = dialog.add_filter(*ext, &[*ext]); }
                                     if let Some(path) = dialog.pick_file() {
                                         self.danger_sound = path.display().to_string();
                                     }
@@ -277,10 +302,9 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.caution_sound);
                                 if ui.button("Browse…").clicked() {
-                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file");
-                                    for ext in AUDIO_EXTENSIONS {
-                                        dialog = dialog.add_filter(*ext, &[*ext]);
-                                    }
+                                    let start = sound_dir(&self.caution_sound);
+                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file").set_directory(start);
+                                    for ext in AUDIO_EXTENSIONS { dialog = dialog.add_filter(*ext, &[*ext]); }
                                     if let Some(path) = dialog.pick_file() {
                                         self.caution_sound = path.display().to_string();
                                     }
@@ -302,10 +326,9 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.hunt_sound);
                                 if ui.button("Browse…").clicked() {
-                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file");
-                                    for ext in AUDIO_EXTENSIONS {
-                                        dialog = dialog.add_filter(*ext, &[*ext]);
-                                    }
+                                    let start = sound_dir(&self.hunt_sound);
+                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file").set_directory(start);
+                                    for ext in AUDIO_EXTENSIONS { dialog = dialog.add_filter(*ext, &[*ext]); }
                                     if let Some(path) = dialog.pick_file() {
                                         self.hunt_sound = path.display().to_string();
                                     }
@@ -327,10 +350,9 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.alert_sound);
                                 if ui.button("Browse…").clicked() {
-                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file");
-                                    for ext in AUDIO_EXTENSIONS {
-                                        dialog = dialog.add_filter(*ext, &[*ext]);
-                                    }
+                                    let start = sound_dir(&self.alert_sound);
+                                    let mut dialog = rfd::FileDialog::new().set_title("Select sound file").set_directory(start);
+                                    for ext in AUDIO_EXTENSIONS { dialog = dialog.add_filter(*ext, &[*ext]); }
                                     if let Some(path) = dialog.pick_file() {
                                         self.alert_sound = path.display().to_string();
                                     }
@@ -385,7 +407,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.eq_path);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.eq_path).pick_folder() {
                                         self.eq_path = path.display().to_string();
                                     }
                             });

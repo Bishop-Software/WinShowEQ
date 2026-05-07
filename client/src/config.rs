@@ -15,9 +15,11 @@ pub struct ClientConfig {
     pub cfg_dir: String,
     /// Directory for respawn timer files.
     pub timer_dir: String,
+    /// Directory for per-zone annotation files.
+    pub annotations_dir: String,
     /// Directory for dated log files.
     pub log_dir: String,
-    /// Directory for filter XML files (often same as cfg_dir).
+    /// Directory for filter XML files (dev default: "cfg"; installed default: "filters").
     pub filter_dir: String,
     /// Directory containing EQ native map files ({zone}_1.txt etc.).
     pub map_dir: String,
@@ -59,6 +61,7 @@ impl Default for ClientConfig {
             update_delay_ms: 250,
             cfg_dir: "cfg".to_owned(),
             timer_dir: "timers".to_owned(),
+            annotations_dir: "annotations".to_owned(),
             log_dir: "logs".to_owned(),
             filter_dir: "cfg".to_owned(),
             map_dir: "maps".to_owned(),
@@ -100,6 +103,7 @@ impl ClientConfig {
         writeln!(f, "[Directories]")?;
         writeln!(f, "CfgDir={}", self.cfg_dir)?;
         writeln!(f, "TimerDir={}", self.timer_dir)?;
+        writeln!(f, "AnnotationsDir={}", self.annotations_dir)?;
         writeln!(f, "LogDir={}", self.log_dir)?;
         writeln!(f, "FilterDir={}", self.filter_dir)?;
         writeln!(f, "MapDir={}", self.map_dir)?;
@@ -159,6 +163,9 @@ impl ClientConfig {
             }
             if let Some(v) = dirs.get("timerdir") {
                 cfg.timer_dir = v.clone();
+            }
+            if let Some(v) = dirs.get("annotationsdir") {
+                cfg.annotations_dir = v.clone();
             }
             if let Some(v) = dirs.get("logdir") {
                 cfg.log_dir = v.clone();
