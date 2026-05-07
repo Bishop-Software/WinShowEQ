@@ -28,7 +28,7 @@ impl FilterCategory {
             Self::Hunt => "hunt",
             Self::Caution => "caution",
             Self::Danger => "danger",
-            Self::Rare => "alert",
+            Self::Rare => "rare",
         }
     }
 }
@@ -78,13 +78,13 @@ impl FilterSet {
                     b"hunt" => current = Some(FilterCategory::Hunt),
                     b"caution" => current = Some(FilterCategory::Caution),
                     b"danger" => current = Some(FilterCategory::Danger),
-                    b"alert" => current = Some(FilterCategory::Rare),
+                    b"rare" => current = Some(FilterCategory::Rare),
                     b"item" => self.insert_from_element(&e, current),
                     _ => {}
                 },
                 Event::Empty(e) if e.name().as_ref() == b"item" => self.insert_from_element(&e, current),
                 Event::End(e) => match e.name().as_ref() {
-                    b"hunt" | b"caution" | b"danger" | b"alert" => current = None,
+                    b"hunt" | b"caution" | b"danger" | b"rare" => current = None,
                     _ => {}
                 },
                 Event::Eof => break,
@@ -150,7 +150,12 @@ impl FilterSet {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
+        if let Some(dir) = path.parent() {
+            write_dtd_if_needed(dir)?;
+        }
         let mut f = std::fs::File::create(path)?;
+        writeln!(f, r#"<?xml version="1.0" encoding="UTF-8"?>"#)?;
+        writeln!(f, r#"<!DOCTYPE seqfilters SYSTEM "seqfilters.dtd">"#)?;
         writeln!(f, "<seqfilters>")?;
         for cat in [
             FilterCategory::Hunt,
@@ -190,6 +195,24 @@ impl FilterSet {
     }
 }
 
+const DTD_CONTENT: &str = "\
+<!ELEMENT seqfilters (hunt?, caution?, danger?, rare?)>\n\
+<!ELEMENT hunt (item*)>\n\
+<!ELEMENT caution (item*)>\n\
+<!ELEMENT danger (item*)>\n\
+<!ELEMENT rare (item*)>\n\
+<!ELEMENT item EMPTY>\n\
+<!ATTLIST item name CDATA #REQUIRED>\n";
+
+/// Write `seqfilters.dtd` into `dir` if it does not already exist.
+fn write_dtd_if_needed(dir: &std::path::Path) -> std::io::Result<()> {
+    let dtd_path = dir.join("seqfilters.dtd");
+    if !dtd_path.exists() {
+        std::fs::write(&dtd_path, DTD_CONTENT)?;
+    }
+    Ok(())
+}
+
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('"', "&quot;")
@@ -212,7 +235,7 @@ mod tests {
   <hunt><item name="Fippy Darkpaw" /></hunt>
   <caution><item name="a gnoll scout" /></caution>
   <danger><item name="Lord Nagafen" /></danger>
-  <alert><item name="Lockjaw" /></alert>
+  <rare><item name="Lockjaw" /></rare>
 </seqfilters>"#;
 
     #[test]

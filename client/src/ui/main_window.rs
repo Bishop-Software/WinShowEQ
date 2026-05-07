@@ -24,6 +24,7 @@ use crate::ui::login::LoginDialog;
 use crate::ui::map_pane::MapPane;
 use crate::ui::options::OptionsDialog;
 use crate::ui::search_dialog::SearchDialog;
+use crate::filters::FilterCategory;
 use crate::ui::spawn_list::{self, SpawnAction};
 use crate::ui::timer_list;
 
@@ -63,6 +64,14 @@ struct AddTimerDialog {
     respawn_input: String,
 }
 
+/// State for the "Add to Filter — choose scope" floating dialog.
+#[derive(Default)]
+struct AddFilterScopeDialog {
+    open: bool,
+    name: String,
+    category: Option<FilterCategory>,
+}
+
 const NOTE_COLORS: &[[u8; 3]] = &[
     [255, 255, 255],
     [255, 255, 0],
@@ -87,6 +96,7 @@ pub struct MainApp {
     add_note: AddNoteDialog,
     add_timer: AddTimerDialog,
     pending_spawn_action: Option<SpawnAction>,
+    add_filter_scope: AddFilterScopeDialog,
     stop: Arc<AtomicBool>,
     server_addr: Arc<Mutex<Option<SocketAddr>>>,
     prev_zone: String,
@@ -148,11 +158,11 @@ impl MainApp {
             d.game_data.load_classes(&std::path::Path::new(&config.cfg_dir).join("classes.json"));
             d.game_data.load_color_palette(&std::path::Path::new(&config.cfg_dir).join("colors.json"));
             d.game_data.load_spawn_colors(&std::path::Path::new(&config.cfg_dir).join("spawn_colors.json"));
-            d.filters = crate::filters::FilterSet::load(
-                &std::path::Path::new(&config.filter_dir).join("seqfilters.xml"),
+            d.filter_dir = config.filter_dir.clone();
+            d.filters_global = crate::filters::FilterSet::load(
+                &std::path::Path::new(&config.filter_dir).join("filters_global.xml"),
             );
-            let filters = d.filters.clone();
-            d.spawns.reclassify_all(&filters);
+            d.recompute_filters();
         }
 
         start_network_thread(
@@ -182,6 +192,7 @@ impl MainApp {
             add_note: AddNoteDialog::default(),
             add_timer: AddTimerDialog::default(),
             pending_spawn_action: None,
+            add_filter_scope: AddFilterScopeDialog::default(),
             stop,
             server_addr: addr_cell,
             prev_zone: String::new(),
@@ -232,13 +243,14 @@ impl MainApp {
                 self.add_timer.respawn_input = "30".to_owned();
             }
             SpawnAction::AddToFilter { name, category } => {
-                let mut data = self.data.lock().unwrap();
-                data.filters.add(category, name);
-                let filters = data.filters.clone();
-                data.spawns.reclassify_all(&filters);
-                let _ = data.filters.save(
-                    &std::path::Path::new(&self.config.filter_dir).join("seqfilters.xml"),
-                );
+                let zone_name = self.data.lock().unwrap().zone_name.clone();
+                if zone_name.is_empty() {
+                    self.write_filter_global(name, category);
+                } else {
+                    self.add_filter_scope.name = name;
+                    self.add_filter_scope.category = Some(category);
+                    self.add_filter_scope.open = true;
+                }
             }
             SpawnAction::CenterMap { id, x, y } => {
                 let (mx, my) = crate::map_canvas::eq_to_map_pub(x, y);
@@ -252,6 +264,24 @@ impl MainApp {
                 self.add_note.override_pos = Some((x, y, z));
             }
         }
+    }
+
+    fn write_filter_global(&mut self, name: String, category: FilterCategory) {
+        let path = std::path::Path::new(&self.config.filter_dir).join("filters_global.xml");
+        let mut data = self.data.lock().unwrap();
+        data.filters_global.add(category, name);
+        let _ = data.filters_global.save(&path);
+        data.recompute_filters();
+    }
+
+    fn write_filter_zone(&mut self, name: String, category: FilterCategory) {
+        let zone_name = self.data.lock().unwrap().zone_name.clone();
+        let path = std::path::Path::new(&self.config.filter_dir)
+            .join(format!("filters_{}.xml", zone_name.to_lowercase()));
+        let mut data = self.data.lock().unwrap();
+        data.filters_zone.add(category, name);
+        let _ = data.filters_zone.save(&path);
+        data.recompute_filters();
     }
 
     /// Show or hide a panel tab. The Map tab is never hidden.
@@ -376,6 +406,11 @@ impl eframe::App for MainApp {
                 data.game_data.load_classes(&std::path::Path::new(&self.config.cfg_dir).join("classes.json"));
                 data.game_data.load_color_palette(&std::path::Path::new(&self.config.cfg_dir).join("colors.json"));
                 data.game_data.load_spawn_colors(&std::path::Path::new(&self.config.cfg_dir).join("spawn_colors.json"));
+                data.filter_dir = self.config.filter_dir.clone();
+                data.filters_global = crate::filters::FilterSet::load(
+                    &std::path::Path::new(&self.config.filter_dir).join("filters_global.xml"),
+                );
+                data.recompute_filters();
             }
             let _ = self.config.save(&self.config_path);
         }
@@ -536,6 +571,44 @@ impl eframe::App for MainApp {
                 });
             if !open {
                 self.add_timer.open = false;
+            }
+        }
+
+        // "Add to Filter — scope" dialog
+        if self.add_filter_scope.open && let Some(category) = self.add_filter_scope.category {
+            let zone_name = self.data.lock().unwrap().zone_name.clone();
+            let mut chosen: Option<bool> = None; // true = global, false = zone
+            let mut cancel = false;
+            egui::Window::new("Add to Filter")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(&ctx, |ui| {
+                    ui.label(format!("Add \"{}\" to which filter?", self.add_filter_scope.name));
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Global").clicked() {
+                            chosen = Some(true);
+                        }
+                        if ui.button(format!("Zone: {zone_name}")).clicked() {
+                            chosen = Some(false);
+                        }
+                        if ui.button("Cancel").clicked() {
+                            cancel = true;
+                        }
+                    });
+                });
+            if cancel {
+                self.add_filter_scope.open = false;
+            }
+            if let Some(is_global) = chosen {
+                let name = self.add_filter_scope.name.clone();
+                self.add_filter_scope.open = false;
+                if is_global {
+                    self.write_filter_global(name, category);
+                } else {
+                    self.write_filter_zone(name, category);
+                }
             }
         }
 

@@ -29,7 +29,14 @@ pub struct AppData {
     pub zone_name: String,
     pub target_id: Option<u32>,
     pub self_id: Option<u32>,
+    /// Global filters loaded from `filters_global.xml` — applies in every zone.
+    pub filters_global: FilterSet,
+    /// Zone-specific filters loaded from `filters_{zone}.xml` — applies in the current zone only.
+    pub filters_zone: FilterSet,
+    /// Merged result of global + zone filters (computed, not persisted directly).
     pub filters: FilterSet,
+    /// Directory where filter XML files are stored; used for zone-filter reloading on zone change.
+    pub filter_dir: String,
     /// Mob trail positions (map coords — already X/Y negated). Updated each tick.
     pub trails: HashMap<u32, VecDeque<(f32, f32)>>,
     pub trails_enabled: bool,
@@ -59,7 +66,10 @@ impl Default for AppData {
             zone_name: String::new(),
             target_id: None,
             self_id: None,
+            filters_global: FilterSet::default(),
+            filters_zone: FilterSet::default(),
             filters: FilterSet::default(),
+            filter_dir: String::new(),
             trails: HashMap::new(),
             trails_enabled: false,
             alert_engine: AlertEngine::default(),
@@ -114,6 +124,23 @@ impl AppData {
             .and_then(|id| self.spawns.get(id))
             .map(|s| (s.x, s.y, s.z))
     }
+
+    /// Recompute `filters` as global merged with zone, then reclassify all spawns.
+    pub fn recompute_filters(&mut self) {
+        let mut merged = self.filters_global.clone();
+        merged.merge(self.filters_zone.clone());
+        self.filters = merged;
+        let filters = self.filters.clone();
+        self.spawns.reclassify_all(&filters);
+    }
+
+    /// Load `filters_{zone}.xml` from `filter_dir`, recompute the merged filter set.
+    pub fn reload_zone_filter(&mut self, zone: &str) {
+        let path = std::path::Path::new(&self.filter_dir)
+            .join(format!("filters_{}.xml", zone.to_lowercase()));
+        self.filters_zone = FilterSet::load(&path);
+        self.recompute_filters();
+    }
 }
 
 /// Apply a decoded packet to the shared app state.
@@ -121,13 +148,16 @@ impl AppData {
 pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
     match packet {
         Packet::Zone { name } => {
-            data.zone_name = name;
             data.spawns.clear();
             data.ground.clear();
             data.trails.clear();
             data.self_id = None;
             data.target_id = None;
             data.alert_engine.on_zone_change();
+            if !data.filter_dir.is_empty() {
+                data.reload_zone_filter(&name);
+            }
+            data.zone_name = name;
         }
         Packet::Spawn(rec) => {
             let id = rec.id;
