@@ -368,9 +368,6 @@ fn draw_hover_tooltip(ui: &mut Ui, ctx: &DrawCtx, data: &AppData, hover_pos: Pos
     let mut hit: Option<HoverHit<'_>> = None;
 
     for spawn in data.spawns.iter() {
-        if Some(spawn.id) == data.self_id {
-            continue;
-        }
         if z_filtered(spawn.z, z_filter) {
             continue;
         }
@@ -419,8 +416,12 @@ fn draw_hover_tooltip(ui: &mut Ui, ctx: &DrawCtx, data: &AppData, hover_pos: Pos
         match hit {
             HoverHit::Spawn(s) => {
                 ui.label(format!("{} ({})", s.name, s.level));
-                ui.label(data.game_data.class_name(s.class));
+                let invis = if s.hidden != 0 { "Invis" } else { "Visible" };
+                ui.label(format!("{} / {}", data.game_data.race_name(s.race), data.game_data.class_name(s.class)));
+                ui.label(format!("Invisible: {invis}"));
+                ui.label(format!("Speed: {:.1}", s.speed));
                 ui.label(format!("Dist: {}", player_dist(s.x, s.y)));
+                ui.label(format!("Loc: {:.2}, {:.2}, {:.2}", s.x, s.y, s.z));
             }
             HoverHit::Ground(g) => {
                 ui.label(&g.name);

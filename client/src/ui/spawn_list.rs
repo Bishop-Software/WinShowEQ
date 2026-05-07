@@ -27,11 +27,7 @@ pub fn show(
     let current_selected = data.selected_id; // Copy before spawns borrows data
     let current_target = data.target_id;
 
-    let mut spawns: Vec<_> = data
-        .spawns
-        .iter()
-        .filter(|s| Some(s.id) != data.self_id)
-        .collect();
+    let mut spawns: Vec<_> = data.spawns.iter().collect();
 
     // Apply sorting
     if let Some(col) = sort_column {
