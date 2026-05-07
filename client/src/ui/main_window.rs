@@ -135,6 +135,7 @@ impl MainApp {
             .unwrap()
             .insert(0, "arial".to_owned());
         cc.egui_ctx.set_fonts(fonts);
+        egui_extras::install_image_loaders(&cc.egui_ctx);
 
         let config = ClientConfig::load(&config_path);
         let server_addr = server_addr.or_else(|| {
@@ -698,6 +699,42 @@ impl eframe::App for MainApp {
                 }
             });
         });
+
+        // Toolbar — one-click access to common actions
+        ui.horizontal(|ui| {
+            ui.add_space(2.0);
+            let connected = self.server_addr.lock().unwrap().is_some();
+            if connected {
+                let img = egui::Image::new(egui::include_image!("../../assets/connected.png"))
+                    .fit_to_exact_size(egui::vec2(24.0, 24.0));
+                if ui.add(egui::Button::image(img)).on_hover_text("Disconnect").clicked() {
+                    *self.server_addr.lock().unwrap() = None;
+                }
+            } else {
+                let img = egui::Image::new(egui::include_image!("../../assets/disconnected.png"))
+                    .fit_to_exact_size(egui::vec2(24.0, 24.0));
+                let tooltip = format!("Connect to {}:{}", self.config.server_ip, self.config.server_port);
+                if ui.add(egui::Button::image(img)).on_hover_text(tooltip).clicked() {
+                    if let Ok(addr) = format!("{}:{}", self.config.server_ip, self.config.server_port).parse() {
+                        *self.server_addr.lock().unwrap() = Some(addr);
+                    }
+                }
+            }
+            ui.separator();
+            let find_img = egui::Image::new(egui::include_image!("../../assets/find.png"))
+                .fit_to_exact_size(egui::vec2(24.0, 24.0));
+            if ui.add(egui::Button::image(find_img)).on_hover_text("Find Spawn").clicked() {
+                self.search.open();
+            }
+            let gear_img = egui::Image::new(egui::include_image!("../../assets/tool.png"))
+                .fit_to_exact_size(egui::vec2(24.0, 24.0));
+            if ui.add(egui::Button::image(gear_img)).on_hover_text("Options").clicked() {
+                let trails = self.data.lock().unwrap().trails_enabled;
+                self.options.sync_from(&self.config, trails);
+                self.options.open = true;
+            }
+        });
+        ui.separator();
 
         // Docked panel layout
         let mut viewer = WinSeqTabViewer {

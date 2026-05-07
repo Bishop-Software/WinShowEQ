@@ -76,6 +76,18 @@ impl AboutDialog {
                         ui.separator();
                         ui.add_space(8.0);
 
+                        ui.label(egui::RichText::new("Icons").strong());
+                        ui.horizontal(|ui| {
+                            if ui.link("paul-j").clicked() {
+                                let _ = open_url("https://www.flaticon.com/authors/paul-j");
+                            }
+                            ui.label("— Toolbar icons via Flaticon");
+                        });
+                        ui.add_space(12.0);
+
+                        ui.separator();
+                        ui.add_space(8.0);
+
                         ui.label(egui::RichText::new("License").strong());
                         ui.label("GPL-3.0 — See LICENSE file for details");
                         ui.add_space(12.0);
