@@ -128,6 +128,8 @@ Copy-Item -Path (Join-Path $installerDir "README.md") -Destination (Join-Path $s
 if ($IncludeClient) {
     Copy-Item -Path $clientExe -Destination (Join-Path $stageRoot "bin\WinShowEQClient.exe")
     Copy-Item -Path (Join-Path $repoRoot "client\client.ini.template") -Destination (Join-Path $stageRoot "config\client.ini")
+    $null = New-Item -ItemType Directory -Path (Join-Path $stageRoot "cfg")
+    Copy-Item -Path (Join-Path $repoRoot "client\cfg\*") -Destination (Join-Path $stageRoot "cfg") -Recurse
 }
 
 Write-Host "`nStaging complete." -ForegroundColor Green
@@ -136,6 +138,7 @@ Write-Host " - Config dir: $(Join-Path $stageRoot 'config')"
 if ($IncludeClient) {
     Write-Host " - Client exe: $(Join-Path $stageRoot 'bin\WinShowEQClient.exe')"
     Write-Host " - Client ini: $(Join-Path $stageRoot 'config\client.ini')"
+    Write-Host " - Client cfg: $(Join-Path $stageRoot 'cfg')"
 }
 
 if ($StageOnly) {

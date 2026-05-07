@@ -54,6 +54,7 @@ Name: "{commonappdata}\WinShowEQ\client\timers"; Permissions: users-modify; Comp
 Name: "{commonappdata}\WinShowEQ\client\annotations"; Permissions: users-modify; Components: client
 Name: "{commonappdata}\WinShowEQ\client\maps"; Permissions: users-modify; Components: client
 Name: "{commonappdata}\WinShowEQ\client\logs"; Permissions: users-modify; Components: client
+Name: "{commonappdata}\WinShowEQ\client\cfg"; Permissions: users-modify; Components: client
 #endif
 
 [Files]
@@ -66,6 +67,7 @@ Source: "{#StageDir}\docs\LICENSE.txt"; DestDir: "{app}\docs"; DestName: "LICENS
 #ifdef IncludeClient
 Source: "{#StageDir}\bin\WinShowEQClient.exe"; DestDir: "{app}\bin"; Flags: ignoreversion; Components: client
 Source: "{#StageDir}\config\client.ini"; DestDir: "{commonappdata}\WinShowEQ\client"; Flags: onlyifdoesntexist uninsneveruninstall; Components: client
+Source: "{#StageDir}\cfg\*"; DestDir: "{commonappdata}\WinShowEQ\client\cfg"; Flags: ignoreversion; Components: client
 #endif
 
 [Icons]

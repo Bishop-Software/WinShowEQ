@@ -726,9 +726,9 @@ impl eframe::App for MainApp {
             if ui.add(egui::Button::image(find_img)).on_hover_text("Find Spawn").clicked() {
                 self.search.open();
             }
-            let gear_img = egui::Image::new(egui::include_image!("../../assets/tool.png"))
+            let tool_img = egui::Image::new(egui::include_image!("../../assets/tool.png"))
                 .fit_to_exact_size(egui::vec2(24.0, 24.0));
-            if ui.add(egui::Button::image(gear_img)).on_hover_text("Options").clicked() {
+            if ui.add(egui::Button::image(tool_img)).on_hover_text("Options").clicked() {
                 let trails = self.data.lock().unwrap().trails_enabled;
                 self.options.sync_from(&self.config, trails);
                 self.options.open = true;
