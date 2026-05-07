@@ -14,7 +14,7 @@ use crate::protocol::Packet;
 use annotations::AnnotationStore;
 use ground::GroundStore;
 use spawns::{SpawnInfo, SpawnStore};
-use timers::TimerStore;
+use timers::{SpawnObserver, TimerStore};
 use world::InGameTime;
 
 const MAX_TRAIL_LEN: usize = 25;
@@ -53,6 +53,12 @@ pub struct AppData {
     pub marked_ids: HashSet<u32>,
     /// Single spawn selected by clicking a row in the spawn list.
     pub selected_id: Option<u32>,
+    /// Auto-learning respawn timer engine.
+    pub observer: SpawnObserver,
+    /// NPC spawn IDs seen in the current tick (scratch space for observer diff).
+    pub curr_tick_npc_ids: HashSet<u32>,
+    /// Set when an auto-timer is promoted; cleared after periodic save.
+    pub timers_dirty: bool,
 }
 
 impl Default for AppData {
@@ -96,6 +102,7 @@ impl Default for AppData {
                 120.0, // Name
                 80.0,  // Loc
                 100.0, // Countdown
+                45.0,  // Count
             ],
             ground_list_column_widths: vec![
                 150.0, // Item
@@ -105,6 +112,9 @@ impl Default for AppData {
             ],
             marked_ids: HashSet::new(),
             selected_id: None,
+            observer: SpawnObserver::default(),
+            curr_tick_npc_ids: HashSet::new(),
+            timers_dirty: false,
         }
     }
 }
@@ -134,6 +144,15 @@ impl AppData {
         self.spawns.reclassify_all(&filters);
     }
 
+    /// Run the spawn diff after each network tick to detect kills/respawns.
+    pub fn on_tick_end(&mut self) {
+        let curr_ids = self.curr_tick_npc_ids.clone();
+        let promoted = self.observer.process_diff(&curr_ids, &self.spawns, &self.zone_name, &mut self.timers);
+        if promoted {
+            self.timers_dirty = true;
+        }
+    }
+
     /// Load `filters_{zone}.xml` from `filter_dir`, recompute the merged filter set.
     pub fn reload_zone_filter(&mut self, zone: &str) {
         let path = std::path::Path::new(&self.filter_dir)
@@ -153,6 +172,8 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
             data.trails.clear();
             data.self_id = None;
             data.target_id = None;
+            data.curr_tick_npc_ids.clear();
+            data.observer.on_zone_change();
             data.alert_engine.on_zone_change();
             if !data.filter_dir.is_empty() {
                 data.reload_zone_filter(&name);
@@ -179,6 +200,9 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
             let mut info = SpawnInfo::from_record(&rec);
             info.apply_filters(&data.filters);
             let log_msg = data.alert_engine.check_spawn(&info);
+            if info.spawn_category == spawns::SpawnCategory::Npc {
+                data.curr_tick_npc_ids.insert(id);
+            }
             data.spawns.upsert_info(info);
             return log_msg;
         }

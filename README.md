@@ -25,13 +25,13 @@ This repo contains both the **server** (reads EQ memory and streams data over TC
 | Client    | C7 — Alerts and integrations                  | Complete |
 | Client    | C8 — Polish and parity                        | Complete |
 
-### Planned enhancements
+### Enhancements
 
-| Feature                                     | Issues                                                                                                                                                                                                                                                                                                                                                                              | Status  |
-|---------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| Auto-learning spawn timers (C# parity)      | [#37](https://github.com/Bishop-Software/WinShowEQ/issues/37) [#38](https://github.com/Bishop-Software/WinShowEQ/issues/38) [#39](https://github.com/Bishop-Software/WinShowEQ/issues/39) [#40](https://github.com/Bishop-Software/WinShowEQ/issues/40) [#41](https://github.com/Bishop-Software/WinShowEQ/issues/41) [#42](https://github.com/Bishop-Software/WinShowEQ/issues/42) | Planned |
-| Spawn list filter UI (race / class / level) | [#43](https://github.com/Bishop-Software/WinShowEQ/issues/43) [#44](https://github.com/Bishop-Software/WinShowEQ/issues/44) [#45](https://github.com/Bishop-Software/WinShowEQ/issues/45) [#46](https://github.com/Bishop-Software/WinShowEQ/issues/46)                                                                                                                             | Planned |
-| Spawn color manager UI                      | [#36](https://github.com/Bishop-Software/WinShowEQ/issues/36)                                                                                                                                                                                                                                                                                                                       | Planned |
+| Feature                                     | Issues                                                                                                                                                                                                                                                                                                                                                                              | Status   |
+|---------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
+| Auto-learning spawn timers (C# parity)      | [#37](https://github.com/Bishop-Software/WinShowEQ/issues/37) [#38](https://github.com/Bishop-Software/WinShowEQ/issues/38) [#39](https://github.com/Bishop-Software/WinShowEQ/issues/39) [#40](https://github.com/Bishop-Software/WinShowEQ/issues/40) [#41](https://github.com/Bishop-Software/WinShowEQ/issues/41) [#42](https://github.com/Bishop-Software/WinShowEQ/issues/42) | Complete |
+| Spawn list filter UI (race / class / level) | [#43](https://github.com/Bishop-Software/WinShowEQ/issues/43) [#44](https://github.com/Bishop-Software/WinShowEQ/issues/44) [#45](https://github.com/Bishop-Software/WinShowEQ/issues/45) [#46](https://github.com/Bishop-Software/WinShowEQ/issues/46)                                                                                                                             | Planned  |
+| Spawn color manager UI                      | [#36](https://github.com/Bishop-Software/WinShowEQ/issues/36)                                                                                                                                                                                                                                                                                                                       | Planned  |
 
 ### Project tracking
 
@@ -51,7 +51,7 @@ MySEQ is a map overlay tool for EverQuest. The server component today:
 - Streams packed binary records over TCP (default port 5555) to a connected client
 - Supports GUI mode (default), console mode, and debug mode
 
-The Rust client component (119/119 tests passing):
+The Rust client component (119/119 tests passing across all crates):
 - Connects to the server over TCP and decodes all packet types
 - Renders EQ zone maps (native `.txt` format) with spawn dots, ground items, mob trails, and annotations
 - Loads all four map file layers: `{zone}.txt` (base) + `{zone}_1.txt`, `{zone}_2.txt`, `{zone}_3.txt` (numbered layers)
@@ -60,7 +60,8 @@ The Rust client component (119/119 tests passing):
 - Two filter scopes: global (`filters_global.xml`, applies in every zone) and per-zone (`filters_{zone}.xml`, loaded on zone change); zone filter is merged over global with higher-priority category winning on conflict
 - Right-click context menu on spawns: add timer, add to filter (scope picker: Global or Zone), add map text
 - Filter XML files include a DTD declaration (`seqfilters.dtd`) for schema validation in XML-aware editors
-- Persists timers, annotations, filters, and config across sessions
+- Persists timers, annotations, filters, observations, and config across sessions
+- **Auto-learning spawn timers** — passively detects kill and respawn events each tick by diffing NPC ID sets; learns respawn intervals from observed kill→spawn cycles (no user input required); auto-promotes to timer list once two cycles are confirmed; timer list shows Count column and `[A]` badge for auto-learned entries; observations persist in `obs-{zone}.txt`; void zones (bazaar, nexus, guild halls, etc.) excluded; Clear All resets both the timer list and observation data
 - Map rendering: applies coordinate transforms to align spawns with map lines (north up, east right)
 - Color-coded spawn dots by con level; mob trails with faded orange dots when enabled
 - Named spawn color overrides via `cfg/spawn_colors.json` (maps spawn name → color key from `cfg/colors.json`)
@@ -94,7 +95,6 @@ The Rust client component (119/119 tests passing):
 
 ### Planned features
 
-- **Auto-learning spawn timers** — client-side spawn diff detection automatically tracks kill and respawn events; respawn intervals are learned from observed kill→spawn cycles (no user input required); observation data persists across sessions in `obs-{zone}.txt`; void zones (bazaar, nexus, guild halls) are excluded
 - **Spawn list filter UI** — cascading filter bar above the spawn list: filter by race, class, level range, and spawn type (NPC/PC/Corpse/Pet); active filters also hide matching spawns on the map canvas
 
 ## Workspace layout
@@ -140,7 +140,7 @@ WinShowEQ/
         mod.rs        # AppData aggregate, apply_packet
         spawns.rs     # SpawnInfo, SpawnStore, SpawnCategory, con colors
         ground.rs     # GroundItem, GroundStore (Vec; replaced per tick)
-        timers.rs     # SpawnTimer, TimerStore — respawn tracking + persistence
+        timers.rs     # SpawnTimer, TimerStore, SpawnObserver, SpawnObservation — respawn tracking, auto-learning, persistence
         world.rs      # InGameTime
         annotations.rs # AnnotationStore — per-zone map notes
       ui/

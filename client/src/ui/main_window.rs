@@ -10,7 +10,7 @@ use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 
 use crate::config::ClientConfig;
 use crate::data::annotations::AnnotationStore;
-use crate::data::timers::{SpawnTimer, TimerStore};
+use crate::data::timers::{SpawnObserver, SpawnTimer, TimerStore};
 use crate::map_reader;
 use crate::data::{apply_packet, configure_alerts, AppData};
 use crate::game_data::GameData;
@@ -109,6 +109,8 @@ pub struct MainApp {
     ground_sort_column: Option<usize>,
     ground_sort_ascending: bool,
     search: SearchDialog,
+    pending_clear_timers: bool,
+    last_timer_autosave: std::time::Instant,
 }
 
 /// Build the initial dock layout: Spawns (top-left) + Timers (middle-left) + Ground (bottom-left) + Map (right).
@@ -207,6 +209,8 @@ impl MainApp {
             ground_sort_column: None,
             ground_sort_ascending: true,
             search: SearchDialog::default(),
+            pending_clear_timers: false,
+            last_timer_autosave: std::time::Instant::now(),
         }
     }
 
@@ -219,9 +223,11 @@ impl MainApp {
             let data = self.data.lock().unwrap();
             let _ = data.timers.save(&self.prev_zone, &self.config.timer_dir);
             let _ = data.annotations.save(&self.prev_zone, &self.config.annotations_dir);
+            let _ = SpawnObserver::save(&data.observer.observations, &self.prev_zone, &self.config.timer_dir);
         }
         let new_timers = TimerStore::load(&new_zone, &self.config.timer_dir);
         let new_annotations = AnnotationStore::load(&new_zone, &self.config.annotations_dir);
+        let new_obs = SpawnObserver::load(&new_zone, &self.config.timer_dir);
         // Zone names from EQ are lowercase short names; map files use the same convention.
         let new_map = map_reader::load_zone(
             std::path::Path::new(&self.config.map_dir),
@@ -231,6 +237,7 @@ impl MainApp {
         let mut data = self.data.lock().unwrap();
         data.timers = new_timers;
         data.annotations = new_annotations;
+        data.observer.observations = new_obs;
         data.map = new_map;
         self.prev_zone = new_zone;
     }
@@ -318,6 +325,7 @@ struct WinSeqTabViewer<'a> {
     ground_sort_ascending: &'a mut bool,
     spawn_action: &'a mut Option<SpawnAction>,
     map_action: &'a mut Option<MapAction>,
+    pending_clear_timers: &'a mut bool,
 }
 
 impl<'a> TabViewer for WinSeqTabViewer<'a> {
@@ -347,7 +355,9 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
             }
             Tab::Timers => {
                 let mut data = self.data.lock().unwrap();
-                timer_list::show(ui, &mut data, self.timer_sort_column, self.timer_sort_ascending);
+                if timer_list::show(ui, &mut data, self.timer_sort_column, self.timer_sort_ascending) {
+                    *self.pending_clear_timers = true;
+                }
             }
             Tab::Ground => {
                 let mut data = self.data.lock().unwrap();
@@ -385,6 +395,7 @@ impl eframe::App for MainApp {
                 let data = self.data.lock().unwrap();
                 let _ = data.timers.save(&self.prev_zone, &self.config.timer_dir);
                 let _ = data.annotations.save(&self.prev_zone, &self.config.annotations_dir);
+                let _ = SpawnObserver::save(&data.observer.observations, &self.prev_zone, &self.config.timer_dir);
             }
             self.save_config();
             self.stop.store(true, Ordering::Relaxed);
@@ -755,12 +766,33 @@ impl eframe::App for MainApp {
             ground_sort_ascending: &mut self.ground_sort_ascending,
             spawn_action: &mut self.pending_spawn_action,
             map_action: &mut self.pending_map_action,
+            pending_clear_timers: &mut self.pending_clear_timers,
         };
         DockArea::new(&mut self.dock_state).show_inside(ui, &mut viewer);
 
         // Handle any spawn context menu action from this frame
         if let Some(action) = self.pending_spawn_action.take() {
             self.handle_spawn_action(action);
+        }
+
+        // Handle "Clear all timers" — delete both the timer and obs files so they don't reload
+        if std::mem::take(&mut self.pending_clear_timers) && !self.prev_zone.is_empty() {
+            let dir = std::path::Path::new(&self.config.timer_dir);
+            let _ = std::fs::remove_file(dir.join(format!("spawns-{}.txt", self.prev_zone)));
+            let _ = std::fs::remove_file(dir.join(format!("obs-{}.txt", self.prev_zone)));
+        }
+
+        // Periodic auto-save of timers when auto-promotion has dirtied them
+        {
+            let mut data = self.data.lock().unwrap();
+            if data.timers_dirty
+                && self.last_timer_autosave.elapsed() >= Duration::from_secs(60)
+                && !self.prev_zone.is_empty()
+            {
+                let _ = data.timers.save(&self.prev_zone, &self.config.timer_dir);
+                data.timers_dirty = false;
+                self.last_timer_autosave = std::time::Instant::now();
+            }
         }
 
         // Handle any map context menu action from this frame
@@ -813,6 +845,7 @@ fn start_network_thread(
                             match conn.tick(TICK_REQUEST) {
                                 Ok(records) => {
                                     let mut d = data.lock().unwrap();
+                                    d.curr_tick_npc_ids.clear();
                                     if records.iter().any(|r| r.flags == OPT_GROUND) {
                                         d.ground.clear();
                                     }
@@ -826,6 +859,7 @@ fn start_network_thread(
                                             logger.info(&msg);
                                         }
                                     }
+                                    d.on_tick_end();
                                 }
                                 Err(e) => {
                                     logger.warn(&format!("Disconnected: {e}"));

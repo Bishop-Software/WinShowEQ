@@ -2,13 +2,14 @@ use egui::Ui;
 
 use crate::data::AppData;
 
+/// Returns true if "Clear all timers" was requested (caller must delete the obs file).
 pub fn show(
     ui: &mut Ui,
     data: &mut AppData,
     sort_column: &mut Option<usize>,
     sort_ascending: &mut bool,
-) {
-    const HEADERS: &[&str] = &["Name", "Loc", "Countdown"];
+) -> bool {
+    const HEADERS: &[&str] = &["Name", "Loc", "Countdown", "Count"];
     let row_h = ui.text_style_height(&egui::TextStyle::Body) + 4.0;
     let mut col_widths = data.timer_list_column_widths.clone();
 
@@ -72,6 +73,7 @@ pub fn show(
     ui.separator();
 
     let mut remove_idx: Option<usize> = None;
+    let mut clear_all = false;
 
     // Collect and sort timers
     let mut timers_with_idx: Vec<_> = data.timers.iter().enumerate().collect();
@@ -107,10 +109,16 @@ pub fn show(
                 };
 
                 let row_rect = ui.horizontal(|ui| {
+                    let name_cell = if t.is_auto {
+                        format!("{} [A]", t.name)
+                    } else {
+                        t.name.clone()
+                    };
                     let cells = [
-                        t.name.clone(),
+                        name_cell,
                         format!("{:.0},{:.0}", t.x, t.y),
                         countdown,
+                        if t.spawn_count > 0 { t.spawn_count.to_string() } else { String::new() },
                     ];
 
                     for (col_idx, text) in cells.iter().enumerate() {
@@ -138,11 +146,20 @@ pub fn show(
                         remove_idx = Some(i);
                         ui.close();
                     }
+                    if ui.button("Clear all timers").clicked() {
+                        clear_all = true;
+                        ui.close();
+                    }
                 });
             }
         });
 
-    if let Some(idx) = remove_idx {
+    if clear_all {
+        data.timers.clear_all();
+        data.observer.reset_zone();
+        return true;
+    } else if let Some(idx) = remove_idx {
         data.timers.remove(idx);
     }
+    false
 }
