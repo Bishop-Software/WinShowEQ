@@ -25,12 +25,21 @@ This repo contains both the **server** (reads EQ memory and streams data over TC
 | Client    | C7 — Alerts and integrations                  | Complete |
 | Client    | C8 — Polish and parity                        | Complete |
 
+### Planned enhancements
+
+| Feature                                     | Issues                                                                                                                                                                                                                                                                                                                                                                              | Status  |
+|---------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| Auto-learning spawn timers (C# parity)      | [#37](https://github.com/Bishop-Software/WinShowEQ/issues/37) [#38](https://github.com/Bishop-Software/WinShowEQ/issues/38) [#39](https://github.com/Bishop-Software/WinShowEQ/issues/39) [#40](https://github.com/Bishop-Software/WinShowEQ/issues/40) [#41](https://github.com/Bishop-Software/WinShowEQ/issues/41) [#42](https://github.com/Bishop-Software/WinShowEQ/issues/42) | Planned |
+| Spawn list filter UI (race / class / level) | [#43](https://github.com/Bishop-Software/WinShowEQ/issues/43) [#44](https://github.com/Bishop-Software/WinShowEQ/issues/44) [#45](https://github.com/Bishop-Software/WinShowEQ/issues/45) [#46](https://github.com/Bishop-Software/WinShowEQ/issues/46)                                                                                                                             | Planned |
+| Spawn color manager UI                      | [#36](https://github.com/Bishop-Software/WinShowEQ/issues/36)                                                                                                                                                                                                                                                                                                                       | Planned |
+
 ### Project tracking
 
 Complete migration plans and issue tracking are available on GitHub:
 
 - [**Server Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/1): M1–M7 complete (issues #9–#15)
 - [**Client Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/2): C1–C8 complete (issues #1–#8, #16–#23)
+- [**WinShowEQ Enhancements**](https://github.com/Bishop-Software/WinShowEQ/milestone/3): issues #36–#46
 
 See [CLAUDE.md](CLAUDE.md) for developer guidance and technical details.
 
@@ -82,6 +91,11 @@ The Rust client component (119/119 tests passing):
 - Map menu: Center on Player, Zoom In/Out, Mob Trails toggle
 - Help menu with About dialog (version, credits, clickable library links)
 - F1 (or Help → Help) opens a tabbed Help window: Keyboard Shortcuts, Map Controls, Spawn List, Timers, Alerts
+
+### Planned features
+
+- **Auto-learning spawn timers** — client-side spawn diff detection automatically tracks kill and respawn events; respawn intervals are learned from observed kill→spawn cycles (no user input required); observation data persists across sessions in `obs-{zone}.txt`; void zones (bazaar, nexus, guild halls) are excluded
+- **Spawn list filter UI** — cascading filter bar above the spawn list: filter by race, class, level range, and spawn type (NPC/PC/Corpse/Pet); active filters also hide matching spawns on the map canvas
 
 ## Workspace layout
 
@@ -138,6 +152,7 @@ WinShowEQ/
         options.rs    # settings dialog with folder browse buttons (rfd)
         login.rs      # connect dialog
         search_dialog.rs # Ctrl+F spawn search with live highlighting
+        spawn_filter.rs  # [planned] cascading race/class/level filter for spawn list
 ```
 
 ## Building and running
