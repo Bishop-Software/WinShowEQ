@@ -4,16 +4,30 @@ use crate::logger::LogLevel;
 const ALERT_MODES: &[&str] = &["none", "beep", "speech", "sound"];
 const AUDIO_EXTENSIONS: &[&str] = &["wav", "flac", "ogg", "mp3"];
 
-/// Returns the parent directory of a sound file path, or "." if unset/invalid.
+/// Resolves a directory path to an absolute path for use with rfd::FileDialog.
+/// Relative paths are resolved against the current working directory.
+/// Falls back to cwd if the path is empty or doesn't exist.
+fn resolve_dir(path: &str) -> std::path::PathBuf {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    if path.is_empty() {
+        return cwd;
+    }
+    let p = std::path::Path::new(path);
+    let abs = if p.is_absolute() { p.to_path_buf() } else { cwd.join(p) };
+    if abs.exists() { abs } else { std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")) }
+}
+
+/// Returns the parent directory of a sound file path, or cwd if unset/invalid.
 fn sound_dir(path: &str) -> std::path::PathBuf {
     if path.is_empty() {
-        return std::path::PathBuf::from(".");
+        return std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     }
-    std::path::Path::new(path)
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
+    let p = std::path::Path::new(path);
+    let parent = p.parent().filter(|p| !p.as_os_str().is_empty());
+    match parent {
+        Some(dir) => resolve_dir(&dir.display().to_string()),
+        None => std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+    }
 }
 
 pub struct OptionsDialog {
@@ -196,7 +210,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.cfg_dir);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.cfg_dir).pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(resolve_dir(&self.cfg_dir)).pick_folder() {
                                         self.cfg_dir = path.display().to_string();
                                     }
                             });
@@ -206,7 +220,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.timer_dir);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.timer_dir).pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(resolve_dir(&self.timer_dir)).pick_folder() {
                                         self.timer_dir = path.display().to_string();
                                     }
                             });
@@ -216,7 +230,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.annotations_dir);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.annotations_dir).pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(resolve_dir(&self.annotations_dir)).pick_folder() {
                                         self.annotations_dir = path.display().to_string();
                                     }
                             });
@@ -226,7 +240,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.log_dir);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.log_dir).pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(resolve_dir(&self.log_dir)).pick_folder() {
                                         self.log_dir = path.display().to_string();
                                     }
                             });
@@ -236,7 +250,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.filter_dir);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.filter_dir).pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(resolve_dir(&self.filter_dir)).pick_folder() {
                                         self.filter_dir = path.display().to_string();
                                     }
                             });
@@ -246,7 +260,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.map_dir);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.map_dir).pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(resolve_dir(&self.map_dir)).pick_folder() {
                                         self.map_dir = path.display().to_string();
                                     }
                             });
@@ -407,7 +421,7 @@ impl OptionsDialog {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.eq_path);
                                 if ui.button("Browse…").clicked()
-                                    && let Some(path) = rfd::FileDialog::new().set_directory(&self.eq_path).pick_folder() {
+                                    && let Some(path) = rfd::FileDialog::new().set_directory(resolve_dir(&self.eq_path)).pick_folder() {
                                         self.eq_path = path.display().to_string();
                                     }
                             });

@@ -4,11 +4,7 @@
 # ============================================================
 
 # client generated folders
-/annotations
-/cfg/
-/filters
-/logs/
-/timers/
+/configuration/
 
 # Internal Documentation
 /design

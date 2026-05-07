@@ -95,9 +95,9 @@ pub fn show(
             for item in &items {
                 let cells = [
                     item.name.clone(),
-                    format!("{:.0}", item.x),
-                    format!("{:.0}", item.y),
-                    format!("{:.0}", item.z),
+                    format!("{:.2}", item.x),
+                    format!("{:.2}", item.y),
+                    format!("{:.2}", item.z),
                 ];
 
                 ui.horizontal(|ui| {

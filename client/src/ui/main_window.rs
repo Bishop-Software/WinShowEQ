@@ -725,6 +725,14 @@ impl eframe::App for MainApp {
             if ui.add(egui::Button::image(find_img)).on_hover_text("Find Spawn").clicked() {
                 self.search.open();
             }
+            let trails_on = self.data.lock().unwrap().trails_enabled;
+            let trail_img = egui::Image::new(egui::include_image!("../../assets/trail.png"))
+                .fit_to_exact_size(egui::vec2(24.0, 24.0));
+            if ui.add(egui::Button::image(trail_img).selected(trails_on)).on_hover_text("Mob Trails").clicked() {
+                let mut data = self.data.lock().unwrap();
+                data.trails_enabled = !data.trails_enabled;
+                self.options.trails_enabled = data.trails_enabled;
+            }
             let tool_img = egui::Image::new(egui::include_image!("../../assets/tool.png"))
                 .fit_to_exact_size(egui::vec2(24.0, 24.0));
             if ui.add(egui::Button::image(tool_img)).on_hover_text("Options").clicked() {
