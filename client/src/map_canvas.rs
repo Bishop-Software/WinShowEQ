@@ -120,8 +120,8 @@ impl<'a> MapCon<'a> {
             pan: state.pan,
         };
 
-        draw_map_lines(&ctx, &data.map);
-        draw_labels(&ctx, &data.map);
+        draw_map_lines(&ctx, &data.map, overlay);
+        draw_labels(&ctx, &data.map, overlay);
         draw_mob_trails(&ctx, data);
         draw_ground_items(&ctx, data, z_filter);
         draw_spawns(&ctx, data, z_filter, overlay);
@@ -208,8 +208,20 @@ fn map_color(r: u8, g: u8, b: u8) -> Color32 {
     }
 }
 
-fn draw_map_lines(ctx: &DrawCtx, map: &MapData) {
+fn layer_visible(layer: u8, overlay: &MapOverlaySettings) -> bool {
+    match layer {
+        1 => overlay.show_layer1,
+        2 => overlay.show_layer2,
+        3 => overlay.show_layer3,
+        _ => true, // base layer always shown
+    }
+}
+
+fn draw_map_lines(ctx: &DrawCtx, map: &MapData, overlay: &MapOverlaySettings) {
     for line in &map.lines {
+        if !layer_visible(line.layer, overlay) {
+            continue;
+        }
         let p1 = ctx.to_screen(line.p1.x, line.p1.y);
         let p2 = ctx.to_screen(line.p2.x, line.p2.y);
         if ctx.either_visible(p1, p2) {
@@ -222,8 +234,14 @@ fn draw_map_lines(ctx: &DrawCtx, map: &MapData) {
     }
 }
 
-fn draw_labels(ctx: &DrawCtx, map: &MapData) {
+fn draw_labels(ctx: &DrawCtx, map: &MapData, overlay: &MapOverlaySettings) {
+    if !overlay.show_zone_text {
+        return;
+    }
     for label in &map.labels {
+        if !layer_visible(label.layer, overlay) {
+            continue;
+        }
         let pos = ctx.to_screen(label.pos.x, label.pos.y);
         if !ctx.is_visible(pos) {
             continue;

@@ -14,6 +14,11 @@ pub struct MapOverlaySettings {
     pub show_npc_names: bool,
     pub show_npc_levels: bool,
     pub show_player_names: bool,
+    // Map geometry toggles
+    pub show_zone_text: bool,
+    pub show_layer1: bool,
+    pub show_layer2: bool,
+    pub show_layer3: bool,
 }
 
 impl Default for MapOverlaySettings {
@@ -26,6 +31,10 @@ impl Default for MapOverlaySettings {
             show_npc_names: false,
             show_npc_levels: false,
             show_player_names: true,
+            show_zone_text: true,
+            show_layer1: true,
+            show_layer2: true,
+            show_layer3: true,
         }
     }
 }
@@ -170,6 +179,10 @@ impl ClientConfig {
         writeln!(f, "ShowNPCNames={}", if self.map_overlay.show_npc_names { 1 } else { 0 })?;
         writeln!(f, "ShowNPCLevels={}", if self.map_overlay.show_npc_levels { 1 } else { 0 })?;
         writeln!(f, "ShowPlayerNames={}", if self.map_overlay.show_player_names { 1 } else { 0 })?;
+        writeln!(f, "ShowZoneText={}", if self.map_overlay.show_zone_text { 1 } else { 0 })?;
+        writeln!(f, "ShowLayer1={}", if self.map_overlay.show_layer1 { 1 } else { 0 })?;
+        writeln!(f, "ShowLayer2={}", if self.map_overlay.show_layer2 { 1 } else { 0 })?;
+        writeln!(f, "ShowLayer3={}", if self.map_overlay.show_layer3 { 1 } else { 0 })?;
         Ok(())
     }
 
@@ -252,6 +265,10 @@ impl ClientConfig {
             if let Some(v) = overlay.get("shownpcnames") { cfg.map_overlay.show_npc_names = v == "1"; }
             if let Some(v) = overlay.get("shownpclevels") { cfg.map_overlay.show_npc_levels = v == "1"; }
             if let Some(v) = overlay.get("showplayernames") { cfg.map_overlay.show_player_names = v != "0"; }
+            if let Some(v) = overlay.get("showzonetext") { cfg.map_overlay.show_zone_text = v != "0"; }
+            if let Some(v) = overlay.get("showlayer1") { cfg.map_overlay.show_layer1 = v != "0"; }
+            if let Some(v) = overlay.get("showlayer2") { cfg.map_overlay.show_layer2 = v != "0"; }
+            if let Some(v) = overlay.get("showlayer3") { cfg.map_overlay.show_layer3 = v != "0"; }
         }
 
         cfg

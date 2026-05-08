@@ -743,6 +743,19 @@ impl eframe::App for MainApp {
                     if ui.checkbox(&mut self.config.map_overlay.show_player_names, "Player Names").clicked() {
                         self.save_config();
                     }
+                    ui.separator();
+                    if ui.checkbox(&mut self.config.map_overlay.show_zone_text, "Zone Text").clicked() {
+                        self.save_config();
+                    }
+                    if ui.checkbox(&mut self.config.map_overlay.show_layer1, "Layer 1").clicked() {
+                        self.save_config();
+                    }
+                    if ui.checkbox(&mut self.config.map_overlay.show_layer2, "Layer 2").clicked() {
+                        self.save_config();
+                    }
+                    if ui.checkbox(&mut self.config.map_overlay.show_layer3, "Layer 3").clicked() {
+                        self.save_config();
+                    }
                 });
             });
             ui.menu_button("Help", |ui| {

@@ -15,6 +15,8 @@ pub struct MapLine {
     pub p1: MapPoint,
     pub p2: MapPoint,
     pub color: [u8; 3],
+    /// Layer index: 0 = base, 1–3 = zone_N.txt numbered layers.
+    pub layer: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -23,6 +25,8 @@ pub struct MapLabel {
     pub text: String,
     pub color: [u8; 3],
     pub size: u8,
+    /// Layer index: 0 = base, 1–3 = zone_N.txt numbered layers.
+    pub layer: u8,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -85,19 +89,19 @@ impl From<std::io::Error> for MapError {
 /// ```
 /// X and Y are negated on load to match the MySEQ display coordinate convention.
 /// Unrecognised lines are silently skipped.
-pub fn load_layer(path: &Path) -> Result<MapData, MapError> {
+pub fn load_layer(path: &Path, layer: u8) -> Result<MapData, MapError> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
-    parse_lines(reader.lines().map_while(Result::ok))
+    parse_lines(reader.lines().map_while(Result::ok), layer)
 }
 
 /// Parse native EQ map layer text from an in-memory string (useful for tests).
 #[allow(dead_code)]
 pub fn parse_str(src: &str) -> MapData {
-    parse_lines(src.lines().map(str::to_owned)).unwrap_or_default()
+    parse_lines(src.lines().map(str::to_owned), 0).unwrap_or_default()
 }
 
-fn parse_lines(lines: impl Iterator<Item = String>) -> Result<MapData, MapError> {
+fn parse_lines(lines: impl Iterator<Item = String>, layer: u8) -> Result<MapData, MapError> {
     let mut data = MapData::default();
     for line in lines {
         let line = line.trim();
@@ -106,12 +110,14 @@ fn parse_lines(lines: impl Iterator<Item = String>) -> Result<MapData, MapError>
         }
         match line.as_bytes().first() {
             Some(b'L') | Some(b'l') => {
-                if let Some(ml) = parse_map_line(&line[1..]) {
+                if let Some(mut ml) = parse_map_line(&line[1..]) {
+                    ml.layer = layer;
                     data.lines.push(ml);
                 }
             }
             Some(b'P') | Some(b'p') => {
-                if let Some(lbl) = parse_map_label(&line[1..]) {
+                if let Some(mut lbl) = parse_map_label(&line[1..]) {
+                    lbl.layer = layer;
                     data.labels.push(lbl);
                 }
             }
@@ -126,13 +132,14 @@ fn parse_lines(lines: impl Iterator<Item = String>) -> Result<MapData, MapError>
 pub fn load_zone(dir: &Path, zone: &str) -> Result<MapData, MapError> {
     let mut combined = MapData::default();
     let mut found = false;
-    // Base layer (no suffix) + up to three numbered layers.
-    let candidates: Vec<std::path::PathBuf> = std::iter::once(dir.join(format!("{zone}.txt")))
-        .chain((1..=3u8).map(|n| dir.join(format!("{zone}_{n}.txt"))))
-        .collect();
-    for path in candidates {
+    // Base layer (layer 0, no suffix) + up to three numbered layers (1–3).
+    let candidates: Vec<(std::path::PathBuf, u8)> =
+        std::iter::once((dir.join(format!("{zone}.txt")), 0u8))
+            .chain((1..=3u8).map(|n| (dir.join(format!("{zone}_{n}.txt")), n)))
+            .collect();
+    for (path, layer) in candidates {
         if path.exists() {
-            combined.merge(load_layer(&path)?);
+            combined.merge(load_layer(&path, layer)?);
             found = true;
         }
     }
@@ -156,6 +163,7 @@ fn parse_map_line(rest: &str) -> Option<MapLine> {
         p1: MapPoint { x: x1, y: y1, z: z1 },
         p2: MapPoint { x: x2, y: y2, z: z2 },
         color: [r, g, b],
+        layer: 0,
     })
 }
 
@@ -175,6 +183,7 @@ fn parse_map_label(rest: &str) -> Option<MapLabel> {
         text,
         color: [r, g, b],
         size,
+        layer: 0,
     })
 }
 
