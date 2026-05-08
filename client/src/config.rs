@@ -2,6 +2,34 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+/// Map overlay visibility and label toggles.
+#[derive(Debug, Clone)]
+pub struct MapOverlaySettings {
+    // Spawn visibility — controls whether the dot is drawn at all
+    pub show_npcs: bool,
+    pub show_players: bool,
+    pub show_corpses: bool,
+    pub show_pets: bool,
+    // Map label overlays — controls text drawn next to the dot
+    pub show_npc_names: bool,
+    pub show_npc_levels: bool,
+    pub show_player_names: bool,
+}
+
+impl Default for MapOverlaySettings {
+    fn default() -> Self {
+        Self {
+            show_npcs: true,
+            show_players: true,
+            show_corpses: true,
+            show_pets: true,
+            show_npc_names: false,
+            show_npc_levels: false,
+            show_player_names: true,
+        }
+    }
+}
+
 /// Client configuration loaded from `client.ini`.
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
@@ -51,6 +79,9 @@ pub struct ClientConfig {
     // ── Startup ───────────────────────────────────────────────────────────────
     /// Connect to the server automatically on startup without showing the Connect dialog.
     pub auto_connect: bool,
+
+    // ── Map overlay ───────────────────────────────────────────────────────────
+    pub map_overlay: MapOverlaySettings,
 }
 
 impl Default for ClientConfig {
@@ -80,6 +111,7 @@ impl Default for ClientConfig {
             log_enabled: true,
             log_level: "info".to_owned(),
             auto_connect: false,
+            map_overlay: MapOverlaySettings::default(),
         }
     }
 }
@@ -129,6 +161,15 @@ impl ClientConfig {
         writeln!(f, "[Logging]")?;
         writeln!(f, "Enabled={}", if self.log_enabled { 1 } else { 0 })?;
         writeln!(f, "Level={}", self.log_level)?;
+        writeln!(f)?;
+        writeln!(f, "[MapOverlay]")?;
+        writeln!(f, "ShowNPCs={}", if self.map_overlay.show_npcs { 1 } else { 0 })?;
+        writeln!(f, "ShowPlayers={}", if self.map_overlay.show_players { 1 } else { 0 })?;
+        writeln!(f, "ShowCorpses={}", if self.map_overlay.show_corpses { 1 } else { 0 })?;
+        writeln!(f, "ShowPets={}", if self.map_overlay.show_pets { 1 } else { 0 })?;
+        writeln!(f, "ShowNPCNames={}", if self.map_overlay.show_npc_names { 1 } else { 0 })?;
+        writeln!(f, "ShowNPCLevels={}", if self.map_overlay.show_npc_levels { 1 } else { 0 })?;
+        writeln!(f, "ShowPlayerNames={}", if self.map_overlay.show_player_names { 1 } else { 0 })?;
         Ok(())
     }
 
@@ -203,6 +244,16 @@ impl ClientConfig {
             if let Some(v) = logging.get("level") { cfg.log_level = v.clone(); }
         }
 
+        if let Some(overlay) = sections.get("mapoverlay") {
+            if let Some(v) = overlay.get("shownpcs") { cfg.map_overlay.show_npcs = v != "0"; }
+            if let Some(v) = overlay.get("showplayers") { cfg.map_overlay.show_players = v != "0"; }
+            if let Some(v) = overlay.get("showcorpses") { cfg.map_overlay.show_corpses = v != "0"; }
+            if let Some(v) = overlay.get("showpets") { cfg.map_overlay.show_pets = v != "0"; }
+            if let Some(v) = overlay.get("shownpcnames") { cfg.map_overlay.show_npc_names = v == "1"; }
+            if let Some(v) = overlay.get("shownpclevels") { cfg.map_overlay.show_npc_levels = v == "1"; }
+            if let Some(v) = overlay.get("showplayernames") { cfg.map_overlay.show_player_names = v != "0"; }
+        }
+
         cfg
     }
 }
@@ -261,5 +312,53 @@ mod tests {
         let ini = "; this is a comment\n[WinShowEQ]\n# also a comment\nServer=10.0.0.1\n";
         let sections = parse_ini(ini);
         assert_eq!(sections["winshoweq"]["server"], "10.0.0.1");
+    }
+
+    #[test]
+    fn map_overlay_defaults_are_correct() {
+        let cfg = ClientConfig::default();
+        assert!(cfg.map_overlay.show_npcs);
+        assert!(cfg.map_overlay.show_players);
+        assert!(cfg.map_overlay.show_corpses);
+        assert!(cfg.map_overlay.show_pets);
+        assert!(!cfg.map_overlay.show_npc_names);
+        assert!(!cfg.map_overlay.show_npc_levels);
+        assert!(cfg.map_overlay.show_player_names);
+    }
+
+    #[test]
+    fn map_overlay_save_and_load_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("client.ini");
+
+        let mut cfg = ClientConfig::default();
+        cfg.map_overlay.show_npcs = false;
+        cfg.map_overlay.show_npc_names = true;
+        cfg.map_overlay.show_npc_levels = true;
+        cfg.map_overlay.show_player_names = false;
+        cfg.save(&path).unwrap();
+
+        let loaded = ClientConfig::load(&path);
+        assert!(!loaded.map_overlay.show_npcs);
+        assert!(loaded.map_overlay.show_players);   // default preserved
+        assert!(loaded.map_overlay.show_corpses);   // default preserved
+        assert!(loaded.map_overlay.show_pets);      // default preserved
+        assert!(loaded.map_overlay.show_npc_names);
+        assert!(loaded.map_overlay.show_npc_levels);
+        assert!(!loaded.map_overlay.show_player_names);
+    }
+
+    #[test]
+    fn map_overlay_missing_section_uses_defaults() {
+        let ini = "[WinShowEQ]\nServer=127.0.0.1\n";
+        let sections = parse_ini(ini);
+        assert!(!sections.contains_key("mapoverlay"));
+        // Loading an ini without [MapOverlay] should produce defaults
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("client.ini");
+        std::fs::write(&path, ini).unwrap();
+        let cfg = ClientConfig::load(&path);
+        assert!(cfg.map_overlay.show_npcs);
+        assert!(!cfg.map_overlay.show_npc_names);
     }
 }

@@ -172,6 +172,7 @@ impl OptionsDialog {
                                 log_enabled: self.log_enabled,
                                 log_level: self.log_level.clone(),
                                 auto_connect: self.auto_connect,
+                                map_overlay: self.base_config.map_overlay.clone(),
                             });
                             self.open = false;
                         }
