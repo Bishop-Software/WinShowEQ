@@ -1,5 +1,6 @@
 use egui::{Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 
+use crate::config::MapOverlaySettings;
 use crate::data::AppData;
 use crate::data::spawns::{con_color, ConColor, SpawnCategory, SpawnInfo};
 use crate::game_data::GameData;
@@ -55,7 +56,7 @@ impl<'a> MapCon<'a> {
 
     /// `z_filter`: if `Some((center_z, range))`, spawns with `|z - center| > range` are hidden.
     /// Returns `Some(MapAction)` if the context menu produced an action this frame.
-    pub fn show(self, ui: &mut Ui, z_filter: Option<(f32, f32)>) -> Option<MapAction> {
+    pub fn show(self, ui: &mut Ui, z_filter: Option<(f32, f32)>, overlay: &MapOverlaySettings) -> Option<MapAction> {
         let MapCon { data, state } = self;
 
         let size = ui.available_size();
@@ -123,7 +124,7 @@ impl<'a> MapCon<'a> {
         draw_labels(&ctx, &data.map);
         draw_mob_trails(&ctx, data);
         draw_ground_items(&ctx, data, z_filter);
-        draw_spawns(&ctx, data, z_filter);
+        draw_spawns(&ctx, data, z_filter, overlay);
         draw_self(&ctx, data);
         draw_annotations(&ctx, data);
         if let Some(target) = state.bearing_target {
@@ -243,7 +244,7 @@ fn draw_labels(ctx: &DrawCtx, map: &MapData) {
     }
 }
 
-fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>) {
+fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, overlay: &MapOverlaySettings) {
     let player_level = data.self_level();
     for spawn in data.spawns.iter() {
         if Some(spawn.id) == data.self_id {
@@ -252,6 +253,18 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>) {
         if z_filtered(spawn.z, z_filter) {
             continue;
         }
+
+        // Visibility filtering
+        let visible = match spawn.spawn_category {
+            SpawnCategory::Npc => overlay.show_npcs,
+            SpawnCategory::Pc => overlay.show_players,
+            SpawnCategory::Corpse => overlay.show_corpses,
+            SpawnCategory::Pet | SpawnCategory::Merc => overlay.show_pets,
+        };
+        if !visible {
+            continue;
+        }
+
         let (mx, my) = eq_to_map(spawn.x, spawn.y);
         let pos = ctx.to_screen(mx, my);
         if !ctx.is_visible(pos) {
@@ -282,6 +295,28 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>) {
             if data.target_id == Some(spawn.id) {
                 ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 6.0, Stroke::new(2.0, Color32::from_rgb(255, 120, 0)));
             }
+        }
+
+        // Map label overlay
+        let label: Option<String> = if is_pc {
+            if overlay.show_player_names { Some(spawn.name.clone()) } else { None }
+        } else {
+            match (overlay.show_npc_names, overlay.show_npc_levels) {
+                (true, true) => Some(format!("{} ({})", spawn.name, spawn.level)),
+                (true, false) => Some(spawn.name.clone()),
+                (false, true) => Some(spawn.level.to_string()),
+                (false, false) => None,
+            }
+        };
+        if let Some(text) = label {
+            let label_pos = pos + Vec2::new(SPAWN_RADIUS + 2.0, -(SPAWN_RADIUS + 2.0));
+            ctx.painter.with_clip_rect(ctx.rect).text(
+                label_pos,
+                egui::Align2::LEFT_BOTTOM,
+                &text,
+                FontId::proportional(10.0),
+                color,
+            );
         }
     }
 }

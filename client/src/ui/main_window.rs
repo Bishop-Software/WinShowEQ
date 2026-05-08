@@ -8,7 +8,7 @@ use std::time::Duration;
 use common::{IPT_GROUND, IPT_SELF, IPT_SPAWNS, IPT_TARGET, IPT_WORLD, IPT_ZONE, OPT_GROUND};
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 
-use crate::config::ClientConfig;
+use crate::config::{ClientConfig, MapOverlaySettings};
 use crate::data::annotations::AnnotationStore;
 use crate::data::timers::{SpawnObserver, SpawnTimer, TimerStore};
 use crate::map_reader;
@@ -317,6 +317,7 @@ impl MainApp {
 struct WinSeqTabViewer<'a> {
     data: &'a Arc<Mutex<AppData>>,
     map_pane: &'a mut MapPane,
+    overlay: &'a MapOverlaySettings,
     spawn_sort_column: &'a mut Option<usize>,
     spawn_sort_ascending: &'a mut bool,
     timer_sort_column: &'a mut Option<usize>,
@@ -365,7 +366,7 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
             }
             Tab::Map => {
                 let data = self.data.lock().unwrap();
-                if let Some(action) = self.map_pane.show(ui, &data) {
+                if let Some(action) = self.map_pane.show(ui, &data, self.overlay) {
                     *self.map_action = Some(action);
                 }
             }
@@ -758,6 +759,7 @@ impl eframe::App for MainApp {
         let mut viewer = WinSeqTabViewer {
             data: &self.data,
             map_pane: &mut self.map_pane,
+            overlay: &self.config.map_overlay,
             spawn_sort_column: &mut self.spawn_sort_column,
             spawn_sort_ascending: &mut self.spawn_sort_ascending,
             timer_sort_column: &mut self.timer_sort_column,

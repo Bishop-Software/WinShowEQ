@@ -1,5 +1,6 @@
 use egui::Ui;
 
+use crate::config::MapOverlaySettings;
 use crate::data::AppData;
 use crate::map_canvas::{MapAction, MapCon, MapState};
 
@@ -21,7 +22,7 @@ impl Default for MapPane {
 }
 
 impl MapPane {
-    pub fn show(&mut self, ui: &mut Ui, data: &AppData) -> Option<MapAction> {
+    pub fn show(&mut self, ui: &mut Ui, data: &AppData, overlay: &MapOverlaySettings) -> Option<MapAction> {
         // Controls strip at the top of the panel.
         ui.horizontal(|ui| {
             ui.checkbox(&mut self.z_filter_enabled, "Z Filter");
@@ -53,6 +54,6 @@ impl MapPane {
             None
         };
 
-        MapCon::new(data, &mut self.state).show(ui, z_filter)
+        MapCon::new(data, &mut self.state).show(ui, z_filter, overlay)
     }
 }
