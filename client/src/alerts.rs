@@ -166,40 +166,38 @@ fn spawn_audio_thread(rx: mpsc::Receiver<AudioCmd>) {
 
 fn play_beep() {
     use rodio::source::{SineWave, Source};
-    use rodio::{OutputStream, Sink};
+    use rodio::stream::DeviceSinkBuilder;
+    use rodio::Player;
 
-    let Ok((_stream, handle)) = OutputStream::try_default() else {
+    let Ok(device_sink) = DeviceSinkBuilder::open_default_sink() else {
         return;
     };
-    let Ok(sink) = Sink::try_new(&handle) else {
-        return;
-    };
+    let player = Player::connect_new(device_sink.mixer());
     let source = SineWave::new(300.0)
         .take_duration(Duration::from_millis(100))
         .amplify(0.5);
-    sink.append(source);
-    sink.sleep_until_end();
+    player.append(source);
+    player.sleep_until_end();
 }
 
 fn play_wav_file(path: &str) {
-    use rodio::{Decoder, OutputStream, Sink};
+    use rodio::stream::DeviceSinkBuilder;
+    use rodio::{Decoder, Player};
     use std::fs::File;
     use std::io::BufReader;
 
-    let Ok((_stream, handle)) = OutputStream::try_default() else {
+    let Ok(device_sink) = DeviceSinkBuilder::open_default_sink() else {
         return;
     };
-    let Ok(sink) = Sink::try_new(&handle) else {
-        return;
-    };
+    let player = Player::connect_new(device_sink.mixer());
     let Ok(file) = File::open(path) else {
         return;
     };
     let Ok(source) = Decoder::new(BufReader::new(file)) else {
         return;
     };
-    sink.append(source);
-    sink.sleep_until_end();
+    player.append(source);
+    player.sleep_until_end();
 }
 
 /// Convert a raw EQ spawn name to a TTS-friendly string.
@@ -215,6 +213,6 @@ fn post_discord(url: &str, message: &str) {
     let escaped = message.replace('\\', "\\\\").replace('"', "\\\"");
     let body = format!(r#"{{"content":"{}"}}"#, escaped);
     let _ = ureq::post(url)
-        .set("Content-Type", "application/json")
-        .send_string(&body);
+        .header("Content-Type", "application/json")
+        .send(body.as_bytes());
 }

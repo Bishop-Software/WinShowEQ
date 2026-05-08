@@ -33,6 +33,7 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_title("WinShowEQ Client")
             .with_inner_size([900.0, 700.0]),
+        persist_window: true,
         ..Default::default()
     };
 

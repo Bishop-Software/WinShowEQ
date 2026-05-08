@@ -35,7 +35,7 @@ const TICK_DELAY_MS: u64 = 250;
 const RECONNECT_DELAY_SECS: u64 = 2;
 
 /// Identifies each dockable panel.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 enum Tab {
     Spawns,
     Timers,
@@ -150,6 +150,16 @@ impl MainApp {
         let logger = Logger::new(&config.log_dir);
         logger.set_enabled(config.log_enabled);
         logger.set_level(LogLevel::from_str(&config.log_level));
+        // Restore persisted UI state (dock layout + column widths).
+        let dock_state: Option<DockState<Tab>> = cc.storage
+            .and_then(|s| eframe::get_value(s, "dock_state"));
+        let spawn_col_widths: Option<Vec<f32>> = cc.storage
+            .and_then(|s| eframe::get_value(s, "spawn_col_widths"));
+        let timer_col_widths: Option<Vec<f32>> = cc.storage
+            .and_then(|s| eframe::get_value(s, "timer_col_widths"));
+        let ground_col_widths: Option<Vec<f32>> = cc.storage
+            .and_then(|s| eframe::get_value(s, "ground_col_widths"));
+
         let data = Arc::new(Mutex::new(AppData::default()));
         let stop = Arc::new(AtomicBool::new(false));
         let addr_cell: Arc<Mutex<Option<SocketAddr>>> = Arc::new(Mutex::new(server_addr));
@@ -168,6 +178,9 @@ impl MainApp {
                 &std::path::Path::new(&config.filter_dir).join("filters_global.xml"),
             );
             d.recompute_filters();
+            if let Some(w) = spawn_col_widths  { if w.len() == d.spawn_list_column_widths.len()  { d.spawn_list_column_widths  = w; } }
+            if let Some(w) = timer_col_widths  { if w.len() == d.timer_list_column_widths.len()  { d.timer_list_column_widths  = w; } }
+            if let Some(w) = ground_col_widths { if w.len() == d.ground_list_column_widths.len() { d.ground_list_column_widths = w; } }
         }
 
         start_network_thread(
@@ -192,7 +205,7 @@ impl MainApp {
             options,
             about,
             help,
-            dock_state: build_dock_state(),
+            dock_state: dock_state.unwrap_or_else(build_dock_state),
             hidden_panels: HashSet::new(),
             add_note: AddNoteDialog::default(),
             add_timer: AddTimerDialog::default(),
@@ -383,6 +396,14 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
 // ---------------------------------------------------------------------------
 
 impl eframe::App for MainApp {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, "dock_state", &self.dock_state);
+        let data = self.data.lock().unwrap();
+        eframe::set_value(storage, "spawn_col_widths",  &data.spawn_list_column_widths);
+        eframe::set_value(storage, "timer_col_widths",  &data.timer_list_column_widths);
+        eframe::set_value(storage, "ground_col_widths", &data.ground_list_column_widths);
+    }
+
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_millis(TICK_DELAY_MS));
 
