@@ -698,6 +698,31 @@ impl eframe::App for MainApp {
                     self.options.trails_enabled = data.trails_enabled;
                     ui.close();
                 }
+                ui.separator();
+                ui.menu_button("Show ▶", |ui| {
+                    if ui.checkbox(&mut self.config.map_overlay.show_npcs, "NPCs").clicked() {
+                        self.save_config();
+                    }
+                    if ui.checkbox(&mut self.config.map_overlay.show_players, "Players").clicked() {
+                        self.save_config();
+                    }
+                    if ui.checkbox(&mut self.config.map_overlay.show_corpses, "Corpses").clicked() {
+                        self.save_config();
+                    }
+                    if ui.checkbox(&mut self.config.map_overlay.show_pets, "Pets / Mercs").clicked() {
+                        self.save_config();
+                    }
+                    ui.separator();
+                    if ui.checkbox(&mut self.config.map_overlay.show_npc_names, "NPC Names").clicked() {
+                        self.save_config();
+                    }
+                    if ui.checkbox(&mut self.config.map_overlay.show_npc_levels, "NPC Levels").clicked() {
+                        self.save_config();
+                    }
+                    if ui.checkbox(&mut self.config.map_overlay.show_player_names, "Player Names").clicked() {
+                        self.save_config();
+                    }
+                });
             });
             ui.menu_button("Help", |ui| {
                 if ui.button("Help  F1").clicked() {
