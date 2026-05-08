@@ -25,6 +25,15 @@ struct Cli {
     connect: Option<SocketAddr>,
 }
 
+fn load_icon() -> egui::IconData {
+    let bytes = include_bytes!("../../assets/WinShowEQ.png");
+    let img = image::load_from_memory(bytes)
+        .expect("valid PNG icon")
+        .into_rgba8();
+    let (width, height) = img.dimensions();
+    egui::IconData { rgba: img.into_raw(), width, height }
+}
+
 fn main() -> eframe::Result {
     let cli = Cli::parse();
     let config_path = resolve_ini_path("client.ini");
@@ -32,7 +41,8 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("WinShowEQ Client")
-            .with_inner_size([900.0, 700.0]),
+            .with_inner_size([900.0, 700.0])
+            .with_icon(std::sync::Arc::new(load_icon())),
         persist_window: true,
         ..Default::default()
     };

@@ -97,7 +97,7 @@ impl WinShowEQApp {
         let tray = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
             .with_tooltip("WinShowEQ")
-            .with_icon(make_placeholder_icon())
+            .with_icon(load_app_icon())
             .build()
             .expect("tray icon creation");
 
@@ -349,10 +349,13 @@ fn browse_for_exe() -> Option<String> {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn make_placeholder_icon() -> Icon {
-    let size = 16u32;
-    let rgba: Vec<u8> = (0..size * size).flat_map(|_| [50u8, 160, 50, 255]).collect();
-    Icon::from_rgba(rgba, size, size).expect("valid tray icon")
+fn load_app_icon() -> Icon {
+    let bytes = include_bytes!("../../../assets/WinShowEQ.png");
+    let img = image::load_from_memory(bytes)
+        .expect("valid PNG icon")
+        .into_rgba8();
+    let (width, height) = img.dimensions();
+    Icon::from_rgba(img.into_raw(), width, height).expect("valid tray icon")
 }
 
 fn status_color(state: SessionState) -> Color32 {

@@ -69,6 +69,15 @@ fn main() {
     }
 }
 
+fn load_icon() -> egui::IconData {
+    let bytes = include_bytes!("../../assets/WinShowEQ.png");
+    let img = image::load_from_memory(bytes)
+        .expect("valid PNG icon")
+        .into_rgba8();
+    let (width, height) = img.dimensions();
+    egui::IconData { rgba: img.into_raw(), width, height }
+}
+
 fn run_gui(ini_override: Option<&str>) {
     let ini_path = ini_override
         .map(str::to_owned)
@@ -100,7 +109,8 @@ fn run_gui(ini_override: Option<&str>) {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([GUI_DEFAULT_WIDTH, GUI_DEFAULT_HEIGHT])
             .with_min_inner_size([GUI_MIN_WIDTH, GUI_MIN_HEIGHT])
-            .with_visible(!start_minimized),
+            .with_visible(!start_minimized)
+            .with_icon(std::sync::Arc::new(load_icon())),
         ..Default::default()
     };
     eframe::run_native(

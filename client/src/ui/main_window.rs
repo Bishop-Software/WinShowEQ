@@ -720,7 +720,7 @@ impl eframe::App for MainApp {
                     ui.close();
                 }
                 ui.separator();
-                ui.menu_button("Show ▶", |ui| {
+                ui.menu_button("Show", |ui| {
                     if ui.checkbox(&mut self.config.map_overlay.show_npcs, "NPCs").clicked() {
                         self.save_config();
                     }
