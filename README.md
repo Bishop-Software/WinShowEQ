@@ -30,6 +30,8 @@ This repo contains both the **server** (reads EQ memory and streams data over TC
 | Feature                                     | Issues                                                                                                                                                                                                                                                                                                                                                                              | Status   |
 |---------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
 | Auto-learning spawn timers (C# parity)      | [#37](https://github.com/Bishop-Software/WinShowEQ/issues/37) [#38](https://github.com/Bishop-Software/WinShowEQ/issues/38) [#39](https://github.com/Bishop-Software/WinShowEQ/issues/39) [#40](https://github.com/Bishop-Software/WinShowEQ/issues/40) [#41](https://github.com/Bishop-Software/WinShowEQ/issues/41) [#42](https://github.com/Bishop-Software/WinShowEQ/issues/42) | Complete |
+| Map overlay visibility and label toggles    | [#47](https://github.com/Bishop-Software/WinShowEQ/issues/47) [#48](https://github.com/Bishop-Software/WinShowEQ/issues/48) [#49](https://github.com/Bishop-Software/WinShowEQ/issues/49)                                                                                                                                                                                          | Complete |
+| Persist UI state across sessions            | [#50](https://github.com/Bishop-Software/WinShowEQ/issues/50)                                                                                                                                                                                                                                                                                                                       | Complete |
 | Spawn list filter UI (race / class / level) | [#43](https://github.com/Bishop-Software/WinShowEQ/issues/43) [#44](https://github.com/Bishop-Software/WinShowEQ/issues/44) [#45](https://github.com/Bishop-Software/WinShowEQ/issues/45) [#46](https://github.com/Bishop-Software/WinShowEQ/issues/46)                                                                                                                             | Planned  |
 | Spawn color manager UI                      | [#36](https://github.com/Bishop-Software/WinShowEQ/issues/36)                                                                                                                                                                                                                                                                                                                       | Planned  |
 
@@ -39,7 +41,7 @@ Complete migration plans and issue tracking are available on GitHub:
 
 - [**Server Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/1): M1–M7 complete (issues #9–#15)
 - [**Client Migration Milestone**](https://github.com/Bishop-Software/WinShowEQ/milestone/2): C1–C8 complete (issues #1–#8, #16–#23)
-- [**WinShowEQ Enhancements**](https://github.com/Bishop-Software/WinShowEQ/milestone/3): issues #36–#46
+- [**WinShowEQ Enhancements**](https://github.com/Bishop-Software/WinShowEQ/milestone/3): issues #36–#50
 
 See [CLAUDE.md](CLAUDE.md) for developer guidance and technical details.
 
@@ -89,9 +91,11 @@ The Rust client component (119/119 tests passing across all crates):
 | `ESC`         | Clear bearing line         |
 
 - View menu: panel visibility toggles (Spawns/Timers/Ground Items) with checkbox indicators
-- Map menu: Center on Player, Zoom In/Out, Mob Trails toggle
+- Map menu: Center on Player, Zoom In/Out, Mob Trails toggle, and a **Show ▶** submenu with per-category visibility toggles (NPCs, Players, Corpses, Pets/Mercs) and label toggles (NPC Names, NPC Levels, Player Names); all settings persist in `client.ini`
+- Corpse rendering matches C# MySEQ: PC corpses drawn as hollow yellow squares, NPC corpses as cyan crosshairs
 - Help menu with About dialog (version, credits, clickable library links)
 - F1 (or Help → Help) opens a tabbed Help window: Keyboard Shortcuts, Map Controls, Spawn List, Timers, Alerts
+- Window size/position, dock panel layout, and table column widths all persist across sessions via eframe storage
 
 ### Planned features
 
