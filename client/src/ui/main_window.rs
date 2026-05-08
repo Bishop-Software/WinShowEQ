@@ -178,9 +178,9 @@ impl MainApp {
                 &std::path::Path::new(&config.filter_dir).join("filters_global.xml"),
             );
             d.recompute_filters();
-            if let Some(w) = spawn_col_widths  { if w.len() == d.spawn_list_column_widths.len()  { d.spawn_list_column_widths  = w; } }
-            if let Some(w) = timer_col_widths  { if w.len() == d.timer_list_column_widths.len()  { d.timer_list_column_widths  = w; } }
-            if let Some(w) = ground_col_widths { if w.len() == d.ground_list_column_widths.len() { d.ground_list_column_widths = w; } }
+            if let Some(w) = spawn_col_widths  && w.len() == d.spawn_list_column_widths.len()  { d.spawn_list_column_widths  = w; }
+            if let Some(w) = timer_col_widths  && w.len() == d.timer_list_column_widths.len()  { d.timer_list_column_widths  = w; }
+            if let Some(w) = ground_col_widths && w.len() == d.ground_list_column_widths.len() { d.ground_list_column_widths = w; }
         }
 
         start_network_thread(
