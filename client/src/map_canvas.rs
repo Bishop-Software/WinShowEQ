@@ -272,7 +272,26 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, over
         }
         let color = spawn_color(spawn, player_level, &data.game_data);
         let is_pc = spawn.spawn_category == SpawnCategory::Pc;
-        if is_pc {
+        let is_corpse = spawn.spawn_category == SpawnCategory::Corpse;
+        if is_corpse {
+            if is_pc_corpse(&spawn.name) {
+                // PC corpse: hollow yellow square (matches C# DrawRectangle with yellowPen)
+                let r = SPAWN_RADIUS;
+                let sq = egui::Rect::from_center_size(pos, egui::Vec2::splat(r * 2.0));
+                ctx.painter.rect_stroke(sq, 0.0, Stroke::new(1.5, Color32::from_rgb(255, 210, 0)), egui::StrokeKind::Middle);
+            } else {
+                // NPC corpse: cyan crosshair (matches C# DrawLine with cyanPen)
+                let d = SPAWN_RADIUS;
+                ctx.painter.line_segment(
+                    [Pos2::new(pos.x - d, pos.y), Pos2::new(pos.x + d, pos.y)],
+                    Stroke::new(1.5, Color32::from_rgb(0, 220, 220)),
+                );
+                ctx.painter.line_segment(
+                    [Pos2::new(pos.x, pos.y - d), Pos2::new(pos.x, pos.y + d)],
+                    Stroke::new(1.5, Color32::from_rgb(0, 220, 220)),
+                );
+            }
+        } else if is_pc {
             let r = SPAWN_RADIUS;
             let sq = egui::Rect::from_center_size(pos, egui::Vec2::splat(r * 2.0));
             ctx.painter.rect_filled(sq, 0.0, color);
@@ -551,6 +570,14 @@ fn draw_bearing_line(ctx: &DrawCtx, data: &AppData, target: (f32, f32)) {
 fn to_cardinal(degrees: f32) -> &'static str {
     let idx = ((degrees + 22.5) / 45.0) as usize % 8;
     ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][idx]
+}
+
+/// Returns true if a corpse spawn was likely a player character.
+/// Matches C# heuristic: no underscore, doesn't start with "a " or "an ".
+/// NPC names always start with an article or contain underscores; player names never do.
+#[inline]
+fn is_pc_corpse(name: &str) -> bool {
+    !name.contains('_') && !name.starts_with("a ") && !name.starts_with("an ")
 }
 
 /// Returns true if `z` is outside the filter range and should be hidden.
