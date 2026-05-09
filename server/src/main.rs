@@ -111,6 +111,7 @@ fn run_gui(ini_override: Option<&str>) {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([GUI_DEFAULT_WIDTH, GUI_DEFAULT_HEIGHT])
             .with_min_inner_size([GUI_MIN_WIDTH, GUI_MIN_HEIGHT])
+            .with_resizable(false)
             .with_visible(!start_minimized)
             .with_icon(std::sync::Arc::new(load_icon())),
         ..Default::default()
