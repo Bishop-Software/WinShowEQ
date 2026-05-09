@@ -418,7 +418,7 @@ impl eframe::App for MainApp {
         }
 
         {
-            let mut data = self.data.lock().unwrap();
+            let data = self.data.lock().unwrap();
             if data.spawns_dirty {
                 let entries = build_filter_entries(&data.spawns, &data.game_data);
                 drop(data);

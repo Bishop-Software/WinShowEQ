@@ -7,6 +7,7 @@ use crate::game_data::GameData;
 
 /// A single spawn entry fed into the filter UI, with race/class pre-resolved to display strings.
 #[derive(Clone, Debug)]
+#[allow(dead_code)] // fields consumed once wired in #45
 pub struct FilterEntry {
     pub id: u32,
     pub name: String,
@@ -17,6 +18,7 @@ pub struct FilterEntry {
 }
 
 /// Spawn-type bucket for the type filter ComboBox.
+#[allow(dead_code)] // wired in #45/#46
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum SpawnTypeFilter {
     #[default]
@@ -28,6 +30,7 @@ pub enum SpawnTypeFilter {
 }
 
 impl SpawnTypeFilter {
+    #[allow(dead_code)] // wired in #45/#46
     fn label(self) -> &'static str {
         match self {
             Self::All => "All Types",
@@ -38,6 +41,7 @@ impl SpawnTypeFilter {
         }
     }
 
+    #[allow(dead_code)] // wired in #45/#46
     fn matches(self, cat: SpawnCategory) -> bool {
         match self {
             Self::All => true,
@@ -54,6 +58,7 @@ impl SpawnTypeFilter {
 /// Call [`update_spawns`] whenever the spawn list changes (zone change or tick) to
 /// rebuild the race/class options. Call [`apply_filters`] each frame to get the set of
 /// visible spawn IDs. Call [`ui_compact`] to render the filter controls.
+#[allow(dead_code)] // wired in #45/#46
 pub struct SpawnFilterUI {
     entries: Vec<FilterEntry>,
     /// Sorted unique race names across all entries.
@@ -86,6 +91,7 @@ impl Default for SpawnFilterUI {
     }
 }
 
+#[allow(dead_code)] // wired in #45/#46
 impl SpawnFilterUI {
     /// Rebuild race/class option lists from new spawn data.
     ///
@@ -125,11 +131,11 @@ impl SpawnFilterUI {
             .collect();
 
         // Drop race selection if it no longer exists in the new data.
-        if let Some(ref r) = self.selected_race {
-            if !races.contains(r) {
-                self.selected_race = None;
-                self.selected_class = None;
-            }
+        if let Some(ref r) = self.selected_race
+            && !races.contains(r)
+        {
+            self.selected_race = None;
+            self.selected_class = None;
         }
         // Drop class selection if it no longer exists for the current race.
         if let Some(ref c) = self.selected_class {
@@ -158,15 +164,15 @@ impl SpawnFilterUI {
     }
 
     fn matches(&self, e: &FilterEntry) -> bool {
-        if let Some(ref race) = self.selected_race {
-            if &e.race != race {
-                return false;
-            }
+        if let Some(ref race) = self.selected_race
+            && &e.race != race
+        {
+            return false;
         }
-        if let Some(ref class) = self.selected_class {
-            if &e.class != class {
-                return false;
-            }
+        if let Some(ref class) = self.selected_class
+            && &e.class != class
+        {
+            return false;
         }
         if e.level < self.level_min || e.level > self.level_max {
             return false;
