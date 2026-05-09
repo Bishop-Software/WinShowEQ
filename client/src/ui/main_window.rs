@@ -956,7 +956,7 @@ fn start_network_thread(
                                         }
                                     }
                                     for msg in d.on_tick_end() {
-                                        logger.info(&msg);
+                                        logger.debug(&msg);
                                     }
                                 }
                                 Err(e) => {
