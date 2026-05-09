@@ -45,6 +45,10 @@ pub struct SpawnTimer {
     pub is_auto: bool,
     /// Number of confirmed respawn cycles observed (auto timers only).
     pub spawn_count: u32,
+    /// Wall-clock time the mob last respawned (None for manually added timers).
+    pub spawn_time: Option<DateTime<Utc>>,
+    /// Zone name where this timer was learned.
+    pub zone: String,
 }
 
 impl SpawnTimer {
@@ -64,6 +68,8 @@ impl SpawnTimer {
             respawn_secs,
             is_auto: false,
             spawn_count: 0,
+            spawn_time: None,
+            zone: String::new(),
         }
     }
 
@@ -173,7 +179,7 @@ impl TimerStore {
         for t in &self.timers {
             writeln!(
                 f,
-                "{};{};{};{};{};{};{};{}",
+                "{};{};{};{};{};{};{};{};{};{}",
                 t.name,
                 t.x,
                 t.y,
@@ -182,6 +188,8 @@ impl TimerStore {
                 t.respawn_secs,
                 if t.is_auto { 1 } else { 0 },
                 t.spawn_count,
+                t.spawn_time.map(|dt| dt.timestamp()).unwrap_or(0),
+                t.zone,
             )?;
         }
         Ok(())
@@ -193,7 +201,7 @@ fn timer_path(zone: &str, dir: &str) -> std::path::PathBuf {
 }
 
 fn parse_line(line: &str) -> Option<SpawnTimer> {
-    let mut parts = line.splitn(8, ';');
+    let mut parts = line.splitn(10, ';');
     let name = parts.next()?.to_owned();
     let x: f32 = parts.next()?.parse().ok()?;
     let y: f32 = parts.next()?.parse().ok()?;
@@ -202,8 +210,13 @@ fn parse_line(line: &str) -> Option<SpawnTimer> {
     let respawn_secs: i64 = parts.next()?.parse().ok()?;
     let is_auto = parts.next().and_then(|s| s.parse::<u8>().ok()).map(|v| v != 0).unwrap_or(false);
     let spawn_count = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let spawn_time = parts.next()
+        .and_then(|s| s.parse::<i64>().ok())
+        .filter(|&ts| ts > 0)
+        .and_then(|ts| DateTime::from_timestamp(ts, 0));
+    let zone = parts.next().unwrap_or("").to_owned();
     let killed_at = DateTime::from_timestamp(killed_unix, 0).unwrap_or_else(Utc::now);
-    Some(SpawnTimer { name, x, y, z, killed_at, respawn_secs, is_auto, spawn_count })
+    Some(SpawnTimer { name, x, y, z, killed_at, respawn_secs, is_auto, spawn_count, spawn_time, zone })
 }
 
 // ---------------------------------------------------------------------------
@@ -318,6 +331,8 @@ impl SpawnObserver {
                                 respawn_secs: avg,
                                 is_auto: true,
                                 spawn_count: obs.spawn_count,
+                                spawn_time: Some(now),
+                                zone: zone.to_owned(),
                             });
                             log.push(format!(
                                 "[Timer] Auto-timer promoted: {} — avg {}s over {} cycles",
@@ -347,15 +362,17 @@ impl SpawnObserver {
                 if is_excluded_spawn(&spawn.name, spawn.race, spawn.owner_id) {
                     continue;
                 }
-                let key = loc_key(spawn.x, spawn.y);
+                // Use spawn_x/spawn_y (first-seen position = spawn point) rather than
+                // current position, so kills on pulled mobs still match the respawn location.
+                let key = loc_key(spawn.spawn_x, spawn.spawn_y);
                 log.push(format!(
                     "[Timer] Kill detected: {} @ {}",
                     spawn.name, key,
                 ));
                 self.pending_kills.insert(key, PendingKill {
                     name: spawn.name.clone(),
-                    x: spawn.x,
-                    y: spawn.y,
+                    x: spawn.spawn_x,
+                    y: spawn.spawn_y,
                     z: spawn.z,
                     killed_at: now,
                 });
@@ -480,6 +497,8 @@ mod tests {
             offhand: 0,
             spawn_category: SpawnCategory::Npc,
             first_seen: Local::now(),
+            spawn_x: x,
+            spawn_y: y,
             is_hunt: false,
             is_caution: false,
             is_danger: false,
@@ -618,6 +637,31 @@ mod tests {
         observer.process_diff(&ids(&[]), &store, "crushbone", &mut timers);
 
         assert!(observer.pending_kills.is_empty());
+    }
+
+    #[test]
+    fn process_diff_kill_uses_spawn_point_not_death_position() {
+        let mut observer = SpawnObserver::default();
+        let mut timers = TimerStore::default();
+
+        // Mob spawns at (100, 200), then moves to (300, 400) before being killed.
+        let mut npc = make_npc(1, "Fippy Darkpaw", 100.0, 200.0);
+        let store = make_store(vec![npc.clone()]);
+
+        // Tick 1: mob seen at spawn point
+        observer.process_diff(&ids(&[1]), &store, "blackburrow", &mut timers);
+
+        // Mob walks to (300, 400) — update store with moved position, spawn_x/spawn_y preserved
+        npc.x = 300.0;
+        npc.y = 400.0;
+        let moved_store = make_store(vec![npc]);
+
+        // Tick 2: mob gone (killed at death position 300, 400)
+        observer.process_diff(&ids(&[]), &moved_store, "blackburrow", &mut timers);
+
+        // Kill should be keyed at spawn point (100, 200), not death position (300, 400)
+        assert!(observer.pending_kills.contains_key(&loc_key(100.0, 200.0)));
+        assert!(!observer.pending_kills.contains_key(&loc_key(300.0, 400.0)));
     }
 
     #[test]

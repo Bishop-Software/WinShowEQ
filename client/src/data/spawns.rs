@@ -110,6 +110,10 @@ pub struct SpawnInfo {
     pub spawn_category: SpawnCategory,
     /// Wall-clock time when this spawn was first seen in the zone.
     pub first_seen: DateTime<Local>,
+    /// Position where this spawn first appeared (its spawn point). Preserved across
+    /// position updates so kill detection can key on spawn point rather than death position.
+    pub spawn_x: f32,
+    pub spawn_y: f32,
     /// Set by `apply_filters` — highest-priority filter match.
     pub is_hunt: bool,
     pub is_caution: bool,
@@ -148,6 +152,8 @@ impl SpawnInfo {
             offhand,
             spawn_category: categorize(spawn_type, owner, class),
             first_seen: Local::now(),
+            spawn_x: x,
+            spawn_y: y,
             is_hunt: false,
             is_caution: false,
             is_danger: false,
@@ -196,6 +202,8 @@ impl SpawnStore {
         let mut info = SpawnInfo::from_record(rec);
         if let Some(existing) = self.spawns.get(&info.id) {
             info.first_seen = existing.first_seen;
+            info.spawn_x = existing.spawn_x;
+            info.spawn_y = existing.spawn_y;
         }
         self.spawns.insert(info.id, info);
     }
@@ -205,6 +213,8 @@ impl SpawnStore {
         let mut info = SpawnInfo::from_record(rec);
         if let Some(existing) = self.spawns.get(&info.id) {
             info.first_seen = existing.first_seen;
+            info.spawn_x = existing.spawn_x;
+            info.spawn_y = existing.spawn_y;
         }
         info.apply_filters(filters);
         self.spawns.insert(info.id, info);
@@ -221,6 +231,8 @@ impl SpawnStore {
     pub fn upsert_info(&mut self, mut info: SpawnInfo) {
         if let Some(existing) = self.spawns.get(&info.id) {
             info.first_seen = existing.first_seen;
+            info.spawn_x = existing.spawn_x;
+            info.spawn_y = existing.spawn_y;
         }
         self.spawns.insert(info.id, info);
     }
@@ -355,6 +367,26 @@ mod tests {
         store.upsert(&rec);
         assert_eq!(store.get(100).unwrap().level, 35);
         assert_eq!(store.len(), 1);
+    }
+
+    #[test]
+    fn upsert_preserves_spawn_point_on_position_update() {
+        let mut store = SpawnStore::new();
+        let mut rec = SpawnRecord::zeroed();
+        rec.id = 42;
+        rec.flags = common::OPT_SPAWNS;
+        rec.x = 100.0; // wire x = EQ east-west → SpawnInfo.y
+        rec.y = 200.0; // wire y = EQ north-south → SpawnInfo.x
+        store.upsert(&rec);
+
+        // Move the mob
+        rec.x = 300.0;
+        rec.y = 400.0;
+        store.upsert(&rec);
+
+        let info = store.get(42).unwrap();
+        assert_eq!(info.spawn_x, 200.0, "spawn_x should be first-seen position");
+        assert_eq!(info.spawn_y, 100.0, "spawn_y should be first-seen position");
     }
 
     #[test]
