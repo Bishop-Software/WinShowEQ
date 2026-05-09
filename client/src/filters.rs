@@ -133,9 +133,16 @@ impl FilterSet {
         }
     }
 
-    /// Return the filter category for `name` (case-insensitive), or None if unfilitered.
+    /// Return the filter category for `name`, or None if unfiltered.
+    /// Matches if any filter entry is a case-insensitive substring of `name`.
+    /// When multiple entries match, the highest-priority category wins.
     pub fn classify(&self, name: &str) -> Option<FilterCategory> {
-        self.entries.get(&name.to_lowercase()).copied()
+        let lower = name.to_lowercase();
+        self.entries
+            .iter()
+            .filter(|(entry, _)| lower.contains(entry.as_str()))
+            .map(|(_, &cat)| cat)
+            .max_by_key(|cat| cat.priority())
     }
 
     /// Remove an entry by name (case-insensitive).
@@ -261,6 +268,24 @@ mod tests {
         let f = write_temp_xml(SAMPLE_XML);
         let set = FilterSet::load(f.path());
         assert_eq!(set.classify("Xygoz"), None);
+    }
+
+    #[test]
+    fn classify_matches_substring() {
+        let mut set = FilterSet::new();
+        set.add(FilterCategory::Hunt, "gnoll");
+        assert_eq!(set.classify("a gnoll scout"), Some(FilterCategory::Hunt));
+        assert_eq!(set.classify("a gnoll warrior"), Some(FilterCategory::Hunt));
+        assert_eq!(set.classify("GNOLL SHAMAN"), Some(FilterCategory::Hunt));
+        assert_eq!(set.classify("orc pawn"), None);
+    }
+
+    #[test]
+    fn classify_highest_priority_wins_on_multiple_substring_matches() {
+        let mut set = FilterSet::new();
+        set.add(FilterCategory::Hunt, "gnoll");
+        set.add(FilterCategory::Danger, "gnoll lord");
+        assert_eq!(set.classify("a gnoll lord"), Some(FilterCategory::Danger));
     }
 
     #[test]

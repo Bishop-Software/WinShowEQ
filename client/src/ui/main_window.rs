@@ -69,6 +69,7 @@ struct AddTimerDialog {
 #[derive(Default)]
 struct AddFilterScopeDialog {
     open: bool,
+    focus_requested: bool,
     name: String,
     category: Option<FilterCategory>,
 }
@@ -271,9 +272,10 @@ impl MainApp {
                 if zone_name.is_empty() {
                     self.write_filter_global(name, category);
                 } else {
-                    self.add_filter_scope.name = name;
+                    self.add_filter_scope.name = name.trim_end_matches(|c: char| c.is_ascii_digit()).trim_end().to_string();
                     self.add_filter_scope.category = Some(category);
                     self.add_filter_scope.open = true;
+                    self.add_filter_scope.focus_requested = false;
                 }
             }
             SpawnAction::CenterMap { id, x, y } => {
@@ -624,15 +626,32 @@ impl eframe::App for MainApp {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .show(&ctx, |ui| {
-                    ui.label(format!("Add \"{}\" to which filter?", self.add_filter_scope.name));
+                    ui.label("Filter name:");
+                    let response = ui.add(
+                        egui::TextEdit::singleline(&mut self.add_filter_scope.name)
+                            .min_size(egui::vec2(220.0, 0.0))
+                            .hint_text("Enter filter text"),
+                    );
+                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        chosen = Some(false); // Enter defaults to Zone
+                    }
+                    if !self.add_filter_scope.focus_requested {
+                        response.request_focus();
+                        self.add_filter_scope.focus_requested = true;
+                    }
                     ui.add_space(4.0);
+                    ui.label("Add to which filter scope?");
+                    ui.add_space(2.0);
                     ui.horizontal(|ui| {
-                        if ui.button("Global").clicked() {
-                            chosen = Some(true);
-                        }
-                        if ui.button(format!("Zone: {zone_name}")).clicked() {
-                            chosen = Some(false);
-                        }
+                        let name_empty = self.add_filter_scope.name.trim().is_empty();
+                        ui.add_enabled_ui(!name_empty, |ui| {
+                            if ui.button("Global").clicked() {
+                                chosen = Some(true);
+                            }
+                            if ui.button(format!("Zone: {zone_name}")).clicked() {
+                                chosen = Some(false);
+                            }
+                        });
                         if ui.button("Cancel").clicked() {
                             cancel = true;
                         }
@@ -642,12 +661,14 @@ impl eframe::App for MainApp {
                 self.add_filter_scope.open = false;
             }
             if let Some(is_global) = chosen {
-                let name = self.add_filter_scope.name.clone();
+                let name = self.add_filter_scope.name.trim().to_string();
                 self.add_filter_scope.open = false;
-                if is_global {
-                    self.write_filter_global(name, category);
-                } else {
-                    self.write_filter_zone(name, category);
+                if !name.is_empty() {
+                    if is_global {
+                        self.write_filter_global(name, category);
+                    } else {
+                        self.write_filter_zone(name, category);
+                    }
                 }
             }
         }
