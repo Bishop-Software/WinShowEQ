@@ -20,6 +20,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\assets\WinShowEQ.ico
 PrivilegesRequired=admin
 DisableProgramGroupPage=yes
 LicenseFile={#StageDir}\docs\LICENSE.txt

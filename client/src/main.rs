@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod alerts;
 mod config;
 mod data;

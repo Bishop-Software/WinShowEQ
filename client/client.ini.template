@@ -25,3 +25,7 @@ RareSound=
 WebhookUrl=
 OnDanger=0
 OnHunt=0
+
+[Logging]
+Enabled=0
+Level=info
