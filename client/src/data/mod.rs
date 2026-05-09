@@ -104,9 +104,15 @@ impl Default for AppData {
             ],
             timer_list_column_widths: vec![
                 120.0, // Name
-                80.0,  // Loc
-                100.0, // Countdown
+                80.0,  // Remain
+                65.0,  // Interval
+                80.0,  // Zone
+                55.0,  // X
+                55.0,  // Y
+                55.0,  // Z
                 45.0,  // Count
+                110.0, // Spawn Time
+                110.0, // Kill Time
             ],
             ground_list_column_widths: vec![
                 150.0, // Item
