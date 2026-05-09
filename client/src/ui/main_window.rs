@@ -928,6 +928,7 @@ fn start_network_thread(
                                 Ok(records) => {
                                     let mut d = data.lock().unwrap();
                                     d.curr_tick_npc_ids.clear();
+                                    d.curr_tick_all_ids.clear();
                                     if records.iter().any(|r| r.flags == OPT_GROUND) {
                                         d.ground.clear();
                                     }

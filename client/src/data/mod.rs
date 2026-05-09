@@ -57,6 +57,8 @@ pub struct AppData {
     pub observer: SpawnObserver,
     /// NPC spawn IDs seen in the current tick (scratch space for observer diff).
     pub curr_tick_npc_ids: HashSet<u32>,
+    /// All spawn IDs (any type) seen in the current tick — used to prune stale spawns.
+    pub curr_tick_all_ids: HashSet<u32>,
     /// Set when an auto-timer is promoted; cleared after periodic save.
     pub timers_dirty: bool,
 }
@@ -114,6 +116,7 @@ impl Default for AppData {
             selected_id: None,
             observer: SpawnObserver::default(),
             curr_tick_npc_ids: HashSet::new(),
+            curr_tick_all_ids: HashSet::new(),
             timers_dirty: false,
         }
     }
@@ -151,6 +154,29 @@ impl AppData {
         if promoted {
             self.timers_dirty = true;
         }
+
+        // Remove spawns that the server didn't send this tick (despawned/decayed).
+        // Skip pruning if the tick was empty — the server may have sent nothing due to
+        // a partial response or the player not being in a zone yet.
+        if !self.curr_tick_all_ids.is_empty() {
+            let stale: Vec<u32> = self.spawns
+                .iter()
+                .map(|s| s.id)
+                .filter(|id| !self.curr_tick_all_ids.contains(id))
+                .collect();
+            for id in stale {
+                self.spawns.remove(id);
+                self.trails.remove(&id);
+                self.marked_ids.remove(&id);
+                if self.selected_id == Some(id) {
+                    self.selected_id = None;
+                }
+                if self.target_id == Some(id) {
+                    self.target_id = None;
+                }
+            }
+        }
+        self.curr_tick_all_ids.clear();
     }
 
     /// Load `filters_{zone}.xml` from `filter_dir`, recompute the merged filter set.
@@ -173,6 +199,7 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
             data.self_id = None;
             data.target_id = None;
             data.curr_tick_npc_ids.clear();
+            data.curr_tick_all_ids.clear();
             data.observer.on_zone_change();
             data.alert_engine.on_zone_change();
             if !data.filter_dir.is_empty() {
@@ -203,11 +230,13 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
             if info.spawn_category == spawns::SpawnCategory::Npc {
                 data.curr_tick_npc_ids.insert(id);
             }
+            data.curr_tick_all_ids.insert(id);
             data.spawns.upsert_info(info);
             return log_msg;
         }
         Packet::Self_(rec) => {
             data.self_id = Some(rec.id);
+            data.curr_tick_all_ids.insert(rec.id);
             let (spawns, filters) = (&mut data.spawns, &data.filters);
             spawns.upsert_with_filter(&rec, filters);
         }
