@@ -151,9 +151,10 @@ impl AppData {
     }
 
     /// Run the spawn diff after each network tick to detect kills/respawns.
-    pub fn on_tick_end(&mut self) {
+    /// Returns log messages for the caller to write (kill detections, respawns, promotions).
+    pub fn on_tick_end(&mut self) -> Vec<String> {
         let curr_ids = self.curr_tick_npc_ids.clone();
-        let promoted = self.observer.process_diff(&curr_ids, &self.spawns, &self.zone_name, &mut self.timers);
+        let (promoted, log) = self.observer.process_diff(&curr_ids, &self.spawns, &self.zone_name, &mut self.timers);
         if promoted {
             self.timers_dirty = true;
         }
@@ -181,6 +182,7 @@ impl AppData {
         }
         self.curr_tick_all_ids.clear();
         self.spawns_dirty = true;
+        log
     }
 
     /// Load `filters_{zone}.xml` from `filter_dir`, recompute the merged filter set.

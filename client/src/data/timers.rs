@@ -251,21 +251,25 @@ impl SpawnObserver {
 
     /// Diff the current tick's NPC ID set against the previous tick's, record
     /// kills and respawns, and auto-promote confident timers into `timers`.
-    /// Returns true if at least one timer was promoted this tick.
+    ///
+    /// Returns `(promoted, log_messages)` where `promoted` is true if at least
+    /// one timer was promoted this tick and `log_messages` holds lines for the
+    /// caller to write to the log file.
     pub fn process_diff(
         &mut self,
         curr_ids: &HashSet<u32>,
         spawns: &SpawnStore,
         zone: &str,
         timers: &mut TimerStore,
-    ) -> bool {
+    ) -> (bool, Vec<String>) {
         if zone.is_empty() || is_void_zone(zone) {
             self.prev_tick_ids = curr_ids.clone();
-            return false;
+            return (false, Vec::new());
         }
 
         let now = Utc::now();
         let mut promoted = false;
+        let mut log: Vec<String> = Vec::new();
 
         // Detect respawns: IDs new this tick that appear at a pending kill location.
         for &id in curr_ids {
@@ -299,6 +303,10 @@ impl SpawnObserver {
                         if !obs.names.contains(&spawn.name) {
                             obs.names.push(spawn.name.clone());
                         }
+                        log.push(format!(
+                            "[Timer] Respawn: {} — interval {}s (cycle {})",
+                            spawn.name, interval, obs.spawn_count,
+                        ));
                         if obs.spawn_count > 1 {
                             let avg = obs.intervals.iter().sum::<i64>() / obs.intervals.len() as i64;
                             timers.add(SpawnTimer {
@@ -311,8 +319,17 @@ impl SpawnObserver {
                                 is_auto: true,
                                 spawn_count: obs.spawn_count,
                             });
+                            log.push(format!(
+                                "[Timer] Auto-timer promoted: {} — avg {}s over {} cycles",
+                                kill.name, avg, obs.spawn_count,
+                            ));
                             promoted = true;
                         }
+                    } else {
+                        log.push(format!(
+                            "[Timer] Respawn skipped: {} — interval {}s below minimum {}s",
+                            spawn.name, interval, MIN_INTERVAL_SECS,
+                        ));
                     }
                 }
             }
@@ -330,6 +347,10 @@ impl SpawnObserver {
                     continue;
                 }
                 let key = loc_key(spawn.x, spawn.y);
+                log.push(format!(
+                    "[Timer] Kill detected: {} @ {}",
+                    spawn.name, key,
+                ));
                 self.pending_kills.insert(key, PendingKill {
                     name: spawn.name.clone(),
                     x: spawn.x,
@@ -341,7 +362,7 @@ impl SpawnObserver {
         }
 
         self.prev_tick_ids = curr_ids.clone();
-        promoted
+        (promoted, log)
     }
 
     /// Fully reset observer state for the current zone (called by Clear All Timers).
@@ -630,7 +651,7 @@ mod tests {
             Utc::now() - Duration::seconds(600);
 
         // Respawn — first cycle: spawn_count becomes 1, not > 1, no promotion
-        let promoted = observer.process_diff(&ids(&[1]), &store, "blackburrow", &mut timers);
+        let (promoted, _) = observer.process_diff(&ids(&[1]), &store, "blackburrow", &mut timers);
 
         assert!(!promoted);
         assert!(timers.is_empty());
@@ -651,14 +672,14 @@ mod tests {
         observer.process_diff(&ids(&[]), &store, zone, &mut timers);
         observer.pending_kills.get_mut(&key).unwrap().killed_at =
             Utc::now() - Duration::seconds(600);
-        let promoted = observer.process_diff(&ids(&[1]), &store, zone, &mut timers);
+        let (promoted, _) = observer.process_diff(&ids(&[1]), &store, zone, &mut timers);
         assert!(!promoted);
 
         // Cycle 2: gone → respawn (spawn_count=2, promoted)
         observer.process_diff(&ids(&[]), &store, zone, &mut timers);
         observer.pending_kills.get_mut(&key).unwrap().killed_at =
             Utc::now() - Duration::seconds(600);
-        let promoted = observer.process_diff(&ids(&[1]), &store, zone, &mut timers);
+        let (promoted, _) = observer.process_diff(&ids(&[1]), &store, zone, &mut timers);
 
         assert!(promoted);
         assert_eq!(timers.len(), 1);
@@ -680,7 +701,7 @@ mod tests {
         observer.process_diff(&ids(&[1]), &store, "crushbone", &mut timers);
         observer.process_diff(&ids(&[]), &store, "crushbone", &mut timers);
         // Do NOT backdate — interval will be ~0 secs (< MIN_INTERVAL_SECS=10)
-        let promoted = observer.process_diff(&ids(&[1]), &store, "crushbone", &mut timers);
+        let (promoted, _) = observer.process_diff(&ids(&[1]), &store, "crushbone", &mut timers);
 
         assert!(!promoted);
         assert!(observer.observations.is_empty());

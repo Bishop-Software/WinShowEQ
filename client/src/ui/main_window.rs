@@ -955,7 +955,9 @@ fn start_network_thread(
                                             logger.info(&msg);
                                         }
                                     }
-                                    d.on_tick_end();
+                                    for msg in d.on_tick_end() {
+                                        logger.info(&msg);
+                                    }
                                 }
                                 Err(e) => {
                                     logger.warn(&format!("Disconnected: {e}"));
