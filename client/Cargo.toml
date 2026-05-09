@@ -1,0 +1,31 @@
+[package]
+name = "winshoweq-client"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "WinShowEQClient"
+path = "src/main.rs"
+
+[dependencies]
+common = { path = "../common" }
+clap = { version = "4", features = ["derive"] }
+egui = "0.34"
+eframe = { version = "0.34", default-features = false, features = ["default_fonts", "glow", "persistence"] }
+serde = { version = "1", features = ["derive"] }
+quick-xml = "0.39.3"
+serde_json = "1"
+chrono = "0.4"
+tts = "0.26"
+rodio = { version = "0.22.2", features = ["wav"] }
+ureq = "3.3.0"
+rfd = "0.17.2"
+egui_dock = { version = "0.19", features = ["serde"] }
+egui_extras = { version = "0.34", features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[build-dependencies]
+winres = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
