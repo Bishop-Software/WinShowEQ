@@ -336,14 +336,15 @@ impl SpawnObserver {
         }
 
         // Detect kills: IDs present last tick but absent this tick.
+        // Note: do NOT re-check spawn_category here. An NPC kill causes the spawn to
+        // transition to spawn_type=2 (Corpse) in the same tick, so spawns.get() may
+        // return a Corpse even though the ID was an NPC in prev_tick_ids.
         for &id in &self.prev_tick_ids {
             if curr_ids.contains(&id) {
                 continue;
             }
             if let Some(spawn) = spawns.get(id) {
-                if spawn.spawn_category != SpawnCategory::Npc
-                    || is_excluded_spawn(&spawn.name, spawn.race, spawn.owner_id)
-                {
+                if is_excluded_spawn(&spawn.name, spawn.race, spawn.owner_id) {
                     continue;
                 }
                 let key = loc_key(spawn.x, spawn.y);
