@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use egui::Ui;
 
-use crate::data::spawns::SpawnCategory;
+use crate::data::spawns::{SpawnCategory, SpawnStore};
+use crate::game_data::GameData;
 
 /// A single spawn entry fed into the filter UI, with race/class pre-resolved to display strings.
 #[derive(Clone, Debug)]
@@ -289,6 +290,22 @@ impl SpawnFilterUI {
             }
         });
     }
+}
+
+/// Build the `FilterEntry` list from the current spawn store, resolving race and class names.
+/// Intended to be called once per tick when `AppData::spawns_dirty` is set.
+pub fn build_filter_entries(spawns: &SpawnStore, game_data: &GameData) -> Vec<FilterEntry> {
+    spawns
+        .iter()
+        .map(|s| FilterEntry {
+            id: s.id,
+            name: s.name.clone(),
+            race: game_data.race_name(s.race).to_owned(),
+            class: game_data.class_name(s.class),
+            level: s.level,
+            spawn_type: s.spawn_category,
+        })
+        .collect()
 }
 
 #[cfg(test)]

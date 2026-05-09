@@ -24,6 +24,7 @@ use crate::ui::login::LoginDialog;
 use crate::ui::map_pane::MapPane;
 use crate::ui::options::OptionsDialog;
 use crate::ui::search_dialog::SearchDialog;
+use crate::ui::spawn_filter::{build_filter_entries, SpawnFilterUI};
 use crate::filters::FilterCategory;
 use crate::map_canvas::MapAction;
 use crate::ui::spawn_list::{self, SpawnAction};
@@ -110,6 +111,7 @@ pub struct MainApp {
     ground_sort_column: Option<usize>,
     ground_sort_ascending: bool,
     search: SearchDialog,
+    spawn_filter: SpawnFilterUI,
     pending_clear_timers: bool,
     last_timer_autosave: std::time::Instant,
 }
@@ -223,6 +225,7 @@ impl MainApp {
             ground_sort_column: None,
             ground_sort_ascending: true,
             search: SearchDialog::default(),
+            spawn_filter: SpawnFilterUI::default(),
             pending_clear_timers: false,
             last_timer_autosave: std::time::Instant::now(),
         }
@@ -412,6 +415,16 @@ impl eframe::App for MainApp {
         let zone_name = self.data.lock().unwrap().zone_name.clone();
         if !zone_name.is_empty() && zone_name != self.prev_zone {
             self.handle_zone_change(zone_name);
+        }
+
+        {
+            let mut data = self.data.lock().unwrap();
+            if data.spawns_dirty {
+                let entries = build_filter_entries(&data.spawns, &data.game_data);
+                drop(data);
+                self.spawn_filter.update_spawns(entries);
+                self.data.lock().unwrap().spawns_dirty = false;
+            }
         }
 
         if ctx.input(|i| i.viewport().close_requested()) {

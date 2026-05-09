@@ -61,6 +61,8 @@ pub struct AppData {
     pub curr_tick_all_ids: HashSet<u32>,
     /// Set when an auto-timer is promoted; cleared after periodic save.
     pub timers_dirty: bool,
+    /// Set whenever the spawn list changes; cleared by the UI after rebuilding filter options.
+    pub spawns_dirty: bool,
 }
 
 impl Default for AppData {
@@ -118,6 +120,7 @@ impl Default for AppData {
             curr_tick_npc_ids: HashSet::new(),
             curr_tick_all_ids: HashSet::new(),
             timers_dirty: false,
+            spawns_dirty: false,
         }
     }
 }
@@ -177,6 +180,7 @@ impl AppData {
             }
         }
         self.curr_tick_all_ids.clear();
+        self.spawns_dirty = true;
     }
 
     /// Load `filters_{zone}.xml` from `filter_dir`, recompute the merged filter set.
@@ -200,6 +204,7 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
             data.target_id = None;
             data.curr_tick_npc_ids.clear();
             data.curr_tick_all_ids.clear();
+            data.spawns_dirty = true;
             data.observer.on_zone_change();
             data.alert_engine.on_zone_change();
             if !data.filter_dir.is_empty() {
