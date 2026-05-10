@@ -156,11 +156,10 @@ pub fn show(
         .auto_shrink([false; 2])
         .show(ui, |ui| {
             for s in &spawns {
-                if let Some(ids) = filter_ids {
-                    if !ids.contains(&s.id) {
+                if let Some(ids) = filter_ids
+                    && !ids.contains(&s.id) {
                         continue;
                     }
-                }
 
                 let dist_str = match player_pos {
                     Some((px, py, _)) => format!("{:.0}", s.distance_2d(px, py)),

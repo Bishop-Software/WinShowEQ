@@ -189,11 +189,10 @@ fn draw_mob_trails(ctx: &DrawCtx, data: &AppData, filtered_ids: Option<&HashSet<
         return;
     }
     for (&spawn_id, trail) in &data.trails {
-        if let Some(ids) = filtered_ids {
-            if !ids.contains(&spawn_id) {
+        if let Some(ids) = filtered_ids
+            && !ids.contains(&spawn_id) {
                 continue;
             }
-        }
         for &(mx, my) in trail {
             let pos = ctx.to_screen(mx, my);
             if ctx.is_visible(pos) {
@@ -280,11 +279,10 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, over
         }
 
         // Spawn filter — target is always shown regardless of filter state
-        if let Some(ids) = filtered_ids {
-            if data.target_id != Some(spawn.id) && !ids.contains(&spawn.id) {
+        if let Some(ids) = filtered_ids
+            && data.target_id != Some(spawn.id) && !ids.contains(&spawn.id) {
                 continue;
             }
-        }
 
         // Visibility filtering
         let visible = match spawn.spawn_category {
