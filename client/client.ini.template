@@ -14,11 +14,11 @@ MapDir=maps
 [Alerts]
 DangerMode=speech
 DangerSound=
-CautionMode=beep
+CautionMode=speech
 CautionSound=
-HuntMode=beep
+HuntMode=speech
 HuntSound=
-RareMode=none
+RareMode=speech
 RareSound=
 
 [Discord]
