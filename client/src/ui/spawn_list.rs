@@ -1,9 +1,10 @@
+use std::collections::HashSet;
+
 use egui::Ui;
 
 use crate::data::AppData;
 use crate::data::spawns::SpawnCategory;
 use crate::filters::FilterCategory;
-use crate::ui::spawn_filter::SpawnFilterUI;
 
 /// Action returned when the user selects a context menu item on a spawn row.
 pub enum SpawnAction {
@@ -18,7 +19,7 @@ pub fn show(
     data: &mut AppData,
     sort_column: &mut Option<usize>,
     sort_ascending: &mut bool,
-    spawn_filter: &mut SpawnFilterUI,
+    filter_ids: Option<&HashSet<u32>>,
 ) -> Option<SpawnAction> {
     const HEADERS: &[&str] = &[
         "Name", "Last Name", "Lvl", "Class", "Race", "Type", "Owner", "Invis", "Speed", "X",
@@ -81,15 +82,6 @@ pub fn show(
             da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
         });
     }
-
-    let visible_ids = if spawn_filter.is_active() {
-        Some(spawn_filter.apply_filters())
-    } else {
-        None
-    };
-
-    spawn_filter.ui_compact(ui);
-    ui.separator();
 
     let mut col_widths = data.spawn_list_column_widths.clone();
     let row_h = ui.text_style_height(&egui::TextStyle::Body) + 4.0;
@@ -164,7 +156,7 @@ pub fn show(
         .auto_shrink([false; 2])
         .show(ui, |ui| {
             for s in &spawns {
-                if let Some(ref ids) = visible_ids {
+                if let Some(ids) = filter_ids {
                     if !ids.contains(&s.id) {
                         continue;
                     }

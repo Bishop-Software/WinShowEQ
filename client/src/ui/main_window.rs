@@ -337,6 +337,7 @@ struct WinSeqTabViewer<'a> {
     map_pane: &'a mut MapPane,
     overlay: &'a MapOverlaySettings,
     spawn_filter: &'a mut SpawnFilterUI,
+    filter_ids: Option<&'a HashSet<u32>>,
     spawn_sort_column: &'a mut Option<usize>,
     spawn_sort_ascending: &'a mut bool,
     timer_sort_column: &'a mut Option<usize>,
@@ -377,12 +378,14 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
                     ui.label(format!("Spawns ({})", total));
                 }
                 ui.separator();
+                self.spawn_filter.ui_compact(ui);
+                ui.separator();
                 *self.spawn_action = spawn_list::show(
                     ui,
                     &mut data,
                     self.spawn_sort_column,
                     self.spawn_sort_ascending,
-                    self.spawn_filter,
+                    self.filter_ids,
                 );
             }
             Tab::Timers => {
@@ -397,7 +400,7 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
             }
             Tab::Map => {
                 let data = self.data.lock().unwrap();
-                if let Some(action) = self.map_pane.show(ui, &data, self.overlay) {
+                if let Some(action) = self.map_pane.show(ui, &data, self.overlay, self.filter_ids) {
                     *self.map_action = Some(action);
                 }
             }
@@ -862,11 +865,17 @@ impl eframe::App for MainApp {
         ui.separator();
 
         // Docked panel layout
+        let filter_ids: Option<HashSet<u32>> = if self.spawn_filter.is_active() {
+            Some(self.spawn_filter.apply_filters())
+        } else {
+            None
+        };
         let mut viewer = WinSeqTabViewer {
             data: &self.data,
             map_pane: &mut self.map_pane,
             overlay: &self.config.map_overlay,
             spawn_filter: &mut self.spawn_filter,
+            filter_ids: filter_ids.as_ref(),
             spawn_sort_column: &mut self.spawn_sort_column,
             spawn_sort_ascending: &mut self.spawn_sort_ascending,
             timer_sort_column: &mut self.timer_sort_column,

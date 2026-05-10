@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use egui::Ui;
 
 use crate::config::MapOverlaySettings;
@@ -22,7 +24,7 @@ impl Default for MapPane {
 }
 
 impl MapPane {
-    pub fn show(&mut self, ui: &mut Ui, data: &AppData, overlay: &MapOverlaySettings) -> Option<MapAction> {
+    pub fn show(&mut self, ui: &mut Ui, data: &AppData, overlay: &MapOverlaySettings, filtered_ids: Option<&HashSet<u32>>) -> Option<MapAction> {
         // Controls strip at the top of the panel.
         ui.horizontal(|ui| {
             ui.checkbox(&mut self.z_filter_enabled, "Z Filter");
@@ -54,6 +56,6 @@ impl MapPane {
             None
         };
 
-        MapCon::new(data, &mut self.state).show(ui, z_filter, overlay)
+        MapCon::new(data, &mut self.state).show(ui, z_filter, overlay, filtered_ids)
     }
 }
