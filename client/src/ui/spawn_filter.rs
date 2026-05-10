@@ -7,9 +7,9 @@ use crate::game_data::GameData;
 
 /// A single spawn entry fed into the filter UI, with race/class pre-resolved to display strings.
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // fields consumed once wired in #45
 pub struct FilterEntry {
     pub id: u32,
+    #[allow(dead_code)]
     pub name: String,
     pub race: String,
     pub class: String,
@@ -18,7 +18,6 @@ pub struct FilterEntry {
 }
 
 /// Spawn-type bucket for the type filter ComboBox.
-#[allow(dead_code)] // wired in #45/#46
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum SpawnTypeFilter {
     #[default]
@@ -30,7 +29,6 @@ pub enum SpawnTypeFilter {
 }
 
 impl SpawnTypeFilter {
-    #[allow(dead_code)] // wired in #45/#46
     fn label(self) -> &'static str {
         match self {
             Self::All => "All Types",
@@ -41,7 +39,6 @@ impl SpawnTypeFilter {
         }
     }
 
-    #[allow(dead_code)] // wired in #45/#46
     fn matches(self, cat: SpawnCategory) -> bool {
         match self {
             Self::All => true,
@@ -58,7 +55,6 @@ impl SpawnTypeFilter {
 /// Call [`update_spawns`] whenever the spawn list changes (zone change or tick) to
 /// rebuild the race/class options. Call [`apply_filters`] each frame to get the set of
 /// visible spawn IDs. Call [`ui_compact`] to render the filter controls.
-#[allow(dead_code)] // wired in #45/#46
 pub struct SpawnFilterUI {
     entries: Vec<FilterEntry>,
     /// Sorted unique race names across all entries.
@@ -91,7 +87,6 @@ impl Default for SpawnFilterUI {
     }
 }
 
-#[allow(dead_code)] // wired in #45/#46
 impl SpawnFilterUI {
     /// Rebuild race/class option lists from new spawn data.
     ///
