@@ -37,6 +37,7 @@ fn load_icon() -> egui::IconData {
 }
 
 fn main() -> eframe::Result {
+    relaunch_if_known_name("WinShowEQClient");
     let cli = Cli::parse();
     let config_path = resolve_ini_path("client.ini");
 
@@ -54,6 +55,64 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| Ok(Box::new(MainApp::new(cc, cli.connect, config_path)))),
     )
+}
+
+fn relaunch_if_known_name(_known_stem: &str) {
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+
+    // Already running as a .bin copy — proceed normally.
+    if exe.extension().and_then(|e| e.to_str()) == Some("bin") {
+        return;
+    }
+
+    let dir = match exe.parent() {
+        Some(d) => d,
+        None => return,
+    };
+
+    // Remove .bin copies left by previous sessions.
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("bin") {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+
+    // Copy to a random .bin name in the same directory and relaunch.
+    let new_path = dir.join(random_bin_name());
+    if std::fs::copy(&exe, &new_path).is_err() {
+        return;
+    }
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if std::process::Command::new(&new_path).args(&args).spawn().is_err() {
+        let _ = std::fs::remove_file(&new_path);
+        return;
+    }
+    std::process::exit(0);
+}
+
+fn random_bin_name() -> String {
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0xDEAD_BEEF) as u64;
+    const POOL: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let len = 4 + (seed % 13) as usize; // 4–16 chars (matches C# reference: rnd.Next(4, 16))
+    let mut state = seed ^ (seed >> 33).wrapping_mul(0xff51afd7ed558ccd);
+    let mut name = String::with_capacity(len + 4);
+    for _ in 0..len {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        name.push(POOL[(state as usize) % POOL.len()] as char);
+    }
+    name.push_str(".bin");
+    name
 }
 
 fn resolve_ini_path(name: &str) -> PathBuf {
