@@ -59,7 +59,7 @@ The Rust client component (119/119 tests passing across all crates):
 - Loads all four map file layers: `{zone}.txt` (base) + `{zone}_1.txt`, `{zone}_2.txt`, `{zone}_3.txt` (numbered layers)
 - Maintains spawn list, timer list, and ground item list panels in an `egui_dock` docking layout
 - Supports filter categories (hunt/caution/danger/rare), Z-filter for vertical spawn filtering, alerts (TTS/speech/sound/Discord)
-- Two filter scopes: global (`filters_global.xml`, applies in every zone) and per-zone (`filters_{zone}.xml`, loaded on zone change); zone filter is merged over global with higher-priority category winning on conflict
+- Two filter scopes: global (`global.xml`, applies in every zone) and per-zone (`{zone}.xml`, loaded on zone change); zone filter is merged over global with higher-priority category winning on conflict
 - Right-click context menu on spawns: add timer, add to filter (scope picker: Global or Zone), add map text
 - Filter XML files include a DTD declaration (`seqfilters.dtd`) for schema validation in XML-aware editors
 - Persists timers, annotations, filters, observations, and config across sessions
@@ -275,7 +275,7 @@ UpdateDelayMs=100
 
 [Directories]
 ConfigDir=...      ; timers, annotations (OS-specific %AppData%)
-FilterDir=...      ; filter XML files (filters_global.xml, filters_{zone}.xml, seqfilters.dtd)
+FilterDir=...      ; filter XML files (global.xml, {zone}.xml, seqfilters.dtd)
 MapDir=...         ; zone .txt files
 LogDir=...         ; dated log files
 

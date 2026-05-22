@@ -168,7 +168,7 @@ fn show_spawn_list(ui: &mut egui::Ui) {
     bullet(ui, "Matching spawns get a white ring on the map and a cyan bar in the list");
 
     section(ui, "Filters");
-    bullet(ui, "Filters are loaded from the configured filter directory (seqfilters.xml)");
+    bullet(ui, "Filters are loaded from the configured filter directory (global.xml, {zone}.xml)");
     bullet(ui, "Each spawn is classified as Hunt / Caution / Danger / Rare based on name");
 
     ui.add_space(6.0);

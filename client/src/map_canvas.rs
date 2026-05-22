@@ -358,10 +358,10 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, over
             }
         };
         if let Some(text) = label {
-            let label_pos = pos + Vec2::new(SPAWN_RADIUS + 2.0, -(SPAWN_RADIUS + 2.0));
+            let label_pos = pos + Vec2::new(0.0, -(SPAWN_RADIUS + 2.0));
             ctx.painter.with_clip_rect(ctx.rect).text(
                 label_pos,
-                egui::Align2::LEFT_BOTTOM,
+                egui::Align2::CENTER_BOTTOM,
                 &text,
                 FontId::proportional(10.0),
                 color,

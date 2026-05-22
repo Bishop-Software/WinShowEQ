@@ -29,9 +29,9 @@ pub struct AppData {
     pub zone_name: String,
     pub target_id: Option<u32>,
     pub self_id: Option<u32>,
-    /// Global filters loaded from `filters_global.xml` — applies in every zone.
+    /// Global filters loaded from `global.xml` — applies in every zone.
     pub filters_global: FilterSet,
-    /// Zone-specific filters loaded from `filters_{zone}.xml` — applies in the current zone only.
+    /// Zone-specific filters loaded from `{zone}.xml` — applies in the current zone only.
     pub filters_zone: FilterSet,
     /// Merged result of global + zone filters (computed, not persisted directly).
     pub filters: FilterSet,
@@ -191,10 +191,10 @@ impl AppData {
         log
     }
 
-    /// Load `filters_{zone}.xml` from `filter_dir`, recompute the merged filter set.
+    /// Load `{zone}.xml` from `filter_dir`, recompute the merged filter set.
     pub fn reload_zone_filter(&mut self, zone: &str) {
         let path = std::path::Path::new(&self.filter_dir)
-            .join(format!("filters_{}.xml", zone.to_lowercase()));
+            .join(format!("{}.xml", zone.to_lowercase()));
         self.filters_zone = FilterSet::load(&path);
         self.recompute_filters();
     }

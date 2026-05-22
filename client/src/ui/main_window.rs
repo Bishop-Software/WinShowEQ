@@ -178,7 +178,7 @@ impl MainApp {
             d.game_data.load_spawn_colors(&std::path::Path::new(&config.cfg_dir).join("spawn_colors.json"));
             d.filter_dir = config.filter_dir.clone();
             d.filters_global = crate::filters::FilterSet::load(
-                &std::path::Path::new(&config.filter_dir).join("filters_global.xml"),
+                &std::path::Path::new(&config.filter_dir).join("global.xml"),
             );
             d.recompute_filters();
             if let Some(w) = spawn_col_widths  && w.len() == d.spawn_list_column_widths.len()  { d.spawn_list_column_widths  = w; }
@@ -296,7 +296,7 @@ impl MainApp {
     }
 
     fn write_filter_global(&mut self, name: String, category: FilterCategory) {
-        let path = std::path::Path::new(&self.config.filter_dir).join("filters_global.xml");
+        let path = std::path::Path::new(&self.config.filter_dir).join("global.xml");
         let mut data = self.data.lock().unwrap();
         data.filters_global.add(category, name);
         let _ = data.filters_global.save(&path);
@@ -306,7 +306,7 @@ impl MainApp {
     fn write_filter_zone(&mut self, name: String, category: FilterCategory) {
         let zone_name = self.data.lock().unwrap().zone_name.clone();
         let path = std::path::Path::new(&self.config.filter_dir)
-            .join(format!("filters_{}.xml", zone_name.to_lowercase()));
+            .join(format!("{}.xml", zone_name.to_lowercase()));
         let mut data = self.data.lock().unwrap();
         data.filters_zone.add(category, name);
         let _ = data.filters_zone.save(&path);
@@ -479,7 +479,7 @@ impl eframe::App for MainApp {
                 data.game_data.load_spawn_colors(&std::path::Path::new(&self.config.cfg_dir).join("spawn_colors.json"));
                 data.filter_dir = self.config.filter_dir.clone();
                 data.filters_global = crate::filters::FilterSet::load(
-                    &std::path::Path::new(&self.config.filter_dir).join("filters_global.xml"),
+                    &std::path::Path::new(&self.config.filter_dir).join("global.xml"),
                 );
                 data.recompute_filters();
             }
