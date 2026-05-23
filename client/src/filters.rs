@@ -48,11 +48,26 @@ impl FilterSet {
 
     /// Load from a `seqfilters` XML file. Missing files return an empty set.
     ///
-    /// Expected format:
+    /// Supports both the current format and the legacy C# MySEQ format automatically.
+    /// If a legacy file is detected it is migrated to the current format in place.
+    ///
+    /// Current format:
     /// ```xml
     /// <seqfilters>
     ///   <hunt><item name="Fippy Darkpaw" /></hunt>
     ///   <danger><item name="Nagafen" /></danger>
+    /// </seqfilters>
+    /// ```
+    ///
+    /// Legacy C# format:
+    /// ```xml
+    /// <seqfilters>
+    ///   <section name="Hunt">
+    ///     <oldfilter><regex>Name:Fippy Darkpaw</regex></oldfilter>
+    ///   </section>
+    ///   <section name="Alert">
+    ///     <oldfilter><regex>Name:Nagafen</regex></oldfilter>
+    ///   </section>
     /// </seqfilters>
     /// ```
     pub fn load(path: &Path) -> Self {
@@ -60,31 +75,57 @@ impl FilterSet {
         if !path.exists() {
             return set;
         }
-        if let Err(e) = set.load_file(path) {
-            eprintln!("FilterSet: failed to load {:?}: {e}", path);
+        match set.load_file(path) {
+            Ok(true) => {
+                // Legacy format — rewrite in place so future loads are fast
+                if let Err(e) = set.save(path) {
+                    eprintln!("FilterSet: failed to migrate {:?}: {e}", path);
+                }
+            }
+            Ok(false) => {}
+            Err(e) => eprintln!("FilterSet: failed to load {:?}: {e}", path),
         }
         set
     }
 
-    fn load_file(&mut self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    /// Returns `true` if the file used the legacy C# section format (caller should re-save).
+    fn load_file(&mut self, path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
         let mut reader = Reader::from_file(path)?;
         reader.config_mut().trim_text(true);
         let mut buf = Vec::new();
         let mut current: Option<FilterCategory> = None;
+        let mut is_legacy = false;
 
         loop {
             match reader.read_event_into(&mut buf)? {
                 Event::Start(e) => match e.name().as_ref() {
+                    // Current format category tags
                     b"hunt" => current = Some(FilterCategory::Hunt),
                     b"caution" => current = Some(FilterCategory::Caution),
                     b"danger" => current = Some(FilterCategory::Danger),
                     b"rare" => current = Some(FilterCategory::Rare),
                     b"item" => self.insert_from_element(&e, current),
+                    // Legacy format: <section name="Hunt|Caution|Danger|Alert|Locate|...">
+                    b"section" => {
+                        is_legacy = true;
+                        current = section_category(&e);
+                    }
                     _ => {}
                 },
-                Event::Empty(e) if e.name().as_ref() == b"item" => self.insert_from_element(&e, current),
+                Event::Empty(e) if e.name().as_ref() == b"item" => {
+                    self.insert_from_element(&e, current);
+                }
+                // Legacy format: text content inside <oldfilter><regex>Name:xxx</regex></oldfilter>
+                Event::Text(e) if is_legacy => {
+                    if let Some(cat) = current {
+                        let raw = std::str::from_utf8(e.as_ref()).unwrap_or("").trim();
+                        if let Some(name) = extract_old_filter_name(raw) {
+                            self.add(cat, name);
+                        }
+                    }
+                }
                 Event::End(e) => match e.name().as_ref() {
-                    b"hunt" | b"caution" | b"danger" | b"rare" => current = None,
+                    b"hunt" | b"caution" | b"danger" | b"rare" | b"section" => current = None,
                     _ => {}
                 },
                 Event::Eof => break,
@@ -92,7 +133,7 @@ impl FilterSet {
             }
             buf.clear();
         }
-        Ok(())
+        Ok(is_legacy)
     }
 
     fn insert_from_element(
@@ -133,9 +174,16 @@ impl FilterSet {
         }
     }
 
-    /// Return the filter category for `name` (case-insensitive), or None if unfilitered.
+    /// Return the filter category for `name`, or None if unfiltered.
+    /// Matches if any filter entry is a case-insensitive substring of `name`.
+    /// When multiple entries match, the highest-priority category wins.
     pub fn classify(&self, name: &str) -> Option<FilterCategory> {
-        self.entries.get(&name.to_lowercase()).copied()
+        let lower = name.to_lowercase();
+        self.entries
+            .iter()
+            .filter(|(entry, _)| lower.contains(entry.as_str()))
+            .map(|(_, &cat)| cat)
+            .max_by_key(|cat| cat.priority())
     }
 
     /// Remove an entry by name (case-insensitive).
@@ -220,6 +268,41 @@ fn xml_escape(s: &str) -> String {
         .replace('>', "&gt;")
 }
 
+/// Map a `<section name="...">` element to a FilterCategory (legacy C# format).
+/// Hunt→Hunt, Caution→Caution, Danger→Danger, Alert/Locate→Rare; others return None.
+fn section_category(e: &quick_xml::events::BytesStart<'_>) -> Option<FilterCategory> {
+    for attr in e.attributes().flatten() {
+        if attr.key.as_ref() == b"name" {
+            let val = attr.unescape_value().ok()?;
+            return match val.to_lowercase().as_str() {
+                "hunt" => Some(FilterCategory::Hunt),
+                "caution" => Some(FilterCategory::Caution),
+                "danger" => Some(FilterCategory::Danger),
+                "alert" | "locate" => Some(FilterCategory::Rare),
+                _ => None,
+            };
+        }
+    }
+    None
+}
+
+/// Extract a spawn name from legacy `<regex>Name:xxx</regex>` text content.
+/// Strips the `Name:` prefix (case-insensitive). Skips entries containing regex
+/// special chars (`[`, `:`, `^`, `*`) that can't be represented as plain names,
+/// matching C# filter behavior. `#`-prefixed names are kept as-is — EQ named mobs
+/// have `#` at the start of their spawn name in the game data.
+fn extract_old_filter_name(text: &str) -> Option<String> {
+    let name = if text.len() >= 5 && text[..5].eq_ignore_ascii_case("name:") {
+        text[5..].trim()
+    } else {
+        text.trim()
+    };
+    if name.is_empty() || name.contains(['[', ':', '^', '*']) {
+        return None;
+    }
+    Some(name.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,6 +344,24 @@ mod tests {
         let f = write_temp_xml(SAMPLE_XML);
         let set = FilterSet::load(f.path());
         assert_eq!(set.classify("Xygoz"), None);
+    }
+
+    #[test]
+    fn classify_matches_substring() {
+        let mut set = FilterSet::new();
+        set.add(FilterCategory::Hunt, "gnoll");
+        assert_eq!(set.classify("a gnoll scout"), Some(FilterCategory::Hunt));
+        assert_eq!(set.classify("a gnoll warrior"), Some(FilterCategory::Hunt));
+        assert_eq!(set.classify("GNOLL SHAMAN"), Some(FilterCategory::Hunt));
+        assert_eq!(set.classify("orc pawn"), None);
+    }
+
+    #[test]
+    fn classify_highest_priority_wins_on_multiple_substring_matches() {
+        let mut set = FilterSet::new();
+        set.add(FilterCategory::Hunt, "gnoll");
+        set.add(FilterCategory::Danger, "gnoll lord");
+        assert_eq!(set.classify("a gnoll lord"), Some(FilterCategory::Danger));
     }
 
     #[test]
@@ -318,6 +419,62 @@ mod tests {
         assert_eq!(loaded.classify("Fippy Darkpaw"), Some(FilterCategory::Hunt));
         assert_eq!(loaded.classify("a gnoll"), Some(FilterCategory::Caution));
         assert_eq!(loaded.classify("Lockjaw"), Some(FilterCategory::Rare));
+    }
+
+    const LEGACY_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE seqfilters SYSTEM "seqfilters.dtd">
+<seqfilters>
+  <section name="Hunt">
+    <oldfilter><regex>Name:Fippy Darkpaw</regex></oldfilter>
+    <oldfilter><regex>Name:a gnoll scout</regex></oldfilter>
+  </section>
+  <section name="Danger">
+    <oldfilter><regex>Name:Lord Nagafen</regex></oldfilter>
+  </section>
+  <section name="Alert">
+    <oldfilter><regex>Name:Lockjaw</regex></oldfilter>
+  </section>
+  <section name="Filtered">
+    <oldfilter><regex>Name:ShouldBeSkipped</regex></oldfilter>
+  </section>
+</seqfilters>"#;
+
+    #[test]
+    fn legacy_format_loads_correctly() {
+        let f = write_temp_xml(LEGACY_XML);
+        let set = FilterSet::load(f.path());
+        assert_eq!(set.classify("Fippy Darkpaw"), Some(FilterCategory::Hunt));
+        assert_eq!(set.classify("a gnoll scout"), Some(FilterCategory::Hunt));
+        assert_eq!(set.classify("Lord Nagafen"), Some(FilterCategory::Danger));
+        assert_eq!(set.classify("Lockjaw"), Some(FilterCategory::Rare));
+        assert_eq!(set.classify("ShouldBeSkipped"), None);
+    }
+
+    #[test]
+    fn legacy_format_migrates_on_load() {
+        let f = write_temp_xml(LEGACY_XML);
+        FilterSet::load(f.path());
+        // After load, file should be rewritten in new format
+        let contents = std::fs::read_to_string(f.path()).unwrap();
+        assert!(contents.contains("<hunt>"));
+        assert!(!contents.contains("<section"));
+        // Reload the migrated file and verify it still classifies correctly
+        let set2 = FilterSet::load(f.path());
+        assert_eq!(set2.classify("Fippy Darkpaw"), Some(FilterCategory::Hunt));
+        assert_eq!(set2.classify("Lord Nagafen"), Some(FilterCategory::Danger));
+        assert_eq!(set2.classify("Lockjaw"), Some(FilterCategory::Rare));
+    }
+
+    #[test]
+    fn extract_old_filter_name_strips_prefix() {
+        assert_eq!(extract_old_filter_name("Name:Fippy Darkpaw"), Some("Fippy Darkpaw".to_owned()));
+        assert_eq!(extract_old_filter_name("name:fippy darkpaw"), Some("fippy darkpaw".to_owned()));
+        // '#' prefix is part of EQ named mob names — keep as-is
+        assert_eq!(extract_old_filter_name("Name:#Fippy"), Some("#Fippy".to_owned()));
+        assert_eq!(extract_old_filter_name("Name:"), None);
+        assert_eq!(extract_old_filter_name("Name:some[regex]"), None);
+        assert_eq!(extract_old_filter_name("Name:^anchored"), None);
+        assert_eq!(extract_old_filter_name("Name:wild*card"), None);
     }
 
     #[test]

@@ -511,12 +511,13 @@ impl EqGameScanner {
         ir: &IniReader,
         entry: &SecondaryPatternEntry,
         base_addr: u64,
+        write_out: bool,
     ) -> String {
         let start = ir.read_pattern_int(entry.ini_section, "Start");
         let pattern = ir.read_pattern_bytes(entry.ini_section, "Pattern");
         let mask_str = ir.read_pattern_string(entry.ini_section, "Mask");
 
-        let match_addr = self.find_eq_structure_offset(
+        let match_val = self.find_eq_structure_offset(
             start,
             SCAN_WINDOW,
             &pattern,
@@ -524,11 +525,27 @@ impl EqGameScanner {
             base_addr,
         );
 
+        let status = if match_val != 0 {
+            if write_out {
+                let value_str = format!("0x{:x}", match_val);
+                if ir.write_string_entry("SpawnInfo Offsets", entry.output_label, &value_str, false) {
+                    "Written to ini file"
+                } else {
+                    "Found - Write failed"
+                }
+            } else {
+                "Found"
+            }
+        } else {
+            "Not Found"
+        };
+
         format!(
-            "{}:\r\n| Match Found @ {}\r\n| Offset -> 0x{:x}\r\n\r\n",
+            "{}:\r\n| Match Found @ {}\r\n| Offset -> 0x{:x}\r\n| {}\r\n\r\n",
             entry.output_label,
-            if match_addr != 0 { "TRUE" } else { "FALSE" },
-            match_addr,
+            if match_val != 0 { "TRUE" } else { "FALSE" },
+            match_val,
+            status,
         )
     }
 
@@ -659,8 +676,10 @@ impl EqGameScanner {
     }
 
     /// Run the secondary (structure field offset) scan against the exe.
+    /// When `write_out` is true, found values are written to `[SpawnInfo Offsets]`
+    /// in `myseqserver.ini`.
     /// Mirrors EQGameScanner::ScanSecondary in EQGameScanner.cpp.
-    pub fn scan_secondary(&self, ir: &IniReader, fallback_char_info: u64) -> String {
+    pub fn scan_secondary(&self, ir: &IniReader, fallback_char_info: u64, write_out: bool) -> String {
         if !self.executable_exists() {
             return "Error: Could not locate the specified executable file.".to_string();
         }
@@ -670,16 +689,12 @@ impl EqGameScanner {
             let pattern = ir.read_pattern_bytes("CharInfo", "Pattern");
             let mask = ir.read_pattern_string("CharInfo", "Mask");
             let found = self.find_eq_pointer_offset(start, SCAN_WINDOW, &pattern, mask.as_bytes());
-            if found != 0 {
-                found
-            } else {
-                fallback_char_info
-            }
+            if found != 0 { found } else { fallback_char_info }
         };
 
         let mut out = String::from("SpawnInfo Offsets\r\n");
         for entry in SECONDARY_SCANS {
-            out.push_str(&self.run_secondary_scan(ir, entry, char_info_base));
+            out.push_str(&self.run_secondary_scan(ir, entry, char_info_base, write_out));
         }
         out
     }

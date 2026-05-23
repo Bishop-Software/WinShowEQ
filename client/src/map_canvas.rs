@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use egui::{Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 
 use crate::config::MapOverlaySettings;
@@ -56,7 +58,7 @@ impl<'a> MapCon<'a> {
 
     /// `z_filter`: if `Some((center_z, range))`, spawns with `|z - center| > range` are hidden.
     /// Returns `Some(MapAction)` if the context menu produced an action this frame.
-    pub fn show(self, ui: &mut Ui, z_filter: Option<(f32, f32)>, overlay: &MapOverlaySettings) -> Option<MapAction> {
+    pub fn show(self, ui: &mut Ui, z_filter: Option<(f32, f32)>, overlay: &MapOverlaySettings, filtered_ids: Option<&HashSet<u32>>) -> Option<MapAction> {
         let MapCon { data, state } = self;
 
         let size = ui.available_size();
@@ -122,9 +124,9 @@ impl<'a> MapCon<'a> {
 
         draw_map_lines(&ctx, &data.map, overlay);
         draw_labels(&ctx, &data.map, overlay);
-        draw_mob_trails(&ctx, data);
+        draw_mob_trails(&ctx, data, filtered_ids);
         draw_ground_items(&ctx, data, z_filter);
-        draw_spawns(&ctx, data, z_filter, overlay);
+        draw_spawns(&ctx, data, z_filter, overlay, filtered_ids);
         draw_self(&ctx, data);
         draw_annotations(&ctx, data);
         if let Some(target) = state.bearing_target {
@@ -182,11 +184,15 @@ pub fn eq_to_map_pub(eq_x: f32, eq_y: f32) -> (f32, f32) {
     eq_to_map(eq_x, eq_y)
 }
 
-fn draw_mob_trails(ctx: &DrawCtx, data: &AppData) {
+fn draw_mob_trails(ctx: &DrawCtx, data: &AppData, filtered_ids: Option<&HashSet<u32>>) {
     if !data.trails_enabled {
         return;
     }
-    for trail in data.trails.values() {
+    for (&spawn_id, trail) in &data.trails {
+        if let Some(ids) = filtered_ids
+            && !ids.contains(&spawn_id) {
+                continue;
+            }
         for &(mx, my) in trail {
             let pos = ctx.to_screen(mx, my);
             if ctx.is_visible(pos) {
@@ -262,7 +268,7 @@ fn draw_labels(ctx: &DrawCtx, map: &MapData, overlay: &MapOverlaySettings) {
     }
 }
 
-fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, overlay: &MapOverlaySettings) {
+fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, overlay: &MapOverlaySettings, filtered_ids: Option<&HashSet<u32>>) {
     let player_level = data.self_level();
     for spawn in data.spawns.iter() {
         if Some(spawn.id) == data.self_id {
@@ -271,6 +277,12 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, over
         if z_filtered(spawn.z, z_filter) {
             continue;
         }
+
+        // Spawn filter — target is always shown regardless of filter state
+        if let Some(ids) = filtered_ids
+            && data.target_id != Some(spawn.id) && !ids.contains(&spawn.id) {
+                continue;
+            }
 
         // Visibility filtering
         let visible = match spawn.spawn_category {
@@ -346,10 +358,10 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, over
             }
         };
         if let Some(text) = label {
-            let label_pos = pos + Vec2::new(SPAWN_RADIUS + 2.0, -(SPAWN_RADIUS + 2.0));
+            let label_pos = pos + Vec2::new(0.0, -(SPAWN_RADIUS + 2.0));
             ctx.painter.with_clip_rect(ctx.rect).text(
                 label_pos,
-                egui::Align2::LEFT_BOTTOM,
+                egui::Align2::CENTER_BOTTOM,
                 &text,
                 FontId::proportional(10.0),
                 color,

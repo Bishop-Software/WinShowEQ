@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use egui::Ui;
 
 use crate::data::AppData;
@@ -17,6 +19,7 @@ pub fn show(
     data: &mut AppData,
     sort_column: &mut Option<usize>,
     sort_ascending: &mut bool,
+    filter_ids: Option<&HashSet<u32>>,
 ) -> Option<SpawnAction> {
     const HEADERS: &[&str] = &[
         "Name", "Last Name", "Lvl", "Class", "Race", "Type", "Owner", "Invis", "Speed", "X",
@@ -153,6 +156,11 @@ pub fn show(
         .auto_shrink([false; 2])
         .show(ui, |ui| {
             for s in &spawns {
+                if let Some(ids) = filter_ids
+                    && !ids.contains(&s.id) {
+                        continue;
+                    }
+
                 let dist_str = match player_pos {
                     Some((px, py, _)) => format!("{:.0}", s.distance_2d(px, py)),
                     None => "-".to_owned(),
@@ -187,7 +195,11 @@ pub fn show(
                     s.first_seen.format("%H:%M:%S").to_string(),
                 ];
 
+                let is_selected = current_selected == Some(s.id);
                 let is_marked = data.marked_ids.contains(&s.id);
+                let is_target = current_target == Some(s.id);
+
+                let bg_slot = ui.painter().add(egui::Shape::Noop);
 
                 let row_rect = ui.horizontal(|ui| {
                     for (i, text) in cells.iter().enumerate() {
@@ -208,22 +220,18 @@ pub fn show(
                     }
                 }).response.rect;
 
-                let is_selected = current_selected == Some(s.id);
-
-                // Left accent bar: gold for selected, cyan for search-marked
-                if is_selected {
-                    let bar = egui::Rect::from_min_size(row_rect.min, egui::vec2(3.0, row_rect.height()));
-                    ui.painter().rect_filled(bar, 0.0, egui::Color32::from_rgb(255, 200, 0));
+                // Full-row highlight behind text: gold for selected, cyan for marked, orange for target
+                let row_bg = if is_selected {
+                    Some(egui::Color32::from_rgba_unmultiplied(255, 200, 0, 40))
+                } else if is_target {
+                    Some(egui::Color32::from_rgba_unmultiplied(255, 120, 0, 40))
                 } else if is_marked {
-                    let bar = egui::Rect::from_min_size(row_rect.min, egui::vec2(3.0, row_rect.height()));
-                    ui.painter().rect_filled(bar, 0.0, egui::Color32::from_rgb(0, 200, 255));
-                }
-
-                // Right accent bar: orange for current target
-                if current_target == Some(s.id) {
-                    let bar_min = egui::pos2(row_rect.max.x - 3.0, row_rect.min.y);
-                    let bar = egui::Rect::from_min_size(bar_min, egui::vec2(3.0, row_rect.height()));
-                    ui.painter().rect_filled(bar, 0.0, egui::Color32::from_rgb(255, 120, 0));
+                    Some(egui::Color32::from_rgba_unmultiplied(80, 120, 200, 60))
+                } else {
+                    None
+                };
+                if let Some(bg) = row_bg {
+                    ui.painter().set(bg_slot, egui::Shape::rect_filled(row_rect, 0.0, bg));
                 }
 
                 // Capture name/pos before the closure borrows s

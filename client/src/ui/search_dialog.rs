@@ -97,6 +97,12 @@ impl SearchDialog {
                     .auto_shrink([false; 2])
                     .show(ui, |ui| {
                         for r in &self.results {
+                            // Reserve a paint slot before rendering the row content.
+                            // Shape::Noop is a placeholder; we fill it in after we know
+                            // the rect and hover state. This ensures the background renders
+                            // behind the text rather than on top of it.
+                            let bg_slot = ui.painter().add(egui::Shape::Noop);
+
                             let row_rect = ui.horizontal(|ui| {
                                 let name_color = ui.visuals().strong_text_color();
                                 let dim_color = ui.visuals().text_color();
@@ -135,10 +141,13 @@ impl SearchDialog {
                                 egui::Sense::click(),
                             );
                             if row_resp.hovered() {
-                                ui.painter().rect_filled(
-                                    row_rect,
-                                    0.0,
-                                    egui::Color32::from_rgba_premultiplied(255, 255, 255, 12),
+                                ui.painter().set(
+                                    bg_slot,
+                                    egui::Shape::rect_filled(
+                                        row_rect,
+                                        0.0,
+                                        egui::Color32::from_rgba_unmultiplied(80, 120, 200, 60),
+                                    ),
                                 );
                             }
                             if row_resp.clicked() {

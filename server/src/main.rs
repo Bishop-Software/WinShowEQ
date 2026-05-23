@@ -59,6 +59,21 @@ enum Command {
 
 fn main() {
     let cli = Cli::parse();
+
+    // Only relaunch under a random name for long-lived server modes (GUI, console).
+    // Short-lived subcommands (debug, attach, scan, serve-stub) don't need it and
+    // the relaunch disconnects their stdout/stderr from the terminal.
+    if matches!(cli.command, None | Some(Command::Console)) {
+        relaunch_if_known_name("WinShowEQServer");
+    }
+
+    // The GUI subsystem flag (#![windows_subsystem = "windows"]) suppresses automatic
+    // console allocation. For console subcommands, attach to the parent console so that
+    // Rust's stdout/stderr work correctly.
+    if cli.command.is_some() {
+        attach_parent_console();
+    }
+
     let ini = cli.ini_file.as_deref();
 
     match cli.command {
@@ -224,6 +239,73 @@ fn run_scan(exe_path: &str, ini_override: Option<&str>) {
     let scanner = EqGameScanner::new(exe_path);
     let result = scanner.scan_executable(&ir, &current_offsets, false);
     print!("{}", result.output);
+    let secondary = scanner.scan_secondary(&ir, current_offsets.self_addr, false);
+    print!("{}", secondary);
+}
+
+fn attach_parent_console() {
+    use windows::Win32::System::Console::AttachConsole;
+    // ATTACH_PARENT_PROCESS = 0xFFFFFFFF — attach to whichever console launched us.
+    // Failure is silent: the process simply has no console (e.g., double-clicked).
+    unsafe { let _ = AttachConsole(u32::MAX); }
+}
+
+fn relaunch_if_known_name(_known_stem: &str) {
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+
+    // Already running as a .bin copy — proceed normally.
+    if exe.extension().and_then(|e| e.to_str()) == Some("bin") {
+        return;
+    }
+
+    let dir = match exe.parent() {
+        Some(d) => d,
+        None => return,
+    };
+
+    // Remove .bin copies left by previous sessions.
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("bin") {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+
+    // Copy to a random .bin name in the same directory and relaunch.
+    let new_path = dir.join(random_bin_name());
+    if std::fs::copy(&exe, &new_path).is_err() {
+        return;
+    }
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if std::process::Command::new(&new_path).args(&args).spawn().is_err() {
+        let _ = std::fs::remove_file(&new_path);
+        return;
+    }
+    std::process::exit(0);
+}
+
+fn random_bin_name() -> String {
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0xDEAD_BEEF) as u64;
+    const POOL: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let len = 4 + (seed % 13) as usize; // 4–16 chars (matches C# reference: rnd.Next(4, 16))
+    let mut state = seed ^ (seed >> 33).wrapping_mul(0xff51afd7ed558ccd);
+    let mut name = String::with_capacity(len + 4);
+    for _ in 0..len {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        name.push(POOL[(state as usize) % POOL.len()] as char);
+    }
+    name.push_str(".bin");
+    name
 }
 
 fn resolve_ini_path(name: &str) -> String {

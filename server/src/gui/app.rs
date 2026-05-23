@@ -170,11 +170,11 @@ impl WinShowEQApp {
                     scanner.scan_executable(&ir, &current_offsets, write_out).output
                 }
                 ScanKind::Secondary => {
-                    scanner.scan_secondary(&ir, current_offsets.self_addr)
+                    scanner.scan_secondary(&ir, current_offsets.self_addr, write_out)
                 }
                 ScanKind::Both => {
                     let primary = scanner.scan_executable(&ir, &current_offsets, write_out);
-                    let secondary = scanner.scan_secondary(&ir, current_offsets.self_addr);
+                    let secondary = scanner.scan_secondary(&ir, current_offsets.self_addr, write_out);
                     format!("{}\n{}", primary.output, secondary)
                 }
             };

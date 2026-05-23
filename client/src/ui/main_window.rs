@@ -24,6 +24,7 @@ use crate::ui::login::LoginDialog;
 use crate::ui::map_pane::MapPane;
 use crate::ui::options::OptionsDialog;
 use crate::ui::search_dialog::SearchDialog;
+use crate::ui::spawn_filter::{build_filter_entries, SpawnFilterUI};
 use crate::filters::FilterCategory;
 use crate::map_canvas::MapAction;
 use crate::ui::spawn_list::{self, SpawnAction};
@@ -69,6 +70,7 @@ struct AddTimerDialog {
 #[derive(Default)]
 struct AddFilterScopeDialog {
     open: bool,
+    focus_requested: bool,
     name: String,
     category: Option<FilterCategory>,
 }
@@ -109,6 +111,7 @@ pub struct MainApp {
     ground_sort_column: Option<usize>,
     ground_sort_ascending: bool,
     search: SearchDialog,
+    spawn_filter: SpawnFilterUI,
     pending_clear_timers: bool,
     last_timer_autosave: std::time::Instant,
 }
@@ -175,7 +178,7 @@ impl MainApp {
             d.game_data.load_spawn_colors(&std::path::Path::new(&config.cfg_dir).join("spawn_colors.json"));
             d.filter_dir = config.filter_dir.clone();
             d.filters_global = crate::filters::FilterSet::load(
-                &std::path::Path::new(&config.filter_dir).join("filters_global.xml"),
+                &std::path::Path::new(&config.filter_dir).join("global.xml"),
             );
             d.recompute_filters();
             if let Some(w) = spawn_col_widths  && w.len() == d.spawn_list_column_widths.len()  { d.spawn_list_column_widths  = w; }
@@ -222,6 +225,7 @@ impl MainApp {
             ground_sort_column: None,
             ground_sort_ascending: true,
             search: SearchDialog::default(),
+            spawn_filter: SpawnFilterUI::default(),
             pending_clear_timers: false,
             last_timer_autosave: std::time::Instant::now(),
         }
@@ -271,9 +275,10 @@ impl MainApp {
                 if zone_name.is_empty() {
                     self.write_filter_global(name, category);
                 } else {
-                    self.add_filter_scope.name = name;
+                    self.add_filter_scope.name = name.trim_end_matches(|c: char| c.is_ascii_digit()).trim_end().to_string();
                     self.add_filter_scope.category = Some(category);
                     self.add_filter_scope.open = true;
+                    self.add_filter_scope.focus_requested = false;
                 }
             }
             SpawnAction::CenterMap { id, x, y } => {
@@ -291,7 +296,7 @@ impl MainApp {
     }
 
     fn write_filter_global(&mut self, name: String, category: FilterCategory) {
-        let path = std::path::Path::new(&self.config.filter_dir).join("filters_global.xml");
+        let path = std::path::Path::new(&self.config.filter_dir).join("global.xml");
         let mut data = self.data.lock().unwrap();
         data.filters_global.add(category, name);
         let _ = data.filters_global.save(&path);
@@ -301,7 +306,7 @@ impl MainApp {
     fn write_filter_zone(&mut self, name: String, category: FilterCategory) {
         let zone_name = self.data.lock().unwrap().zone_name.clone();
         let path = std::path::Path::new(&self.config.filter_dir)
-            .join(format!("filters_{}.xml", zone_name.to_lowercase()));
+            .join(format!("{}.xml", zone_name.to_lowercase()));
         let mut data = self.data.lock().unwrap();
         data.filters_zone.add(category, name);
         let _ = data.filters_zone.save(&path);
@@ -331,6 +336,8 @@ struct WinSeqTabViewer<'a> {
     data: &'a Arc<Mutex<AppData>>,
     map_pane: &'a mut MapPane,
     overlay: &'a MapOverlaySettings,
+    spawn_filter: &'a mut SpawnFilterUI,
+    filter_ids: Option<&'a HashSet<u32>>,
     spawn_sort_column: &'a mut Option<usize>,
     spawn_sort_ascending: &'a mut bool,
     timer_sort_column: &'a mut Option<usize>,
@@ -347,7 +354,13 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
 
     fn title(&mut self, tab: &mut Tab) -> egui::WidgetText {
         match tab {
-            Tab::Spawns => "Spawns".into(),
+            Tab::Spawns => {
+                if self.spawn_filter.is_active() {
+                    "Spawns ●".into()
+                } else {
+                    "Spawns".into()
+                }
+            }
             Tab::Timers => "Timers".into(),
             Tab::Ground => "Ground Items".into(),
             Tab::Map => "Map".into(),
@@ -358,13 +371,21 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
         match tab {
             Tab::Spawns => {
                 let mut data = self.data.lock().unwrap();
-                ui.label(format!("Spawns ({})", data.spawns.len()));
+                let total = data.spawns.len();
+                if self.spawn_filter.is_active() {
+                    ui.label(format!("Spawns ({}) — filtered", total));
+                } else {
+                    ui.label(format!("Spawns ({})", total));
+                }
+                ui.separator();
+                self.spawn_filter.ui_compact(ui);
                 ui.separator();
                 *self.spawn_action = spawn_list::show(
                     ui,
                     &mut data,
                     self.spawn_sort_column,
                     self.spawn_sort_ascending,
+                    self.filter_ids,
                 );
             }
             Tab::Timers => {
@@ -379,7 +400,7 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
             }
             Tab::Map => {
                 let data = self.data.lock().unwrap();
-                if let Some(action) = self.map_pane.show(ui, &data, self.overlay) {
+                if let Some(action) = self.map_pane.show(ui, &data, self.overlay, self.filter_ids) {
                     *self.map_action = Some(action);
                 }
             }
@@ -410,6 +431,16 @@ impl eframe::App for MainApp {
         let zone_name = self.data.lock().unwrap().zone_name.clone();
         if !zone_name.is_empty() && zone_name != self.prev_zone {
             self.handle_zone_change(zone_name);
+        }
+
+        {
+            let data = self.data.lock().unwrap();
+            if data.spawns_dirty {
+                let entries = build_filter_entries(&data.spawns, &data.game_data);
+                drop(data);
+                self.spawn_filter.update_spawns(entries);
+                self.data.lock().unwrap().spawns_dirty = false;
+            }
         }
 
         if ctx.input(|i| i.viewport().close_requested()) {
@@ -448,7 +479,7 @@ impl eframe::App for MainApp {
                 data.game_data.load_spawn_colors(&std::path::Path::new(&self.config.cfg_dir).join("spawn_colors.json"));
                 data.filter_dir = self.config.filter_dir.clone();
                 data.filters_global = crate::filters::FilterSet::load(
-                    &std::path::Path::new(&self.config.filter_dir).join("filters_global.xml"),
+                    &std::path::Path::new(&self.config.filter_dir).join("global.xml"),
                 );
                 data.recompute_filters();
             }
@@ -624,15 +655,32 @@ impl eframe::App for MainApp {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .show(&ctx, |ui| {
-                    ui.label(format!("Add \"{}\" to which filter?", self.add_filter_scope.name));
+                    ui.label("Filter name:");
+                    let response = ui.add(
+                        egui::TextEdit::singleline(&mut self.add_filter_scope.name)
+                            .min_size(egui::vec2(220.0, 0.0))
+                            .hint_text("Enter filter text"),
+                    );
+                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        chosen = Some(false); // Enter defaults to Zone
+                    }
+                    if !self.add_filter_scope.focus_requested {
+                        response.request_focus();
+                        self.add_filter_scope.focus_requested = true;
+                    }
                     ui.add_space(4.0);
+                    ui.label("Add to which filter scope?");
+                    ui.add_space(2.0);
                     ui.horizontal(|ui| {
-                        if ui.button("Global").clicked() {
-                            chosen = Some(true);
-                        }
-                        if ui.button(format!("Zone: {zone_name}")).clicked() {
-                            chosen = Some(false);
-                        }
+                        let name_empty = self.add_filter_scope.name.trim().is_empty();
+                        ui.add_enabled_ui(!name_empty, |ui| {
+                            if ui.button("Global").clicked() {
+                                chosen = Some(true);
+                            }
+                            if ui.button(format!("Zone: {zone_name}")).clicked() {
+                                chosen = Some(false);
+                            }
+                        });
                         if ui.button("Cancel").clicked() {
                             cancel = true;
                         }
@@ -642,12 +690,14 @@ impl eframe::App for MainApp {
                 self.add_filter_scope.open = false;
             }
             if let Some(is_global) = chosen {
-                let name = self.add_filter_scope.name.clone();
+                let name = self.add_filter_scope.name.trim().to_string();
                 self.add_filter_scope.open = false;
-                if is_global {
-                    self.write_filter_global(name, category);
-                } else {
-                    self.write_filter_zone(name, category);
+                if !name.is_empty() {
+                    if is_global {
+                        self.write_filter_global(name, category);
+                    } else {
+                        self.write_filter_zone(name, category);
+                    }
                 }
             }
         }
@@ -815,10 +865,17 @@ impl eframe::App for MainApp {
         ui.separator();
 
         // Docked panel layout
+        let filter_ids: Option<HashSet<u32>> = if self.spawn_filter.is_active() {
+            Some(self.spawn_filter.apply_filters())
+        } else {
+            None
+        };
         let mut viewer = WinSeqTabViewer {
             data: &self.data,
             map_pane: &mut self.map_pane,
             overlay: &self.config.map_overlay,
+            spawn_filter: &mut self.spawn_filter,
+            filter_ids: filter_ids.as_ref(),
             spawn_sort_column: &mut self.spawn_sort_column,
             spawn_sort_ascending: &mut self.spawn_sort_ascending,
             timer_sort_column: &mut self.timer_sort_column,
@@ -907,6 +964,7 @@ fn start_network_thread(
                                 Ok(records) => {
                                     let mut d = data.lock().unwrap();
                                     d.curr_tick_npc_ids.clear();
+                                    d.curr_tick_all_ids.clear();
                                     if records.iter().any(|r| r.flags == OPT_GROUND) {
                                         d.ground.clear();
                                     }
@@ -920,7 +978,9 @@ fn start_network_thread(
                                             logger.info(&msg);
                                         }
                                     }
-                                    d.on_tick_end();
+                                    for msg in d.on_tick_end() {
+                                        logger.debug(&msg);
+                                    }
                                 }
                                 Err(e) => {
                                     logger.warn(&format!("Disconnected: {e}"));

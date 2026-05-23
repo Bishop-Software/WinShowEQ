@@ -29,9 +29,9 @@ pub struct AppData {
     pub zone_name: String,
     pub target_id: Option<u32>,
     pub self_id: Option<u32>,
-    /// Global filters loaded from `filters_global.xml` — applies in every zone.
+    /// Global filters loaded from `global.xml` — applies in every zone.
     pub filters_global: FilterSet,
-    /// Zone-specific filters loaded from `filters_{zone}.xml` — applies in the current zone only.
+    /// Zone-specific filters loaded from `{zone}.xml` — applies in the current zone only.
     pub filters_zone: FilterSet,
     /// Merged result of global + zone filters (computed, not persisted directly).
     pub filters: FilterSet,
@@ -57,8 +57,12 @@ pub struct AppData {
     pub observer: SpawnObserver,
     /// NPC spawn IDs seen in the current tick (scratch space for observer diff).
     pub curr_tick_npc_ids: HashSet<u32>,
+    /// All spawn IDs (any type) seen in the current tick — used to prune stale spawns.
+    pub curr_tick_all_ids: HashSet<u32>,
     /// Set when an auto-timer is promoted; cleared after periodic save.
     pub timers_dirty: bool,
+    /// Set whenever the spawn list changes; cleared by the UI after rebuilding filter options.
+    pub spawns_dirty: bool,
 }
 
 impl Default for AppData {
@@ -100,9 +104,15 @@ impl Default for AppData {
             ],
             timer_list_column_widths: vec![
                 120.0, // Name
-                80.0,  // Loc
-                100.0, // Countdown
+                80.0,  // Remain
+                65.0,  // Interval
+                80.0,  // Zone
+                55.0,  // X
+                55.0,  // Y
+                55.0,  // Z
                 45.0,  // Count
+                110.0, // Spawn Time
+                110.0, // Kill Time
             ],
             ground_list_column_widths: vec![
                 150.0, // Item
@@ -114,7 +124,9 @@ impl Default for AppData {
             selected_id: None,
             observer: SpawnObserver::default(),
             curr_tick_npc_ids: HashSet::new(),
+            curr_tick_all_ids: HashSet::new(),
             timers_dirty: false,
+            spawns_dirty: false,
         }
     }
 }
@@ -145,18 +157,44 @@ impl AppData {
     }
 
     /// Run the spawn diff after each network tick to detect kills/respawns.
-    pub fn on_tick_end(&mut self) {
+    /// Returns log messages for the caller to write (kill detections, respawns, promotions).
+    pub fn on_tick_end(&mut self) -> Vec<String> {
         let curr_ids = self.curr_tick_npc_ids.clone();
-        let promoted = self.observer.process_diff(&curr_ids, &self.spawns, &self.zone_name, &mut self.timers);
+        let (promoted, log) = self.observer.process_diff(&curr_ids, &self.spawns, &self.zone_name, &mut self.timers);
         if promoted {
             self.timers_dirty = true;
         }
+
+        // Remove spawns that the server didn't send this tick (despawned/decayed).
+        // Skip pruning if the tick was empty — the server may have sent nothing due to
+        // a partial response or the player not being in a zone yet.
+        if !self.curr_tick_all_ids.is_empty() {
+            let stale: Vec<u32> = self.spawns
+                .iter()
+                .map(|s| s.id)
+                .filter(|id| !self.curr_tick_all_ids.contains(id))
+                .collect();
+            for id in stale {
+                self.spawns.remove(id);
+                self.trails.remove(&id);
+                self.marked_ids.remove(&id);
+                if self.selected_id == Some(id) {
+                    self.selected_id = None;
+                }
+                if self.target_id == Some(id) {
+                    self.target_id = None;
+                }
+            }
+        }
+        self.curr_tick_all_ids.clear();
+        self.spawns_dirty = true;
+        log
     }
 
-    /// Load `filters_{zone}.xml` from `filter_dir`, recompute the merged filter set.
+    /// Load `{zone}.xml` from `filter_dir`, recompute the merged filter set.
     pub fn reload_zone_filter(&mut self, zone: &str) {
         let path = std::path::Path::new(&self.filter_dir)
-            .join(format!("filters_{}.xml", zone.to_lowercase()));
+            .join(format!("{}.xml", zone.to_lowercase()));
         self.filters_zone = FilterSet::load(&path);
         self.recompute_filters();
     }
@@ -173,6 +211,8 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
             data.self_id = None;
             data.target_id = None;
             data.curr_tick_npc_ids.clear();
+            data.curr_tick_all_ids.clear();
+            data.spawns_dirty = true;
             data.observer.on_zone_change();
             data.alert_engine.on_zone_change();
             if !data.filter_dir.is_empty() {
@@ -203,11 +243,13 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
             if info.spawn_category == spawns::SpawnCategory::Npc {
                 data.curr_tick_npc_ids.insert(id);
             }
+            data.curr_tick_all_ids.insert(id);
             data.spawns.upsert_info(info);
             return log_msg;
         }
         Packet::Self_(rec) => {
             data.self_id = Some(rec.id);
+            data.curr_tick_all_ids.insert(rec.id);
             let (spawns, filters) = (&mut data.spawns, &data.filters);
             spawns.upsert_with_filter(&rec, filters);
         }

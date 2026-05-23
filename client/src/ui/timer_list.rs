@@ -1,6 +1,16 @@
+use chrono::Local;
 use egui::Ui;
 
 use crate::data::AppData;
+
+const HEADERS: &[&str] = &[
+    "Name", "Remain", "Interval", "Zone", "X", "Y", "Z", "Count", "Spawn Time", "Kill Time",
+];
+
+fn format_timestamp(dt: chrono::DateTime<chrono::Utc>) -> String {
+    let local: chrono::DateTime<Local> = dt.into();
+    local.format("%-I:%M %p %-m/%-d/%Y").to_string()
+}
 
 /// Returns true if "Clear all timers" was requested (caller must delete the obs file).
 pub fn show(
@@ -9,7 +19,6 @@ pub fn show(
     sort_column: &mut Option<usize>,
     sort_ascending: &mut bool,
 ) -> bool {
-    const HEADERS: &[&str] = &["Name", "Loc", "Countdown", "Count"];
     let row_h = ui.text_style_height(&egui::TextStyle::Body) + 4.0;
     let mut col_widths = data.timer_list_column_widths.clone();
 
@@ -22,11 +31,9 @@ pub fn show(
             };
             let label = format!("{}{}", header, indicator);
 
-            // Allocate space for header and detect clicks
             let header_rect = ui.allocate_space(egui::vec2(*width, row_h)).1;
             let header_resp = ui.interact(header_rect, ui.id().with("header").with(col_idx), egui::Sense::click());
 
-            // Display header as plain text
             let text_color = if header_resp.hovered() {
                 egui::Color32::WHITE
             } else {
@@ -49,18 +56,15 @@ pub fn show(
                 }
             }
 
-            // Resize handle between columns (except after last column)
             if col_idx < HEADERS.len() - 1 {
-                let sep_width = 4.0;
-                let sep_rect = ui.allocate_space(egui::vec2(sep_width, row_h)).1;
+                let sep_rect = ui.allocate_space(egui::vec2(4.0, row_h)).1;
                 let sep_sense = ui.interact(
                     sep_rect,
                     ui.id().with("resize").with(col_idx),
                     egui::Sense::drag(),
                 );
                 if sep_sense.dragged() {
-                    let delta = sep_sense.drag_delta().x;
-                    *width = (*width + delta).max(30.0);
+                    *width = (*width + sep_sense.drag_delta().x).max(30.0);
                 }
                 if sep_sense.hovered() {
                     ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::ResizeHorizontal);
@@ -75,25 +79,26 @@ pub fn show(
     let mut remove_idx: Option<usize> = None;
     let mut clear_all = false;
 
-    // Collect and sort timers
     let mut timers_with_idx: Vec<_> = data.timers.iter().enumerate().collect();
     if let Some(col) = sort_column {
         timers_with_idx.sort_by(|a, b| {
             let cmp = match col {
                 0 => a.1.name.cmp(&b.1.name),
-                1 => {
-                    let a_loc = (a.1.x as i32, a.1.y as i32);
-                    let b_loc = (b.1.x as i32, b.1.y as i32);
-                    a_loc.cmp(&b_loc)
-                }
-                2 => a.1.secs_remaining().partial_cmp(&b.1.secs_remaining()).unwrap_or(std::cmp::Ordering::Equal),
+                1 => a.1.secs_remaining().cmp(&b.1.secs_remaining()),
+                2 => a.1.respawn_secs.cmp(&b.1.respawn_secs),
+                3 => a.1.zone.cmp(&b.1.zone),
+                4 => a.1.x.partial_cmp(&b.1.x).unwrap_or(std::cmp::Ordering::Equal),
+                5 => a.1.y.partial_cmp(&b.1.y).unwrap_or(std::cmp::Ordering::Equal),
+                6 => a.1.z.partial_cmp(&b.1.z).unwrap_or(std::cmp::Ordering::Equal),
+                7 => a.1.spawn_count.cmp(&b.1.spawn_count),
+                8 => a.1.spawn_time.cmp(&b.1.spawn_time),
+                9 => a.1.killed_at.cmp(&b.1.killed_at),
                 _ => std::cmp::Ordering::Equal,
             };
             if *sort_ascending { cmp } else { cmp.reverse() }
         });
     }
 
-    // Data rows
     egui::ScrollArea::vertical()
         .id_salt("timer_scroll")
         .auto_shrink([false; 2])
@@ -108,21 +113,28 @@ pub fn show(
                     ui.visuals().text_color()
                 };
 
-                let row_rect = ui.horizontal(|ui| {
-                    let name_cell = if t.is_auto {
-                        format!("{} [A]", t.name)
-                    } else {
-                        t.name.clone()
-                    };
-                    let cells = [
-                        name_cell,
-                        format!("{:.0},{:.0}", t.x, t.y),
-                        countdown,
-                        if t.spawn_count > 0 { t.spawn_count.to_string() } else { String::new() },
-                    ];
+                let name_cell = if t.is_auto {
+                    format!("{} [A]", t.name)
+                } else {
+                    t.name.clone()
+                };
 
+                let cells: [String; 10] = [
+                    name_cell,
+                    countdown,
+                    t.respawn_secs.to_string(),
+                    t.zone.clone(),
+                    format!("{:.2}", t.x),
+                    format!("{:.2}", t.y),
+                    format!("{:.2}", t.z),
+                    if t.spawn_count > 0 { t.spawn_count.to_string() } else { String::new() },
+                    t.spawn_time.map(format_timestamp).unwrap_or_default(),
+                    format_timestamp(t.killed_at),
+                ];
+
+                let row_rect = ui.horizontal(|ui| {
                     for (col_idx, text) in cells.iter().enumerate() {
-                        let cell_color = if col_idx == 2 { color } else { ui.visuals().text_color() };
+                        let cell_color = if col_idx == 1 { color } else { ui.visuals().text_color() };
                         let (_, cell_rect) = ui.allocate_space(egui::vec2(col_widths[col_idx], row_h));
                         ui.painter().with_clip_rect(cell_rect).text(
                             egui::pos2(cell_rect.min.x + 4.0, cell_rect.center().y),
@@ -131,15 +143,12 @@ pub fn show(
                             egui::FontId::default(),
                             cell_color,
                         );
-
-                        // Add matching resize handle spacing
                         if col_idx < cells.len() - 1 {
                             ui.allocate_space(egui::vec2(4.0, row_h));
                         }
                     }
                 }).response.rect;
 
-                // Right-click context menu
                 let row_resp = ui.interact(row_rect, ui.id().with("timer").with(i), egui::Sense::click());
                 row_resp.context_menu(|ui| {
                     if ui.button("Remove timer").clicked() {
