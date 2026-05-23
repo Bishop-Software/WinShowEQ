@@ -58,8 +58,22 @@ enum Command {
 }
 
 fn main() {
-    relaunch_if_known_name("WinShowEQServer");
     let cli = Cli::parse();
+
+    // Only relaunch under a random name for long-lived server modes (GUI, console).
+    // Short-lived subcommands (debug, attach, scan, serve-stub) don't need it and
+    // the relaunch disconnects their stdout/stderr from the terminal.
+    if matches!(cli.command, None | Some(Command::Console)) {
+        relaunch_if_known_name("WinShowEQServer");
+    }
+
+    // The GUI subsystem flag (#![windows_subsystem = "windows"]) suppresses automatic
+    // console allocation. For console subcommands, attach to the parent console so that
+    // Rust's stdout/stderr work correctly.
+    if cli.command.is_some() {
+        attach_parent_console();
+    }
+
     let ini = cli.ini_file.as_deref();
 
     match cli.command {
@@ -225,6 +239,15 @@ fn run_scan(exe_path: &str, ini_override: Option<&str>) {
     let scanner = EqGameScanner::new(exe_path);
     let result = scanner.scan_executable(&ir, &current_offsets, false);
     print!("{}", result.output);
+    let secondary = scanner.scan_secondary(&ir, current_offsets.self_addr, false);
+    print!("{}", secondary);
+}
+
+fn attach_parent_console() {
+    use windows::Win32::System::Console::AttachConsole;
+    // ATTACH_PARENT_PROCESS = 0xFFFFFFFF — attach to whichever console launched us.
+    // Failure is silent: the process simply has no console (e.g., double-clicked).
+    unsafe { let _ = AttachConsole(u32::MAX); }
 }
 
 fn relaunch_if_known_name(_known_stem: &str) {
