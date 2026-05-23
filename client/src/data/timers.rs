@@ -27,7 +27,7 @@ fn loc_key(x: f32, y: f32) -> String {
 fn is_excluded_spawn(name: &str, race: u32, owner_id: u32) -> bool {
     owner_id != 0                           // pets, mercs, familiars, mounts
         || name.starts_with('_')            // internal/placeholder names
-        || matches!(race, 141 | 376 | 533)  // boats and other non-mob races
+        || matches!(race, 141 | 376 | 533) // boats and other non-mob races
 }
 
 /// A tracked respawn timer for a named EQ mob.
@@ -52,13 +52,7 @@ pub struct SpawnTimer {
 }
 
 impl SpawnTimer {
-    pub fn new(
-        name: impl Into<String>,
-        x: f32,
-        y: f32,
-        z: f32,
-        respawn_secs: i64,
-    ) -> Self {
+    pub fn new(name: impl Into<String>, x: f32, y: f32, z: f32, respawn_secs: i64) -> Self {
         Self {
             name: name.into(),
             x,
@@ -208,15 +202,31 @@ fn parse_line(line: &str) -> Option<SpawnTimer> {
     let z: f32 = parts.next()?.parse().ok()?;
     let killed_unix: i64 = parts.next()?.parse().ok()?;
     let respawn_secs: i64 = parts.next()?.parse().ok()?;
-    let is_auto = parts.next().and_then(|s| s.parse::<u8>().ok()).map(|v| v != 0).unwrap_or(false);
+    let is_auto = parts
+        .next()
+        .and_then(|s| s.parse::<u8>().ok())
+        .map(|v| v != 0)
+        .unwrap_or(false);
     let spawn_count = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-    let spawn_time = parts.next()
+    let spawn_time = parts
+        .next()
         .and_then(|s| s.parse::<i64>().ok())
         .filter(|&ts| ts > 0)
         .and_then(|ts| DateTime::from_timestamp(ts, 0));
     let zone = parts.next().unwrap_or("").to_owned();
     let killed_at = DateTime::from_timestamp(killed_unix, 0).unwrap_or_else(Utc::now);
-    Some(SpawnTimer { name, x, y, z, killed_at, respawn_secs, is_auto, spawn_count, spawn_time, zone })
+    Some(SpawnTimer {
+        name,
+        x,
+        y,
+        z,
+        killed_at,
+        respawn_secs,
+        is_auto,
+        spawn_count,
+        spawn_time,
+        zone,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -299,15 +309,18 @@ impl SpawnObserver {
                 if let Some(kill) = self.pending_kills.remove(&key) {
                     let interval = (now - kill.killed_at).num_seconds();
                     if interval >= MIN_INTERVAL_SECS {
-                        let obs = self.observations.entry(key).or_insert_with(|| SpawnObservation {
-                            name: spawn.name.clone(),
-                            x: spawn.x,
-                            y: spawn.y,
-                            z: spawn.z,
-                            spawn_count: 0,
-                            intervals: Vec::new(),
-                            names: Vec::new(),
-                        });
+                        let obs =
+                            self.observations
+                                .entry(key)
+                                .or_insert_with(|| SpawnObservation {
+                                    name: spawn.name.clone(),
+                                    x: spawn.x,
+                                    y: spawn.y,
+                                    z: spawn.z,
+                                    spawn_count: 0,
+                                    intervals: Vec::new(),
+                                    names: Vec::new(),
+                                });
                         obs.spawn_count += 1;
                         obs.intervals.push(interval);
                         if obs.intervals.len() > MAX_INTERVALS {
@@ -321,7 +334,8 @@ impl SpawnObserver {
                             spawn.name, interval, obs.spawn_count,
                         ));
                         if obs.spawn_count > 1 {
-                            let avg = obs.intervals.iter().sum::<i64>() / obs.intervals.len() as i64;
+                            let avg =
+                                obs.intervals.iter().sum::<i64>() / obs.intervals.len() as i64;
                             timers.add(SpawnTimer {
                                 name: kill.name.clone(),
                                 x: kill.x,
@@ -365,17 +379,17 @@ impl SpawnObserver {
                 // Use spawn_x/spawn_y (first-seen position = spawn point) rather than
                 // current position, so kills on pulled mobs still match the respawn location.
                 let key = loc_key(spawn.spawn_x, spawn.spawn_y);
-                log.push(format!(
-                    "[Timer] Kill detected: {} @ {}",
-                    spawn.name, key,
-                ));
-                self.pending_kills.insert(key, PendingKill {
-                    name: spawn.name.clone(),
-                    x: spawn.spawn_x,
-                    y: spawn.spawn_y,
-                    z: spawn.z,
-                    killed_at: now,
-                });
+                log.push(format!("[Timer] Kill detected: {} @ {}", spawn.name, key,));
+                self.pending_kills.insert(
+                    key,
+                    PendingKill {
+                        name: spawn.name.clone(),
+                        x: spawn.spawn_x,
+                        y: spawn.spawn_y,
+                        z: spawn.z,
+                        killed_at: now,
+                    },
+                );
             }
         }
 
@@ -413,7 +427,11 @@ impl SpawnObserver {
     }
 
     /// Save observation data for `zone` to `{dir}/obs-{zone}.txt`.
-    pub fn save(observations: &HashMap<String, SpawnObservation>, zone: &str, dir: &str) -> std::io::Result<()> {
+    pub fn save(
+        observations: &HashMap<String, SpawnObservation>,
+        zone: &str,
+        dir: &str,
+    ) -> std::io::Result<()> {
         if observations.is_empty() || is_void_zone(zone) {
             return Ok(());
         }
@@ -457,7 +475,10 @@ fn parse_obs_line(line: &str) -> Option<(String, SpawnObservation)> {
     let intervals: Vec<i64> = if intervals_str.is_empty() {
         Vec::new()
     } else {
-        intervals_str.split(',').filter_map(|s| s.parse().ok()).collect()
+        intervals_str
+            .split(',')
+            .filter_map(|s| s.parse().ok())
+            .collect()
     };
     let names_str = parts.next().unwrap_or("");
     let names: Vec<String> = if names_str.is_empty() {
@@ -465,7 +486,18 @@ fn parse_obs_line(line: &str) -> Option<(String, SpawnObservation)> {
     } else {
         names_str.split('|').map(|s| s.to_owned()).collect()
     };
-    Some((key, SpawnObservation { name, x, y, z, spawn_count, intervals, names }))
+    Some((
+        key,
+        SpawnObservation {
+            name,
+            x,
+            y,
+            z,
+            spawn_count,
+            intervals,
+            names,
+        },
+    ))
 }
 
 #[cfg(test)]
@@ -793,7 +825,9 @@ mod tests {
             "key".to_owned(),
             SpawnObservation {
                 name: "Orc".to_owned(),
-                x: 0.0, y: 0.0, z: 0.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
                 spawn_count: 1,
                 intervals: vec![600],
                 names: vec!["Orc".to_owned()],
@@ -804,7 +838,10 @@ mod tests {
 
         assert!(observer.pending_kills.is_empty());
         assert!(observer.prev_tick_ids.is_empty());
-        assert!(!observer.observations.is_empty(), "observations survive zone change");
+        assert!(
+            !observer.observations.is_empty(),
+            "observations survive zone change"
+        );
     }
 
     #[test]
@@ -814,7 +851,9 @@ mod tests {
             "key".to_owned(),
             SpawnObservation {
                 name: "NPC".to_owned(),
-                x: 0.0, y: 0.0, z: 0.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
                 spawn_count: 3,
                 intervals: vec![600, 610],
                 names: vec!["NPC".to_owned()],
@@ -822,7 +861,13 @@ mod tests {
         );
         observer.pending_kills.insert(
             "key".to_owned(),
-            PendingKill { name: "NPC".to_owned(), x: 0.0, y: 0.0, z: 0.0, killed_at: Utc::now() },
+            PendingKill {
+                name: "NPC".to_owned(),
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                killed_at: Utc::now(),
+            },
         );
 
         observer.reset_zone();
@@ -845,7 +890,9 @@ mod tests {
             key.clone(),
             SpawnObservation {
                 name: "Fippy Darkpaw".to_owned(),
-                x: 100.0, y: 200.0, z: -5.0,
+                x: 100.0,
+                y: 200.0,
+                z: -5.0,
                 spawn_count: 3,
                 intervals: vec![600, 605, 595],
                 names: vec!["Fippy Darkpaw".to_owned(), "_Fippy".to_owned()],
@@ -878,14 +925,23 @@ mod tests {
         obs.insert(
             "key".to_owned(),
             SpawnObservation {
-                name: "test".to_owned(), x: 0.0, y: 0.0, z: 0.0,
-                spawn_count: 1, intervals: vec![600], names: vec![],
+                name: "test".to_owned(),
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                spawn_count: 1,
+                intervals: vec![600],
+                names: vec![],
             },
         );
 
         SpawnObserver::save(&obs, "nexus", &dir_str).unwrap();
 
-        assert!(!std::path::Path::new(&dir_str).join("obs-nexus.txt").exists());
+        assert!(
+            !std::path::Path::new(&dir_str)
+                .join("obs-nexus.txt")
+                .exists()
+        );
     }
 
     // --- TimerStore persistence ---

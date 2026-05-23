@@ -8,10 +8,26 @@ use crate::filters::FilterCategory;
 
 /// Action returned when the user selects a context menu item on a spawn row.
 pub enum SpawnAction {
-    AddTimer { name: String, x: f32, y: f32, z: f32 },
-    AddToFilter { name: String, category: FilterCategory },
-    AddMapText { x: f32, y: f32, z: f32 },
-    CenterMap { id: u32, x: f32, y: f32 },
+    AddTimer {
+        name: String,
+        x: f32,
+        y: f32,
+        z: f32,
+    },
+    AddToFilter {
+        name: String,
+        category: FilterCategory,
+    },
+    AddMapText {
+        x: f32,
+        y: f32,
+        z: f32,
+    },
+    CenterMap {
+        id: u32,
+        x: f32,
+        y: f32,
+    },
 }
 
 pub fn show(
@@ -22,8 +38,21 @@ pub fn show(
     filter_ids: Option<&HashSet<u32>>,
 ) -> Option<SpawnAction> {
     const HEADERS: &[&str] = &[
-        "Name", "Last Name", "Lvl", "Class", "Race", "Type", "Owner", "Invis", "Speed", "X",
-        "Y", "Z", "Dist", "ID", "Time",
+        "Name",
+        "Last Name",
+        "Lvl",
+        "Class",
+        "Race",
+        "Type",
+        "Owner",
+        "Invis",
+        "Speed",
+        "X",
+        "Y",
+        "Z",
+        "Dist",
+        "ID",
+        "Time",
     ];
 
     let player_pos = data.player_pos();
@@ -39,8 +68,14 @@ pub fn show(
                 0 => a.name.cmp(&b.name),
                 1 => a.last_name.cmp(&b.last_name),
                 2 => a.level.cmp(&b.level),
-                3 => data.game_data.class_name(a.class).cmp(&data.game_data.class_name(b.class)),
-                4 => data.game_data.race_name(a.race).cmp(data.game_data.race_name(b.race)),
+                3 => data
+                    .game_data
+                    .class_name(a.class)
+                    .cmp(&data.game_data.class_name(b.class)),
+                4 => data
+                    .game_data
+                    .race_name(a.race)
+                    .cmp(data.game_data.race_name(b.race)),
                 5 => {
                     let cat_a = spawn_category_str(a.spawn_category);
                     let cat_b = spawn_category_str(b.spawn_category);
@@ -52,7 +87,10 @@ pub fn show(
                     owner_a.cmp(owner_b)
                 }
                 7 => (a.hidden != 0).cmp(&(b.hidden != 0)),
-                8 => a.speed.partial_cmp(&b.speed).unwrap_or(std::cmp::Ordering::Equal),
+                8 => a
+                    .speed
+                    .partial_cmp(&b.speed)
+                    .unwrap_or(std::cmp::Ordering::Equal),
                 9 => a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal),
                 10 => a.y.partial_cmp(&b.y).unwrap_or(std::cmp::Ordering::Equal),
                 11 => a.z.partial_cmp(&b.z).unwrap_or(std::cmp::Ordering::Equal),
@@ -69,11 +107,7 @@ pub fn show(
                 14 => a.first_seen.cmp(&b.first_seen),
                 _ => std::cmp::Ordering::Equal,
             };
-            if *sort_ascending {
-                cmp
-            } else {
-                cmp.reverse()
-            }
+            if *sort_ascending { cmp } else { cmp.reverse() }
         });
     } else if let Some((px, py, _)) = player_pos {
         spawns.sort_by(|a, b| {
@@ -90,14 +124,24 @@ pub fn show(
     ui.horizontal(|ui| {
         for (col_idx, (header, width)) in HEADERS.iter().zip(col_widths.iter_mut()).enumerate() {
             let indicator = match sort_column {
-                Some(c) if *c == col_idx => if *sort_ascending { " ▲" } else { " ▼" },
+                Some(c) if *c == col_idx => {
+                    if *sort_ascending {
+                        " ▲"
+                    } else {
+                        " ▼"
+                    }
+                }
                 _ => "",
             };
             let label_text = format!("{}{}", header, indicator);
 
             // Allocate space for the header cell and detect clicks
             let header_rect = ui.allocate_space(egui::vec2(*width, row_h)).1;
-            let header_resp = ui.interact(header_rect, ui.id().with("header").with(col_idx), egui::Sense::click());
+            let header_resp = ui.interact(
+                header_rect,
+                ui.id().with("header").with(col_idx),
+                egui::Sense::click(),
+            );
 
             // Display header as plain text (not a button)
             let text_color = if header_resp.hovered() {
@@ -157,9 +201,10 @@ pub fn show(
         .show(ui, |ui| {
             for s in &spawns {
                 if let Some(ids) = filter_ids
-                    && !ids.contains(&s.id) {
-                        continue;
-                    }
+                    && !ids.contains(&s.id)
+                {
+                    continue;
+                }
 
                 let dist_str = match player_pos {
                     Some((px, py, _)) => format!("{:.0}", s.distance_2d(px, py)),
@@ -185,7 +230,11 @@ pub fn show(
                     data.game_data.race_name(s.race).to_owned(),
                     spawn_category_str(s.spawn_category).to_owned(),
                     owner_name_str(data, s.owner_id).to_owned(),
-                    if s.hidden != 0 { "Y".to_owned() } else { String::new() },
+                    if s.hidden != 0 {
+                        "Y".to_owned()
+                    } else {
+                        String::new()
+                    },
                     format!("{:.1}", s.speed),
                     format!("{:.2}", s.x),
                     format!("{:.2}", s.y),
@@ -201,24 +250,32 @@ pub fn show(
 
                 let bg_slot = ui.painter().add(egui::Shape::Noop);
 
-                let row_rect = ui.horizontal(|ui| {
-                    for (i, text) in cells.iter().enumerate() {
-                        let cell_color = if i == 0 { color } else { ui.visuals().text_color() };
-                        let (_, cell_rect) = ui.allocate_space(egui::vec2(col_widths[i], row_h));
-                        ui.painter().with_clip_rect(cell_rect).text(
-                            egui::pos2(cell_rect.min.x + 4.0, cell_rect.center().y),
-                            egui::Align2::LEFT_CENTER,
-                            text,
-                            egui::FontId::default(),
-                            cell_color,
-                        );
+                let row_rect = ui
+                    .horizontal(|ui| {
+                        for (i, text) in cells.iter().enumerate() {
+                            let cell_color = if i == 0 {
+                                color
+                            } else {
+                                ui.visuals().text_color()
+                            };
+                            let (_, cell_rect) =
+                                ui.allocate_space(egui::vec2(col_widths[i], row_h));
+                            ui.painter().with_clip_rect(cell_rect).text(
+                                egui::pos2(cell_rect.min.x + 4.0, cell_rect.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                text,
+                                egui::FontId::default(),
+                                cell_color,
+                            );
 
-                        // Add matching resize handle spacing (except after last column)
-                        if i < cells.len() - 1 {
-                            ui.allocate_space(egui::vec2(4.0, row_h));
+                            // Add matching resize handle spacing (except after last column)
+                            if i < cells.len() - 1 {
+                                ui.allocate_space(egui::vec2(4.0, row_h));
+                            }
                         }
-                    }
-                }).response.rect;
+                    })
+                    .response
+                    .rect;
 
                 // Full-row highlight behind text: gold for selected, cyan for marked, orange for target
                 let row_bg = if is_selected {
@@ -231,7 +288,8 @@ pub fn show(
                     None
                 };
                 if let Some(bg) = row_bg {
-                    ui.painter().set(bg_slot, egui::Shape::rect_filled(row_rect, 0.0, bg));
+                    ui.painter()
+                        .set(bg_slot, egui::Shape::rect_filled(row_rect, 0.0, bg));
                 }
 
                 // Capture name/pos before the closure borrows s
@@ -243,7 +301,11 @@ pub fn show(
                 let row_resp = ui.interact(row_rect, ui.id().with(s.id), egui::Sense::click());
 
                 if row_resp.double_clicked_by(egui::PointerButton::Primary) {
-                    action = Some(SpawnAction::CenterMap { id: spawn_id, x: sx, y: sy });
+                    action = Some(SpawnAction::CenterMap {
+                        id: spawn_id,
+                        x: sx,
+                        y: sy,
+                    });
                     // Don't touch pending_select — selection is force-set in handle_spawn_action
                     // to avoid the double-toggle that egui's click+double_click sequence causes.
                 } else if row_resp.clicked_by(egui::PointerButton::Primary) {
@@ -253,7 +315,9 @@ pub fn show(
                     if ui.button("Add Timer…").clicked() {
                         action = Some(SpawnAction::AddTimer {
                             name: spawn_name.clone(),
-                            x: sx, y: sy, z: sz,
+                            x: sx,
+                            y: sy,
+                            z: sz,
                         });
                         ui.close();
                     }
@@ -288,7 +352,11 @@ pub fn show(
                     }
                     ui.separator();
                     if ui.button("Add Map Text").clicked() {
-                        action = Some(SpawnAction::AddMapText { x: sx, y: sy, z: sz });
+                        action = Some(SpawnAction::AddMapText {
+                            x: sx,
+                            y: sy,
+                            z: sz,
+                        });
                         ui.close();
                     }
                 });

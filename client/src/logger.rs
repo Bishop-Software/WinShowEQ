@@ -10,8 +10,8 @@ use chrono::Local;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {
     Debug = 0,
-    Info  = 1,
-    Warn  = 2,
+    Info = 1,
+    Warn = 2,
     Error = 3,
 }
 
@@ -19,8 +19,8 @@ impl LogLevel {
     fn label(self) -> &'static str {
         match self {
             Self::Debug => "DEBUG",
-            Self::Info  => "INFO",
-            Self::Warn  => "WARN",
+            Self::Info => "INFO",
+            Self::Warn => "WARN",
             Self::Error => "ERROR",
         }
     }
@@ -29,18 +29,18 @@ impl LogLevel {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Debug => "debug",
-            Self::Info  => "info",
-            Self::Warn  => "warn",
+            Self::Info => "info",
+            Self::Warn => "warn",
             Self::Error => "error",
         }
     }
 
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
-            "debug"           => Self::Debug,
+            "debug" => Self::Debug,
             "warn" | "warning" => Self::Warn,
-            "error"           => Self::Error,
-            _                 => Self::Info,
+            "error" => Self::Error,
+            _ => Self::Info,
         }
     }
 
@@ -57,16 +57,16 @@ impl LogLevel {
 /// immediately affects the network thread's copy without a restart.
 #[derive(Debug, Clone)]
 pub struct Logger {
-    log_dir:   PathBuf,
-    enabled:   Arc<AtomicBool>,
+    log_dir: PathBuf,
+    enabled: Arc<AtomicBool>,
     min_level: Arc<AtomicU8>,
 }
 
 impl Logger {
     pub fn new(log_dir: impl Into<PathBuf>) -> Self {
         Self {
-            log_dir:   log_dir.into(),
-            enabled:   Arc::new(AtomicBool::new(true)),
+            log_dir: log_dir.into(),
+            enabled: Arc::new(AtomicBool::new(true)),
             min_level: Arc::new(AtomicU8::new(LogLevel::Info as u8)),
         }
     }
@@ -104,11 +104,19 @@ impl Logger {
     }
 
     #[allow(dead_code)]
-    pub fn debug(&self, msg: &str) { self.write(LogLevel::Debug, msg); }
-    pub fn info(&self,  msg: &str) { self.write(LogLevel::Info,  msg); }
-    pub fn warn(&self,  msg: &str) { self.write(LogLevel::Warn,  msg); }
+    pub fn debug(&self, msg: &str) {
+        self.write(LogLevel::Debug, msg);
+    }
+    pub fn info(&self, msg: &str) {
+        self.write(LogLevel::Info, msg);
+    }
+    pub fn warn(&self, msg: &str) {
+        self.write(LogLevel::Warn, msg);
+    }
     #[allow(dead_code)]
-    pub fn error(&self, msg: &str) { self.write(LogLevel::Error, msg); }
+    pub fn error(&self, msg: &str) {
+        self.write(LogLevel::Error, msg);
+    }
 
     fn write(&self, level: LogLevel, msg: &str) {
         if !self.enabled.load(Ordering::Relaxed) {
@@ -120,12 +128,7 @@ impl Logger {
         let now = Local::now();
         let filename = now.format("%m-%d-%Y").to_string() + ".txt";
         let path = self.log_dir.join(filename);
-        let line = format!(
-            "[{}] [{}] {}\n",
-            now.format("%H:%M:%S"),
-            level.label(),
-            msg
-        );
+        let line = format!("[{}] [{}] {}\n", now.format("%H:%M:%S"), level.label(), msg);
         if let Err(e) = self.append(&path, &line) {
             eprintln!("Logger: failed to write to {}: {e}", path.display());
         }

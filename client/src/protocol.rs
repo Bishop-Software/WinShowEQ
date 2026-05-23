@@ -1,5 +1,5 @@
 use common::{
-    SpawnRecord, OPT_GROUND, OPT_PROCESS, OPT_SELF, OPT_SPAWNS, OPT_TARGET, OPT_WORLD, OPT_ZONE,
+    OPT_GROUND, OPT_PROCESS, OPT_SELF, OPT_SPAWNS, OPT_TARGET, OPT_WORLD, OPT_ZONE, SpawnRecord,
 };
 
 use crate::data::world::InGameTime;
@@ -32,7 +32,9 @@ pub fn decode_packet(rec: SpawnRecord) -> Packet {
         OPT_SPAWNS => Packet::Spawn(rec),
         OPT_SELF => Packet::Self_(rec),
         OPT_TARGET => Packet::Target(rec),
-        OPT_ZONE => Packet::Zone { name: name_from_bytes(&rec.name) },
+        OPT_ZONE => Packet::Zone {
+            name: name_from_bytes(&rec.name),
+        },
         OPT_GROUND => Packet::Ground(rec),
         OPT_WORLD => Packet::World(InGameTime::from_record(&rec).unwrap_or_default()),
         OPT_PROCESS => Packet::Process { pid: { rec.id } },
@@ -56,7 +58,7 @@ pub fn last_name_from_bytes(bytes: &[u8; 22]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::{OPT_SPAWNS, OPT_SELF, OPT_TARGET, OPT_ZONE, OPT_GROUND, OPT_WORLD, OPT_PROCESS};
+    use common::{OPT_GROUND, OPT_PROCESS, OPT_SELF, OPT_SPAWNS, OPT_TARGET, OPT_WORLD, OPT_ZONE};
 
     fn rec_with_flags(flags: u32) -> SpawnRecord {
         let mut r = SpawnRecord::zeroed();
@@ -73,12 +75,18 @@ mod tests {
 
     #[test]
     fn decode_self() {
-        assert!(matches!(decode_packet(rec_with_flags(OPT_SELF)), Packet::Self_(_)));
+        assert!(matches!(
+            decode_packet(rec_with_flags(OPT_SELF)),
+            Packet::Self_(_)
+        ));
     }
 
     #[test]
     fn decode_target() {
-        assert!(matches!(decode_packet(rec_with_flags(OPT_TARGET)), Packet::Target(_)));
+        assert!(matches!(
+            decode_packet(rec_with_flags(OPT_TARGET)),
+            Packet::Target(_)
+        ));
     }
 
     #[test]
@@ -104,17 +112,20 @@ mod tests {
 
     #[test]
     fn decode_ground() {
-        assert!(matches!(decode_packet(rec_with_flags(OPT_GROUND)), Packet::Ground(_)));
+        assert!(matches!(
+            decode_packet(rec_with_flags(OPT_GROUND)),
+            Packet::Ground(_)
+        ));
     }
 
     #[test]
     fn decode_world_maps_fields() {
         let mut r = rec_with_flags(OPT_WORLD);
         r.spawn_type = 14; // hour
-        r.class = 30;      // minute
-        r.level = 15;      // day
-        r.hidden = 6;      // month
-        r.race = 3245;     // year
+        r.class = 30; // minute
+        r.level = 15; // day
+        r.hidden = 6; // month
+        r.race = 3245; // year
         match decode_packet(r) {
             Packet::World(t) => {
                 assert_eq!(t.hour, 14);
@@ -134,7 +145,10 @@ mod tests {
 
     #[test]
     fn decode_unknown() {
-        assert!(matches!(decode_packet(rec_with_flags(0x99)), Packet::Unknown { flags: 0x99 }));
+        assert!(matches!(
+            decode_packet(rec_with_flags(0x99)),
+            Packet::Unknown { flags: 0x99 }
+        ));
     }
 
     #[test]

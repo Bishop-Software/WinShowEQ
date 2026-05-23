@@ -220,11 +220,7 @@ impl SpawnFilterUI {
                     }
                     for race in &races {
                         if ui
-                            .selectable_value(
-                                &mut self.selected_race,
-                                Some(race.clone()),
-                                race,
-                            )
+                            .selectable_value(&mut self.selected_race, Some(race.clone()), race)
                             .clicked()
                         {
                             self.selected_class = None;
@@ -240,11 +236,7 @@ impl SpawnFilterUI {
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut self.selected_class, None, "All Classes");
                     for class in &available_classes {
-                        ui.selectable_value(
-                            &mut self.selected_class,
-                            Some(class.clone()),
-                            class,
-                        );
+                        ui.selectable_value(&mut self.selected_class, Some(class.clone()), class);
                     }
                 });
 
@@ -286,7 +278,12 @@ impl SpawnFilterUI {
                 });
 
             // Clear button — only visible when a filter is active
-            if self.is_active() && ui.small_button("✕").on_hover_text("Clear filters").clicked() {
+            if self.is_active()
+                && ui
+                    .small_button("✕")
+                    .on_hover_text("Clear filters")
+                    .clicked()
+            {
                 self.reset();
             }
         });
@@ -313,7 +310,13 @@ pub fn build_filter_entries(spawns: &SpawnStore, game_data: &GameData) -> Vec<Fi
 mod tests {
     use super::*;
 
-    fn make_entry(id: u32, race: &str, class: &str, level: u8, spawn_type: SpawnCategory) -> FilterEntry {
+    fn make_entry(
+        id: u32,
+        race: &str,
+        class: &str,
+        level: u8,
+        spawn_type: SpawnCategory,
+    ) -> FilterEntry {
         FilterEntry {
             id,
             name: format!("spawn_{id}"),
@@ -450,7 +453,10 @@ mod tests {
         assert!(f.races.contains(&"Orc".to_string()));
         assert!(f.races.contains(&"Gnoll".to_string()));
         assert!(f.races.contains(&"Human".to_string()));
-        assert!(f.races.windows(2).all(|w| w[0] <= w[1]), "races must be sorted");
+        assert!(
+            f.races.windows(2).all(|w| w[0] <= w[1]),
+            "races must be sorted"
+        );
     }
 
     #[test]
@@ -480,7 +486,13 @@ mod tests {
         f.selected_race = Some("Orc".to_string());
         f.selected_class = Some("Warrior".to_string());
         // Update with entries that have no Orcs
-        f.update_spawns(vec![make_entry(10, "Gnoll", "Warrior", 10, SpawnCategory::Npc)]);
+        f.update_spawns(vec![make_entry(
+            10,
+            "Gnoll",
+            "Warrior",
+            10,
+            SpawnCategory::Npc,
+        )]);
         assert_eq!(f.selected_race, None);
         assert_eq!(f.selected_class, None);
     }

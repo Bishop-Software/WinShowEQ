@@ -11,10 +11,12 @@ use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use crate::config::{ClientConfig, MapOverlaySettings};
 use crate::data::annotations::AnnotationStore;
 use crate::data::timers::{SpawnObserver, SpawnTimer, TimerStore};
-use crate::map_reader;
-use crate::data::{apply_packet, configure_alerts, AppData};
+use crate::data::{AppData, apply_packet, configure_alerts};
+use crate::filters::FilterCategory;
 use crate::game_data::GameData;
 use crate::logger::{LogLevel, Logger};
+use crate::map_canvas::MapAction;
+use crate::map_reader;
 use crate::net::ServerConnection;
 use crate::protocol::decode_packet;
 use crate::ui::about::AboutDialog;
@@ -24,14 +26,11 @@ use crate::ui::login::LoginDialog;
 use crate::ui::map_pane::MapPane;
 use crate::ui::options::OptionsDialog;
 use crate::ui::search_dialog::SearchDialog;
-use crate::ui::spawn_filter::{build_filter_entries, SpawnFilterUI};
-use crate::filters::FilterCategory;
-use crate::map_canvas::MapAction;
+use crate::ui::spawn_filter::{SpawnFilterUI, build_filter_entries};
 use crate::ui::spawn_list::{self, SpawnAction};
 use crate::ui::timer_list;
 
-const TICK_REQUEST: i32 =
-    IPT_ZONE | IPT_SELF | IPT_TARGET | IPT_SPAWNS | IPT_GROUND | IPT_WORLD;
+const TICK_REQUEST: i32 = IPT_ZONE | IPT_SELF | IPT_TARGET | IPT_SPAWNS | IPT_GROUND | IPT_WORLD;
 const TICK_DELAY_MS: u64 = 250;
 const RECONNECT_DELAY_SECS: u64 = 2;
 
@@ -135,8 +134,12 @@ impl MainApp {
         // Configure Arial font for better Unicode support (arrows, international text)
         let mut fonts = egui::FontDefinitions::default();
         let font_data = egui::FontData::from_static(include_bytes!("../../assets/Arial.ttf"));
-        fonts.font_data.insert("arial".to_owned(), Arc::new(font_data));
-        fonts.families.get_mut(&egui::FontFamily::Proportional)
+        fonts
+            .font_data
+            .insert("arial".to_owned(), Arc::new(font_data));
+        fonts
+            .families
+            .get_mut(&egui::FontFamily::Proportional)
             .unwrap()
             .insert(0, "arial".to_owned());
         cc.egui_ctx.set_fonts(fonts);
@@ -145,7 +148,9 @@ impl MainApp {
         let config = ClientConfig::load(&config_path);
         let server_addr = server_addr.or_else(|| {
             if config.auto_connect {
-                format!("{}:{}", config.server_ip, config.server_port).parse().ok()
+                format!("{}:{}", config.server_ip, config.server_port)
+                    .parse()
+                    .ok()
             } else {
                 None
             }
@@ -154,13 +159,16 @@ impl MainApp {
         logger.set_enabled(config.log_enabled);
         logger.set_level(LogLevel::from_str(&config.log_level));
         // Restore persisted UI state (dock layout + column widths).
-        let dock_state: Option<DockState<Tab>> = cc.storage
-            .and_then(|s| eframe::get_value(s, "dock_state"));
-        let spawn_col_widths: Option<Vec<f32>> = cc.storage
+        let dock_state: Option<DockState<Tab>> =
+            cc.storage.and_then(|s| eframe::get_value(s, "dock_state"));
+        let spawn_col_widths: Option<Vec<f32>> = cc
+            .storage
             .and_then(|s| eframe::get_value(s, "spawn_col_widths"));
-        let timer_col_widths: Option<Vec<f32>> = cc.storage
+        let timer_col_widths: Option<Vec<f32>> = cc
+            .storage
             .and_then(|s| eframe::get_value(s, "timer_col_widths"));
-        let ground_col_widths: Option<Vec<f32>> = cc.storage
+        let ground_col_widths: Option<Vec<f32>> = cc
+            .storage
             .and_then(|s| eframe::get_value(s, "ground_col_widths"));
 
         let data = Arc::new(Mutex::new(AppData::default()));
@@ -173,17 +181,33 @@ impl MainApp {
             if let Some(gd) = GameData::load(&config.eq_path) {
                 d.game_data = gd;
             }
-            d.game_data.load_classes(&std::path::Path::new(&config.cfg_dir).join("classes.json"));
-            d.game_data.load_color_palette(&std::path::Path::new(&config.cfg_dir).join("colors.json"));
-            d.game_data.load_spawn_colors(&std::path::Path::new(&config.cfg_dir).join("spawn_colors.json"));
+            d.game_data
+                .load_classes(&std::path::Path::new(&config.cfg_dir).join("classes.json"));
+            d.game_data
+                .load_color_palette(&std::path::Path::new(&config.cfg_dir).join("colors.json"));
+            d.game_data.load_spawn_colors(
+                &std::path::Path::new(&config.cfg_dir).join("spawn_colors.json"),
+            );
             d.filter_dir = config.filter_dir.clone();
             d.filters_global = crate::filters::FilterSet::load(
                 &std::path::Path::new(&config.filter_dir).join("global.xml"),
             );
             d.recompute_filters();
-            if let Some(w) = spawn_col_widths  && w.len() == d.spawn_list_column_widths.len()  { d.spawn_list_column_widths  = w; }
-            if let Some(w) = timer_col_widths  && w.len() == d.timer_list_column_widths.len()  { d.timer_list_column_widths  = w; }
-            if let Some(w) = ground_col_widths && w.len() == d.ground_list_column_widths.len() { d.ground_list_column_widths = w; }
+            if let Some(w) = spawn_col_widths
+                && w.len() == d.spawn_list_column_widths.len()
+            {
+                d.spawn_list_column_widths = w;
+            }
+            if let Some(w) = timer_col_widths
+                && w.len() == d.timer_list_column_widths.len()
+            {
+                d.timer_list_column_widths = w;
+            }
+            if let Some(w) = ground_col_widths
+                && w.len() == d.ground_list_column_widths.len()
+            {
+                d.ground_list_column_widths = w;
+            }
         }
 
         start_network_thread(
@@ -239,8 +263,14 @@ impl MainApp {
         if !self.prev_zone.is_empty() {
             let data = self.data.lock().unwrap();
             let _ = data.timers.save(&self.prev_zone, &self.config.timer_dir);
-            let _ = data.annotations.save(&self.prev_zone, &self.config.annotations_dir);
-            let _ = SpawnObserver::save(&data.observer.observations, &self.prev_zone, &self.config.timer_dir);
+            let _ = data
+                .annotations
+                .save(&self.prev_zone, &self.config.annotations_dir);
+            let _ = SpawnObserver::save(
+                &data.observer.observations,
+                &self.prev_zone,
+                &self.config.timer_dir,
+            );
         }
         let new_timers = TimerStore::load(&new_zone, &self.config.timer_dir);
         let new_annotations = AnnotationStore::load(&new_zone, &self.config.annotations_dir);
@@ -275,7 +305,10 @@ impl MainApp {
                 if zone_name.is_empty() {
                     self.write_filter_global(name, category);
                 } else {
-                    self.add_filter_scope.name = name.trim_end_matches(|c: char| c.is_ascii_digit()).trim_end().to_string();
+                    self.add_filter_scope.name = name
+                        .trim_end_matches(|c: char| c.is_ascii_digit())
+                        .trim_end()
+                        .to_string();
                     self.add_filter_scope.category = Some(category);
                     self.add_filter_scope.open = true;
                     self.add_filter_scope.focus_requested = false;
@@ -390,13 +423,23 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
             }
             Tab::Timers => {
                 let mut data = self.data.lock().unwrap();
-                if timer_list::show(ui, &mut data, self.timer_sort_column, self.timer_sort_ascending) {
+                if timer_list::show(
+                    ui,
+                    &mut data,
+                    self.timer_sort_column,
+                    self.timer_sort_ascending,
+                ) {
                     *self.pending_clear_timers = true;
                 }
             }
             Tab::Ground => {
                 let mut data = self.data.lock().unwrap();
-                ground_list::show(ui, &mut data, self.ground_sort_column, self.ground_sort_ascending);
+                ground_list::show(
+                    ui,
+                    &mut data,
+                    self.ground_sort_column,
+                    self.ground_sort_ascending,
+                );
             }
             Tab::Map => {
                 let data = self.data.lock().unwrap();
@@ -420,9 +463,13 @@ impl eframe::App for MainApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, "dock_state", &self.dock_state);
         let data = self.data.lock().unwrap();
-        eframe::set_value(storage, "spawn_col_widths",  &data.spawn_list_column_widths);
-        eframe::set_value(storage, "timer_col_widths",  &data.timer_list_column_widths);
-        eframe::set_value(storage, "ground_col_widths", &data.ground_list_column_widths);
+        eframe::set_value(storage, "spawn_col_widths", &data.spawn_list_column_widths);
+        eframe::set_value(storage, "timer_col_widths", &data.timer_list_column_widths);
+        eframe::set_value(
+            storage,
+            "ground_col_widths",
+            &data.ground_list_column_widths,
+        );
     }
 
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -447,8 +494,14 @@ impl eframe::App for MainApp {
             if !self.prev_zone.is_empty() {
                 let data = self.data.lock().unwrap();
                 let _ = data.timers.save(&self.prev_zone, &self.config.timer_dir);
-                let _ = data.annotations.save(&self.prev_zone, &self.config.annotations_dir);
-                let _ = SpawnObserver::save(&data.observer.observations, &self.prev_zone, &self.config.timer_dir);
+                let _ = data
+                    .annotations
+                    .save(&self.prev_zone, &self.config.annotations_dir);
+                let _ = SpawnObserver::save(
+                    &data.observer.observations,
+                    &self.prev_zone,
+                    &self.config.timer_dir,
+                );
             }
             self.save_config();
             self.stop.store(true, Ordering::Relaxed);
@@ -466,7 +519,8 @@ impl eframe::App for MainApp {
             let trails = self.options.trails_enabled;
             self.config = new_config;
             self.logger.set_enabled(self.config.log_enabled);
-            self.logger.set_level(LogLevel::from_str(&self.config.log_level));
+            self.logger
+                .set_level(LogLevel::from_str(&self.config.log_level));
             {
                 let mut data = self.data.lock().unwrap();
                 data.trails_enabled = trails;
@@ -474,9 +528,14 @@ impl eframe::App for MainApp {
                 if let Some(gd) = GameData::load(&self.config.eq_path) {
                     data.game_data = gd;
                 }
-                data.game_data.load_classes(&std::path::Path::new(&self.config.cfg_dir).join("classes.json"));
-                data.game_data.load_color_palette(&std::path::Path::new(&self.config.cfg_dir).join("colors.json"));
-                data.game_data.load_spawn_colors(&std::path::Path::new(&self.config.cfg_dir).join("spawn_colors.json"));
+                data.game_data
+                    .load_classes(&std::path::Path::new(&self.config.cfg_dir).join("classes.json"));
+                data.game_data.load_color_palette(
+                    &std::path::Path::new(&self.config.cfg_dir).join("colors.json"),
+                );
+                data.game_data.load_spawn_colors(
+                    &std::path::Path::new(&self.config.cfg_dir).join("spawn_colors.json"),
+                );
                 data.filter_dir = self.config.filter_dir.clone();
                 data.filters_global = crate::filters::FilterSet::load(
                     &std::path::Path::new(&self.config.filter_dir).join("global.xml"),
@@ -497,15 +556,18 @@ impl eframe::App for MainApp {
         }
 
         // Global keyboard shortcuts
-        let (zoom_in, zoom_out, center_player, f5, f6, f7, toggle_trails) = ctx.input(|i| (
-            (i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals)) && !i.modifiers.any(),
-            i.key_pressed(egui::Key::Minus) && !i.modifiers.any(),
-            i.key_pressed(egui::Key::Home),
-            i.key_pressed(egui::Key::F5),
-            i.key_pressed(egui::Key::F6),
-            i.key_pressed(egui::Key::F7),
-            i.key_pressed(egui::Key::T) && !i.modifiers.any(),
-        ));
+        let (zoom_in, zoom_out, center_player, f5, f6, f7, toggle_trails) = ctx.input(|i| {
+            (
+                (i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals))
+                    && !i.modifiers.any(),
+                i.key_pressed(egui::Key::Minus) && !i.modifiers.any(),
+                i.key_pressed(egui::Key::Home),
+                i.key_pressed(egui::Key::F5),
+                i.key_pressed(egui::Key::F6),
+                i.key_pressed(egui::Key::F7),
+                i.key_pressed(egui::Key::T) && !i.modifiers.any(),
+            )
+        });
         if zoom_in {
             self.map_pane.state.zoom = (self.map_pane.state.zoom * crate::map_canvas::ZOOM_STEP)
                 .clamp(crate::map_canvas::ZOOM_MIN, crate::map_canvas::ZOOM_MAX);
@@ -517,9 +579,15 @@ impl eframe::App for MainApp {
         if center_player {
             self.map_pane.state.pan = egui::Vec2::ZERO;
         }
-        if f5 { self.toggle_panel(Tab::Spawns); }
-        if f6 { self.toggle_panel(Tab::Timers); }
-        if f7 { self.toggle_panel(Tab::Ground); }
+        if f5 {
+            self.toggle_panel(Tab::Spawns);
+        }
+        if f6 {
+            self.toggle_panel(Tab::Timers);
+        }
+        if f7 {
+            self.toggle_panel(Tab::Ground);
+        }
         if toggle_trails {
             let mut data = self.data.lock().unwrap();
             data.trails_enabled = !data.trails_enabled;
@@ -530,10 +598,11 @@ impl eframe::App for MainApp {
         {
             let mut data = self.data.lock().unwrap();
             if let Some(spawn_id) = self.search.show(&ctx, &mut data)
-                && let Some(s) = data.spawns.get(spawn_id) {
-                    let (mx, my) = crate::map_canvas::eq_to_map_pub(s.x, s.y);
-                    self.map_pane.state.pending_center = Some((mx, my));
-                }
+                && let Some(s) = data.spawns.get(spawn_id)
+            {
+                let (mx, my) = crate::map_canvas::eq_to_map_pub(s.x, s.y);
+                self.map_pane.state.pending_center = Some((mx, my));
+            }
         }
 
         // "Add Note" floating dialog
@@ -624,7 +693,10 @@ impl eframe::App for MainApp {
                             .parse::<i64>()
                             .ok()
                             .filter(|&m| m > 0);
-                        if ui.add_enabled(minutes.is_some(), egui::Button::new("Add")).clicked() {
+                        if ui
+                            .add_enabled(minutes.is_some(), egui::Button::new("Add"))
+                            .clicked()
+                        {
                             let timer = SpawnTimer::new(
                                 self.add_timer.name.clone(),
                                 self.add_timer.x,
@@ -646,7 +718,9 @@ impl eframe::App for MainApp {
         }
 
         // "Add to Filter — scope" dialog
-        if self.add_filter_scope.open && let Some(category) = self.add_filter_scope.category {
+        if self.add_filter_scope.open
+            && let Some(category) = self.add_filter_scope.category
+        {
             let zone_name = self.data.lock().unwrap().zone_name.clone();
             let mut chosen: Option<bool> = None; // true = global, false = zone
             let mut cancel = false;
@@ -741,7 +815,10 @@ impl eframe::App for MainApp {
                     ui.close();
                 }
                 let mut ground_visible = !self.hidden_panels.contains(&Tab::Ground);
-                if ui.checkbox(&mut ground_visible, "Ground Items  F7").clicked() {
+                if ui
+                    .checkbox(&mut ground_visible, "Ground Items  F7")
+                    .clicked()
+                {
                     self.toggle_panel(Tab::Ground);
                     ui.close();
                 }
@@ -752,12 +829,14 @@ impl eframe::App for MainApp {
                     ui.close();
                 }
                 if ui.button("Zoom In  +").clicked() {
-                    self.map_pane.state.zoom = (self.map_pane.state.zoom * crate::map_canvas::ZOOM_STEP)
+                    self.map_pane.state.zoom = (self.map_pane.state.zoom
+                        * crate::map_canvas::ZOOM_STEP)
                         .clamp(crate::map_canvas::ZOOM_MIN, crate::map_canvas::ZOOM_MAX);
                     ui.close();
                 }
                 if ui.button("Zoom Out  −").clicked() {
-                    self.map_pane.state.zoom = (self.map_pane.state.zoom / crate::map_canvas::ZOOM_STEP)
+                    self.map_pane.state.zoom = (self.map_pane.state.zoom
+                        / crate::map_canvas::ZOOM_STEP)
                         .clamp(crate::map_canvas::ZOOM_MIN, crate::map_canvas::ZOOM_MAX);
                     ui.close();
                 }
@@ -771,39 +850,75 @@ impl eframe::App for MainApp {
                 }
                 ui.separator();
                 ui.menu_button("Show", |ui| {
-                    if ui.checkbox(&mut self.config.map_overlay.show_npcs, "NPCs").clicked() {
+                    if ui
+                        .checkbox(&mut self.config.map_overlay.show_npcs, "NPCs")
+                        .clicked()
+                    {
                         self.save_config();
                     }
-                    if ui.checkbox(&mut self.config.map_overlay.show_players, "Players").clicked() {
+                    if ui
+                        .checkbox(&mut self.config.map_overlay.show_players, "Players")
+                        .clicked()
+                    {
                         self.save_config();
                     }
-                    if ui.checkbox(&mut self.config.map_overlay.show_corpses, "Corpses").clicked() {
+                    if ui
+                        .checkbox(&mut self.config.map_overlay.show_corpses, "Corpses")
+                        .clicked()
+                    {
                         self.save_config();
                     }
-                    if ui.checkbox(&mut self.config.map_overlay.show_pets, "Pets / Mercs").clicked() {
+                    if ui
+                        .checkbox(&mut self.config.map_overlay.show_pets, "Pets / Mercs")
+                        .clicked()
+                    {
                         self.save_config();
                     }
                     ui.separator();
-                    if ui.checkbox(&mut self.config.map_overlay.show_npc_names, "NPC Names").clicked() {
+                    if ui
+                        .checkbox(&mut self.config.map_overlay.show_npc_names, "NPC Names")
+                        .clicked()
+                    {
                         self.save_config();
                     }
-                    if ui.checkbox(&mut self.config.map_overlay.show_npc_levels, "NPC Levels").clicked() {
+                    if ui
+                        .checkbox(&mut self.config.map_overlay.show_npc_levels, "NPC Levels")
+                        .clicked()
+                    {
                         self.save_config();
                     }
-                    if ui.checkbox(&mut self.config.map_overlay.show_player_names, "Player Names").clicked() {
+                    if ui
+                        .checkbox(
+                            &mut self.config.map_overlay.show_player_names,
+                            "Player Names",
+                        )
+                        .clicked()
+                    {
                         self.save_config();
                     }
                     ui.separator();
-                    if ui.checkbox(&mut self.config.map_overlay.show_zone_text, "Zone Text").clicked() {
+                    if ui
+                        .checkbox(&mut self.config.map_overlay.show_zone_text, "Zone Text")
+                        .clicked()
+                    {
                         self.save_config();
                     }
-                    if ui.checkbox(&mut self.config.map_overlay.show_layer1, "Layer 1").clicked() {
+                    if ui
+                        .checkbox(&mut self.config.map_overlay.show_layer1, "Layer 1")
+                        .clicked()
+                    {
                         self.save_config();
                     }
-                    if ui.checkbox(&mut self.config.map_overlay.show_layer2, "Layer 2").clicked() {
+                    if ui
+                        .checkbox(&mut self.config.map_overlay.show_layer2, "Layer 2")
+                        .clicked()
+                    {
                         self.save_config();
                     }
-                    if ui.checkbox(&mut self.config.map_overlay.show_layer3, "Layer 3").clicked() {
+                    if ui
+                        .checkbox(&mut self.config.map_overlay.show_layer3, "Layer 3")
+                        .clicked()
+                    {
                         self.save_config();
                     }
                 });
@@ -828,35 +943,59 @@ impl eframe::App for MainApp {
             if connected {
                 let img = egui::Image::new(egui::include_image!("../../assets/connected.png"))
                     .fit_to_exact_size(egui::vec2(24.0, 24.0));
-                if ui.add(egui::Button::image(img)).on_hover_text("Disconnect").clicked() {
+                if ui
+                    .add(egui::Button::image(img))
+                    .on_hover_text("Disconnect")
+                    .clicked()
+                {
                     *self.server_addr.lock().unwrap() = None;
                 }
             } else {
                 let img = egui::Image::new(egui::include_image!("../../assets/disconnected.png"))
                     .fit_to_exact_size(egui::vec2(24.0, 24.0));
-                let tooltip = format!("Connect to {}:{}", self.config.server_ip, self.config.server_port);
-                if ui.add(egui::Button::image(img)).on_hover_text(tooltip).clicked()
-                    && let Ok(addr) = format!("{}:{}", self.config.server_ip, self.config.server_port).parse() {
+                let tooltip = format!(
+                    "Connect to {}:{}",
+                    self.config.server_ip, self.config.server_port
+                );
+                if ui
+                    .add(egui::Button::image(img))
+                    .on_hover_text(tooltip)
+                    .clicked()
+                    && let Ok(addr) =
+                        format!("{}:{}", self.config.server_ip, self.config.server_port).parse()
+                {
                     *self.server_addr.lock().unwrap() = Some(addr);
                 }
             }
             ui.separator();
             let find_img = egui::Image::new(egui::include_image!("../../assets/find.png"))
                 .fit_to_exact_size(egui::vec2(24.0, 24.0));
-            if ui.add(egui::Button::image(find_img)).on_hover_text("Find Spawn").clicked() {
+            if ui
+                .add(egui::Button::image(find_img))
+                .on_hover_text("Find Spawn")
+                .clicked()
+            {
                 self.search.open();
             }
             let trails_on = self.data.lock().unwrap().trails_enabled;
             let trail_img = egui::Image::new(egui::include_image!("../../assets/trail.png"))
                 .fit_to_exact_size(egui::vec2(24.0, 24.0));
-            if ui.add(egui::Button::image(trail_img).selected(trails_on)).on_hover_text("Mob Trails").clicked() {
+            if ui
+                .add(egui::Button::image(trail_img).selected(trails_on))
+                .on_hover_text("Mob Trails")
+                .clicked()
+            {
                 let mut data = self.data.lock().unwrap();
                 data.trails_enabled = !data.trails_enabled;
                 self.options.trails_enabled = data.trails_enabled;
             }
             let tool_img = egui::Image::new(egui::include_image!("../../assets/tool.png"))
                 .fit_to_exact_size(egui::vec2(24.0, 24.0));
-            if ui.add(egui::Button::image(tool_img)).on_hover_text("Options").clicked() {
+            if ui
+                .add(egui::Button::image(tool_img))
+                .on_hover_text("Options")
+                .clicked()
+            {
                 let trails = self.data.lock().unwrap().trails_enabled;
                 self.options.sync_from(&self.config, trails);
                 self.options.open = true;
@@ -917,7 +1056,13 @@ impl eframe::App for MainApp {
         if let Some(action) = self.pending_map_action.take() {
             match action {
                 MapAction::AddNoteAt { eq_x, eq_y } => {
-                    let eq_z = self.data.lock().unwrap().player_pos().map(|(_, _, z)| z).unwrap_or(0.0);
+                    let eq_z = self
+                        .data
+                        .lock()
+                        .unwrap()
+                        .player_pos()
+                        .map(|(_, _, z)| z)
+                        .unwrap_or(0.0);
                     self.add_note.open = true;
                     self.add_note.text.clear();
                     self.add_note.override_pos = Some((eq_x, eq_y, eq_z));
@@ -970,8 +1115,7 @@ fn start_network_thread(
                                     }
                                     for rec in records {
                                         let pkt = decode_packet(rec);
-                                        if let crate::protocol::Packet::Zone { name: ref z } = pkt
-                                        {
+                                        if let crate::protocol::Packet::Zone { name: ref z } = pkt {
                                             logger.info(&format!("Zone: {z}"));
                                         }
                                         if let Some(msg) = apply_packet(&mut d, pkt) {

@@ -3,8 +3,8 @@
 mod alerts;
 mod config;
 mod data;
-mod game_data;
 mod filters;
+mod game_data;
 mod logger;
 mod map_canvas;
 mod map_reader;
@@ -33,7 +33,11 @@ fn load_icon() -> egui::IconData {
         .expect("valid PNG icon")
         .into_rgba8();
     let (width, height) = img.dimensions();
-    egui::IconData { rgba: img.into_raw(), width, height }
+    egui::IconData {
+        rgba: img.into_raw(),
+        width,
+        height,
+    }
 }
 
 fn main() -> eframe::Result {
@@ -89,7 +93,11 @@ fn relaunch_if_known_name(_known_stem: &str) {
         return;
     }
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if std::process::Command::new(&new_path).args(&args).spawn().is_err() {
+    if std::process::Command::new(&new_path)
+        .args(&args)
+        .spawn()
+        .is_err()
+    {
         let _ = std::fs::remove_file(&new_path);
         return;
     }
@@ -239,8 +247,12 @@ mod tests {
         let cwd = base.join("cwd");
         std::fs::create_dir_all(&cwd).unwrap();
 
-        let resolved =
-            resolve_ini_path_with("client.ini", Some(program_data.into()), Some(cwd.clone()), None);
+        let resolved = resolve_ini_path_with(
+            "client.ini",
+            Some(program_data.into()),
+            Some(cwd.clone()),
+            None,
+        );
         assert_eq!(resolved, cwd.join("client.ini"));
     }
 }

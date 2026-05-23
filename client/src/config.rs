@@ -172,17 +172,77 @@ impl ClientConfig {
         writeln!(f, "Level={}", self.log_level)?;
         writeln!(f)?;
         writeln!(f, "[MapOverlay]")?;
-        writeln!(f, "ShowNPCs={}", if self.map_overlay.show_npcs { 1 } else { 0 })?;
-        writeln!(f, "ShowPlayers={}", if self.map_overlay.show_players { 1 } else { 0 })?;
-        writeln!(f, "ShowCorpses={}", if self.map_overlay.show_corpses { 1 } else { 0 })?;
-        writeln!(f, "ShowPets={}", if self.map_overlay.show_pets { 1 } else { 0 })?;
-        writeln!(f, "ShowNPCNames={}", if self.map_overlay.show_npc_names { 1 } else { 0 })?;
-        writeln!(f, "ShowNPCLevels={}", if self.map_overlay.show_npc_levels { 1 } else { 0 })?;
-        writeln!(f, "ShowPlayerNames={}", if self.map_overlay.show_player_names { 1 } else { 0 })?;
-        writeln!(f, "ShowZoneText={}", if self.map_overlay.show_zone_text { 1 } else { 0 })?;
-        writeln!(f, "ShowLayer1={}", if self.map_overlay.show_layer1 { 1 } else { 0 })?;
-        writeln!(f, "ShowLayer2={}", if self.map_overlay.show_layer2 { 1 } else { 0 })?;
-        writeln!(f, "ShowLayer3={}", if self.map_overlay.show_layer3 { 1 } else { 0 })?;
+        writeln!(
+            f,
+            "ShowNPCs={}",
+            if self.map_overlay.show_npcs { 1 } else { 0 }
+        )?;
+        writeln!(
+            f,
+            "ShowPlayers={}",
+            if self.map_overlay.show_players { 1 } else { 0 }
+        )?;
+        writeln!(
+            f,
+            "ShowCorpses={}",
+            if self.map_overlay.show_corpses { 1 } else { 0 }
+        )?;
+        writeln!(
+            f,
+            "ShowPets={}",
+            if self.map_overlay.show_pets { 1 } else { 0 }
+        )?;
+        writeln!(
+            f,
+            "ShowNPCNames={}",
+            if self.map_overlay.show_npc_names {
+                1
+            } else {
+                0
+            }
+        )?;
+        writeln!(
+            f,
+            "ShowNPCLevels={}",
+            if self.map_overlay.show_npc_levels {
+                1
+            } else {
+                0
+            }
+        )?;
+        writeln!(
+            f,
+            "ShowPlayerNames={}",
+            if self.map_overlay.show_player_names {
+                1
+            } else {
+                0
+            }
+        )?;
+        writeln!(
+            f,
+            "ShowZoneText={}",
+            if self.map_overlay.show_zone_text {
+                1
+            } else {
+                0
+            }
+        )?;
+        writeln!(
+            f,
+            "ShowLayer1={}",
+            if self.map_overlay.show_layer1 { 1 } else { 0 }
+        )?;
+        writeln!(
+            f,
+            "ShowLayer2={}",
+            if self.map_overlay.show_layer2 { 1 } else { 0 }
+        )?;
+        writeln!(
+            f,
+            "ShowLayer3={}",
+            if self.map_overlay.show_layer3 { 1 } else { 0 }
+        )?;
         Ok(())
     }
 
@@ -199,13 +259,15 @@ impl ClientConfig {
                 cfg.server_ip = v.clone();
             }
             if let Some(v) = winshoweq.get("port")
-                && let Ok(n) = v.parse() {
-                    cfg.server_port = n;
-                }
+                && let Ok(n) = v.parse()
+            {
+                cfg.server_port = n;
+            }
             if let Some(v) = winshoweq.get("rate")
-                && let Ok(n) = v.parse() {
-                    cfg.update_delay_ms = n;
-                }
+                && let Ok(n) = v.parse()
+            {
+                cfg.update_delay_ms = n;
+            }
             if let Some(v) = winshoweq.get("autoconnect") {
                 cfg.auto_connect = v == "1";
             }
@@ -233,42 +295,93 @@ impl ClientConfig {
         }
 
         if let Some(alerts) = sections.get("alerts") {
-            if let Some(v) = alerts.get("dangermode") { cfg.alert_danger_mode = v.clone(); }
-            if let Some(v) = alerts.get("dangersound") { cfg.alert_danger_sound = v.clone(); }
-            if let Some(v) = alerts.get("cautionmode") { cfg.alert_caution_mode = v.clone(); }
-            if let Some(v) = alerts.get("cautionsound") { cfg.alert_caution_sound = v.clone(); }
-            if let Some(v) = alerts.get("huntmode") { cfg.alert_hunt_mode = v.clone(); }
-            if let Some(v) = alerts.get("huntsound") { cfg.alert_hunt_sound = v.clone(); }
-            if let Some(v) = alerts.get("alertmode") { cfg.alert_rare_mode = v.clone(); }
-            if let Some(v) = alerts.get("alertsound") { cfg.alert_rare_sound = v.clone(); }
+            if let Some(v) = alerts.get("dangermode") {
+                cfg.alert_danger_mode = v.clone();
+            }
+            if let Some(v) = alerts.get("dangersound") {
+                cfg.alert_danger_sound = v.clone();
+            }
+            if let Some(v) = alerts.get("cautionmode") {
+                cfg.alert_caution_mode = v.clone();
+            }
+            if let Some(v) = alerts.get("cautionsound") {
+                cfg.alert_caution_sound = v.clone();
+            }
+            if let Some(v) = alerts.get("huntmode") {
+                cfg.alert_hunt_mode = v.clone();
+            }
+            if let Some(v) = alerts.get("huntsound") {
+                cfg.alert_hunt_sound = v.clone();
+            }
+            if let Some(v) = alerts.get("alertmode") {
+                cfg.alert_rare_mode = v.clone();
+            }
+            if let Some(v) = alerts.get("alertsound") {
+                cfg.alert_rare_sound = v.clone();
+            }
         }
 
         if let Some(discord) = sections.get("discord") {
-            if let Some(v) = discord.get("webhook") { cfg.discord_webhook = v.clone(); }
-            if let Some(v) = discord.get("ondanger") { cfg.discord_on_danger = v == "1"; }
-            if let Some(v) = discord.get("onhunt") { cfg.discord_on_hunt = v == "1"; }
+            if let Some(v) = discord.get("webhook") {
+                cfg.discord_webhook = v.clone();
+            }
+            if let Some(v) = discord.get("ondanger") {
+                cfg.discord_on_danger = v == "1";
+            }
+            if let Some(v) = discord.get("onhunt") {
+                cfg.discord_on_hunt = v == "1";
+            }
         }
 
         if let Some(eq) = sections.get("eq")
-            && let Some(v) = eq.get("path") { cfg.eq_path = v.clone(); }
+            && let Some(v) = eq.get("path")
+        {
+            cfg.eq_path = v.clone();
+        }
 
         if let Some(logging) = sections.get("logging") {
-            if let Some(v) = logging.get("enabled") { cfg.log_enabled = v != "0"; }
-            if let Some(v) = logging.get("level") { cfg.log_level = v.clone(); }
+            if let Some(v) = logging.get("enabled") {
+                cfg.log_enabled = v != "0";
+            }
+            if let Some(v) = logging.get("level") {
+                cfg.log_level = v.clone();
+            }
         }
 
         if let Some(overlay) = sections.get("mapoverlay") {
-            if let Some(v) = overlay.get("shownpcs") { cfg.map_overlay.show_npcs = v != "0"; }
-            if let Some(v) = overlay.get("showplayers") { cfg.map_overlay.show_players = v != "0"; }
-            if let Some(v) = overlay.get("showcorpses") { cfg.map_overlay.show_corpses = v != "0"; }
-            if let Some(v) = overlay.get("showpets") { cfg.map_overlay.show_pets = v != "0"; }
-            if let Some(v) = overlay.get("shownpcnames") { cfg.map_overlay.show_npc_names = v == "1"; }
-            if let Some(v) = overlay.get("shownpclevels") { cfg.map_overlay.show_npc_levels = v == "1"; }
-            if let Some(v) = overlay.get("showplayernames") { cfg.map_overlay.show_player_names = v != "0"; }
-            if let Some(v) = overlay.get("showzonetext") { cfg.map_overlay.show_zone_text = v != "0"; }
-            if let Some(v) = overlay.get("showlayer1") { cfg.map_overlay.show_layer1 = v != "0"; }
-            if let Some(v) = overlay.get("showlayer2") { cfg.map_overlay.show_layer2 = v != "0"; }
-            if let Some(v) = overlay.get("showlayer3") { cfg.map_overlay.show_layer3 = v != "0"; }
+            if let Some(v) = overlay.get("shownpcs") {
+                cfg.map_overlay.show_npcs = v != "0";
+            }
+            if let Some(v) = overlay.get("showplayers") {
+                cfg.map_overlay.show_players = v != "0";
+            }
+            if let Some(v) = overlay.get("showcorpses") {
+                cfg.map_overlay.show_corpses = v != "0";
+            }
+            if let Some(v) = overlay.get("showpets") {
+                cfg.map_overlay.show_pets = v != "0";
+            }
+            if let Some(v) = overlay.get("shownpcnames") {
+                cfg.map_overlay.show_npc_names = v == "1";
+            }
+            if let Some(v) = overlay.get("shownpclevels") {
+                cfg.map_overlay.show_npc_levels = v == "1";
+            }
+            if let Some(v) = overlay.get("showplayernames") {
+                cfg.map_overlay.show_player_names = v != "0";
+            }
+            if let Some(v) = overlay.get("showzonetext") {
+                cfg.map_overlay.show_zone_text = v != "0";
+            }
+            if let Some(v) = overlay.get("showlayer1") {
+                cfg.map_overlay.show_layer1 = v != "0";
+            }
+            if let Some(v) = overlay.get("showlayer2") {
+                cfg.map_overlay.show_layer2 = v != "0";
+            }
+            if let Some(v) = overlay.get("showlayer3") {
+                cfg.map_overlay.show_layer3 = v != "0";
+            }
         }
 
         cfg
@@ -357,9 +470,9 @@ mod tests {
 
         let loaded = ClientConfig::load(&path);
         assert!(!loaded.map_overlay.show_npcs);
-        assert!(loaded.map_overlay.show_players);   // default preserved
-        assert!(loaded.map_overlay.show_corpses);   // default preserved
-        assert!(loaded.map_overlay.show_pets);      // default preserved
+        assert!(loaded.map_overlay.show_players); // default preserved
+        assert!(loaded.map_overlay.show_corpses); // default preserved
+        assert!(loaded.map_overlay.show_pets); // default preserved
         assert!(loaded.map_overlay.show_npc_names);
         assert!(loaded.map_overlay.show_npc_levels);
         assert!(!loaded.map_overlay.show_player_names);

@@ -22,7 +22,10 @@ impl ServerConnection {
     pub fn connect_with_timeout(addr: SocketAddr, read_timeout_ms: u64) -> io::Result<Self> {
         let stream = TcpStream::connect(addr)?;
         stream.set_read_timeout(Some(Duration::from_millis(read_timeout_ms)))?;
-        Ok(Self { stream, buf: Vec::new() })
+        Ok(Self {
+            stream,
+            buf: Vec::new(),
+        })
     }
 
     /// Send a 4-byte LE request bitmask and receive all SpawnRecords in the response.
@@ -62,12 +65,14 @@ fn read_all(stream: &mut TcpStream, buf: &mut [u8]) -> io::Result<()> {
     while filled < buf.len() {
         match stream.read(&mut buf[filled..]) {
             Ok(0) => {
-                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "connection closed"))
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "connection closed",
+                ));
             }
             Ok(n) => filled += n,
             Err(e)
-                if e.kind() == io::ErrorKind::WouldBlock
-                    || e.kind() == io::ErrorKind::TimedOut =>
+                if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut =>
             {
                 continue;
             }

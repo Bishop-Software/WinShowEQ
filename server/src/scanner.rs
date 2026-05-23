@@ -480,28 +480,23 @@ impl EqGameScanner {
             base_addr,
         );
 
-        let status = if match_val != 0 {
+        let suffix = if match_val != 0 {
             if write_out {
                 let value_str = format!("0x{:x}", match_val);
-                if ir.write_string_entry("SpawnInfo Offsets", entry.output_label, &value_str, false) {
-                    "Written to ini file"
+                if ir.write_string_entry("SpawnInfo Offsets", entry.output_label, &value_str, false)
+                {
+                    " # Written to ini file\r\n"
                 } else {
-                    "Found - Write failed"
+                    " # Found - Write failed\r\n"
                 }
             } else {
-                "Found"
+                " # Found\r\n"
             }
         } else {
-            "Not Found"
+            " # Not Found\r\n"
         };
 
-        format!(
-            "{}:\r\n| Match Found @ {}\r\n| Offset -> 0x{:x}\r\n| {}\r\n\r\n",
-            entry.output_label,
-            if match_val != 0 { "TRUE" } else { "FALSE" },
-            match_val,
-            status,
-        )
+        format!("{}=0x{:x}{}", entry.output_label, match_val, suffix)
     }
 
     /// Run the primary (pointer address) scan against the exe.
@@ -528,15 +523,17 @@ impl EqGameScanner {
         if let Some(pe) = self.parse_pe_headers() {
             let patch_date = unix_to_date(pe.time_date_stamp as u64);
             let client_hash = self.compute_client_hash().unwrap_or_default();
-            let build_string = self.scan_build_string(&pe).map(|raw| {
-                // Binary stores the short form "Release Client #NNN)\n" (newline before null).
-                // Trim trailing whitespace then ')' before appending time/date from the PE
-                // TimeDateStamp (UTC — may differ from local build-machine time by timezone).
-                let base = raw.trim_end().trim_end_matches(')');
-                let (time_str, date_str) =
-                    unix_to_compile_time_date(pe.time_date_stamp as u64);
-                format!("{} {} {}", base, time_str, date_str)
-            }).unwrap_or_default();
+            let build_string = self
+                .scan_build_string(&pe)
+                .map(|raw| {
+                    // Binary stores the short form "Release Client #NNN)\n" (newline before null).
+                    // Trim trailing whitespace then ')' before appending time/date from the PE
+                    // TimeDateStamp (UTC — may differ from local build-machine time by timezone).
+                    let base = raw.trim_end().trim_end_matches(')');
+                    let (time_str, date_str) = unix_to_compile_time_date(pe.time_date_stamp as u64);
+                    format!("{} {} {}", base, time_str, date_str)
+                })
+                .unwrap_or_default();
 
             if write_out {
                 ir.write_string_entry("File Info", "PatchDate", &patch_date, false);
@@ -620,7 +617,10 @@ impl EqGameScanner {
                     .unwrap_or(data.len());
                 let s = String::from_utf8_lossy(&data[pos..end]).into_owned();
                 if !s.contains('%')
-                    && best.as_ref().map(|b: &String| s.len() > b.len()).unwrap_or(true)
+                    && best
+                        .as_ref()
+                        .map(|b: &String| s.len() > b.len())
+                        .unwrap_or(true)
                 {
                     best = Some(s);
                 }
@@ -634,7 +634,12 @@ impl EqGameScanner {
     /// When `write_out` is true, found values are written to `[SpawnInfo Offsets]`
     /// in `myseqserver.ini`.
     /// Mirrors EQGameScanner::ScanSecondary in EQGameScanner.cpp.
-    pub fn scan_secondary(&self, ir: &IniReader, fallback_char_info: u64, write_out: bool) -> String {
+    pub fn scan_secondary(
+        &self,
+        ir: &IniReader,
+        fallback_char_info: u64,
+        write_out: bool,
+    ) -> String {
         if !self.executable_exists() {
             return "Error: Could not locate the specified executable file.".to_string();
         }
@@ -644,10 +649,14 @@ impl EqGameScanner {
             let pattern = ir.read_pattern_bytes("CharInfo", "Pattern");
             let mask = ir.read_pattern_string("CharInfo", "Mask");
             let found = self.find_eq_pointer_offset(start, SCAN_WINDOW, &pattern, mask.as_bytes());
-            if found != 0 { found } else { fallback_char_info }
+            if found != 0 {
+                found
+            } else {
+                fallback_char_info
+            }
         };
 
-        let mut out = String::from("SpawnInfo Offsets\r\n");
+        let mut out = String::from("[SpawnInfo Offsets]\r\n");
         for entry in SECONDARY_SCANS {
             out.push_str(&self.run_secondary_scan(ir, entry, char_info_base, write_out));
         }
@@ -701,15 +710,18 @@ fn pacific_utc_offset_hours(utc_secs: u64) -> i64 {
     let nov_sun1 = nth_weekday_of_month(year, 11, 0, 1);
     let dst_start = civil_to_days(year, 3, mar_sun2) as u64 * 86400 + 10 * 3600;
     let dst_end = civil_to_days(year, 11, nov_sun1) as u64 * 86400 + 9 * 3600;
-    if utc_secs >= dst_start && utc_secs < dst_end { -7 } else { -8 }
+    if utc_secs >= dst_start && utc_secs < dst_end {
+        -7
+    } else {
+        -8
+    }
 }
 
 /// Convert a UTC Unix timestamp to ("HH:MM:SS", "Mon DD YYYY") in Pacific time,
 /// matching the format of C's __TIME__ / __DATE__ macros used in EQ build strings.
 fn unix_to_compile_time_date(utc_secs: u64) -> (String, String) {
     const MONTHS: [&str; 12] = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
     let local_secs = (utc_secs as i64 + pacific_utc_offset_hours(utc_secs) * 3600) as u64;
     let tod = local_secs % 86400;

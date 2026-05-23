@@ -123,12 +123,18 @@ impl SessionRunner {
         self.notifier
             .on_info("SessionRunner", &format!("Port: {}", config.port));
 
-        self.notifier.on_status_update(&build_initial_snapshot(&ir, &config));
+        self.notifier
+            .on_status_update(&build_initial_snapshot(&ir, &config));
 
         let spawn_off = SpawnOffsets::from_ini(&ir);
         let item_off = ItemOffsets::from_ini(&ir);
         let world_off = WorldOffsets::from_ini(&ir);
-        let live = LiveOffsets { primary: config.offsets.clone(), spawn_off: spawn_off.clone(), item_off, world_off };
+        let live = LiveOffsets {
+            primary: config.offsets.clone(),
+            spawn_off: spawn_off.clone(),
+            item_off,
+            world_off,
+        };
 
         if spawn_off.buf_size <= 30 {
             self.notifier
@@ -196,7 +202,11 @@ fn build_initial_snapshot(ir: &IniReader, config: &ServerConfigModel) -> StatusS
 }
 
 fn fmt_addr(addr: u64) -> String {
-    if addr != 0 { format!("0x{addr:X}") } else { String::new() }
+    if addr != 0 {
+        format!("0x{addr:X}")
+    } else {
+        String::new()
+    }
 }
 
 fn primary_ip() -> String {
@@ -207,9 +217,14 @@ fn primary_ip() -> String {
         .map(|it| it.map(|a| a.ip()).filter(|ip| !ip.is_loopback()).collect())
         .unwrap_or_default();
     // Prefer a routable IPv4 address; fall back to any non-loopback.
-    addrs.iter()
+    addrs
+        .iter()
         .find(|ip| ip.is_ipv4())
-        .or_else(|| addrs.iter().find(|ip| !matches!(ip, IpAddr::V6(v6) if (v6.segments()[0] & 0xffc0) == 0xfe80)))
+        .or_else(|| {
+            addrs
+                .iter()
+                .find(|ip| !matches!(ip, IpAddr::V6(v6) if (v6.segments()[0] & 0xffc0) == 0xfe80))
+        })
         .map(|ip| ip.to_string())
         .unwrap_or_default()
 }

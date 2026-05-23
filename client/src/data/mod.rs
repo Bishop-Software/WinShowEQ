@@ -160,7 +160,9 @@ impl AppData {
     /// Returns log messages for the caller to write (kill detections, respawns, promotions).
     pub fn on_tick_end(&mut self) -> Vec<String> {
         let curr_ids = self.curr_tick_npc_ids.clone();
-        let (promoted, log) = self.observer.process_diff(&curr_ids, &self.spawns, &self.zone_name, &mut self.timers);
+        let (promoted, log) =
+            self.observer
+                .process_diff(&curr_ids, &self.spawns, &self.zone_name, &mut self.timers);
         if promoted {
             self.timers_dirty = true;
         }
@@ -169,7 +171,8 @@ impl AppData {
         // Skip pruning if the tick was empty — the server may have sent nothing due to
         // a partial response or the player not being in a zone yet.
         if !self.curr_tick_all_ids.is_empty() {
-            let stale: Vec<u32> = self.spawns
+            let stale: Vec<u32> = self
+                .spawns
                 .iter()
                 .map(|s| s.id)
                 .filter(|id| !self.curr_tick_all_ids.contains(id))
@@ -193,8 +196,8 @@ impl AppData {
 
     /// Load `{zone}.xml` from `filter_dir`, recompute the merged filter set.
     pub fn reload_zone_filter(&mut self, zone: &str) {
-        let path = std::path::Path::new(&self.filter_dir)
-            .join(format!("{}.xml", zone.to_lowercase()));
+        let path =
+            std::path::Path::new(&self.filter_dir).join(format!("{}.xml", zone.to_lowercase()));
         self.filters_zone = FilterSet::load(&path);
         self.recompute_filters();
     }

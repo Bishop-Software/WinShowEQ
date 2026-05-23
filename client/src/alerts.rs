@@ -93,9 +93,10 @@ impl AlertEngine {
             return None;
         }
         if let Some(until) = self.suppress_until
-            && Instant::now() < until {
-                return None;
-            }
+            && Instant::now() < until
+        {
+            return None;
+        }
 
         let (mode, category) = if spawn.is_danger {
             (&self.danger_mode, "Danger")
@@ -127,8 +128,8 @@ impl AlertEngine {
 
         self.alerted.insert(spawn.id);
 
-        let send_discord = (spawn.is_danger && self.discord_on_danger)
-            || (spawn.is_hunt && self.discord_on_hunt);
+        let send_discord =
+            (spawn.is_danger && self.discord_on_danger) || (spawn.is_hunt && self.discord_on_hunt);
         if send_discord && !self.discord_webhook.is_empty() {
             let url = self.discord_webhook.clone();
             let msg = format!(
@@ -165,9 +166,9 @@ fn spawn_audio_thread(rx: mpsc::Receiver<AudioCmd>) {
 }
 
 fn play_beep() {
+    use rodio::Player;
     use rodio::source::{SineWave, Source};
     use rodio::stream::DeviceSinkBuilder;
-    use rodio::Player;
 
     let Ok(device_sink) = DeviceSinkBuilder::open_default_sink() else {
         return;

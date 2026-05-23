@@ -34,14 +34,14 @@ pub enum WizardPhase {
     Idle,
     ScanningExe,
     Attaching,
-    Static,      // name, lastname, next, prev from first struct read
-    StandStill,  // establish stable float baseline
-    Walking,     // detect position/speed/heading candidates
-    Stopped,     // identify speed offset (drops to 0)
-    Turning,     // identify heading offset (changes without position change)
-    WaitInvis,   // user casts invis → detect HideOffset byte flip
-    WaitPet,     // user summons pet → detect OwnerIDOffset
-    WaitItem,    // user drops item → detect GroundItem offsets
+    Static,     // name, lastname, next, prev from first struct read
+    StandStill, // establish stable float baseline
+    Walking,    // detect position/speed/heading candidates
+    Stopped,    // identify speed offset (drops to 0)
+    Turning,    // identify heading offset (changes without position change)
+    WaitInvis,  // user casts invis → detect HideOffset byte flip
+    WaitPet,    // user summons pet → detect OwnerIDOffset
+    WaitItem,   // user drops item → detect GroundItem offsets
     Complete,
     Failed,
 }
@@ -49,19 +49,19 @@ pub enum WizardPhase {
 impl WizardPhase {
     pub fn instruction(&self) -> &'static str {
         match self {
-            Self::Idle       => "Click 'Start Wizard' to begin.",
+            Self::Idle => "Click 'Start Wizard' to begin.",
             Self::ScanningExe => "Scanning eqgame.exe — please wait...",
-            Self::Attaching  => "Attaching to eqgame.exe — please wait...",
-            Self::Static     => "Reading spawn struct...",
+            Self::Attaching => "Attaching to eqgame.exe — please wait...",
+            Self::Static => "Reading spawn struct...",
             Self::StandStill => "Stand completely still for a moment...",
-            Self::Walking    => "Walk around continuously for a few seconds...",
-            Self::Stopped    => "Stop moving completely...",
-            Self::Turning    => "Turn in place (do not move forward or backward)...",
-            Self::WaitInvis  => "Cast invisibility, then click 'I cast invis'.",
-            Self::WaitPet    => "Summon a pet or hire a mercenary, then click 'I have a pet'.",
-            Self::WaitItem   => "Drop any item on the ground, then click 'Item dropped'.",
-            Self::Complete   => "Discovery complete. Review results and click 'Write to INI'.",
-            Self::Failed     => "Wizard failed — see log for details.",
+            Self::Walking => "Walk around continuously for a few seconds...",
+            Self::Stopped => "Stop moving completely...",
+            Self::Turning => "Turn in place (do not move forward or backward)...",
+            Self::WaitInvis => "Cast invisibility, then click 'I cast invis'.",
+            Self::WaitPet => "Summon a pet or hire a mercenary, then click 'I have a pet'.",
+            Self::WaitItem => "Drop any item on the ground, then click 'Item dropped'.",
+            Self::Complete => "Discovery complete. Review results and click 'Write to INI'.",
+            Self::Failed => "Wizard failed — see log for details.",
         }
     }
 }
@@ -139,7 +139,13 @@ pub fn start_wizard(
     shared: Arc<Mutex<WizardShared>>,
 ) {
     std::thread::spawn(move || {
-        run_wizard(ini_path, config_ini_path, patterns_ini_path, exe_path, shared);
+        run_wizard(
+            ini_path,
+            config_ini_path,
+            patterns_ini_path,
+            exe_path,
+            shared,
+        );
     });
 }
 
@@ -178,11 +184,11 @@ pub fn write_wizard_results(
     //   NameOffset/LastNameOffset — ASCII text scan picks wrong string too often
     //   SpeedOffset               — "drops near 0 when stopped" matches multiple floats
     //   NextOffset/PrevOffset     — pointer scan picks wrong heap pointer too often
-    write_spawn("XOffset",       results.x);
-    write_spawn("YOffset",       results.y);
-    write_spawn("ZOffset",       results.z);
+    write_spawn("XOffset", results.x);
+    write_spawn("YOffset", results.y);
+    write_spawn("ZOffset", results.z);
     write_spawn("HeadingOffset", results.heading);
-    write_spawn("HideOffset",    results.hidden);
+    write_spawn("HideOffset", results.hidden);
     write_spawn("OwnerIDOffset", results.owner);
 
     let mut write_item = |key: &str, val: Option<usize>| {
@@ -196,23 +202,27 @@ pub fn write_wizard_results(
         }
     };
 
-    write_item("PrevOffset",   results.item_prev);
-    write_item("NextOffset",   results.item_next);
-    write_item("IdOffset",     results.item_id);
+    write_item("PrevOffset", results.item_prev);
+    write_item("NextOffset", results.item_next);
+    write_item("IdOffset", results.item_id);
     write_item("DropIdOffset", results.item_drop_id);
-    write_item("XOffset",      results.item_x);
-    write_item("YOffset",      results.item_y);
-    write_item("ZOffset",      results.item_z);
-    write_item("NameOffset",   results.item_name);
+    write_item("XOffset", results.item_x);
+    write_item("YOffset", results.item_y);
+    write_item("ZOffset", results.item_z);
+    write_item("NameOffset", results.item_name);
 
     let mut out = String::new();
     if !written.is_empty() {
         out.push_str(&format!("Written ({}):\r\n", written.len()));
-        for w in &written { out.push_str(&format!("  {}\r\n", w)); }
+        for w in &written {
+            out.push_str(&format!("  {}\r\n", w));
+        }
     }
     if !skipped.is_empty() {
         out.push_str(&format!("Write failed ({}):\r\n", skipped.len()));
-        for s in &skipped { out.push_str(&format!("  {}\r\n", s)); }
+        for s in &skipped {
+            out.push_str(&format!("  {}\r\n", s));
+        }
     }
     if written.is_empty() && skipped.is_empty() {
         out.push_str("Nothing to write (no fields discovered).\r\n");
@@ -239,13 +249,17 @@ fn run_wizard(
     }
     macro_rules! set_phase {
         ($p:expr) => {
-            if let Ok(mut s) = shared.lock() { s.phase = $p; }
+            if let Ok(mut s) = shared.lock() {
+                s.phase = $p;
+            }
         };
     }
     macro_rules! check_cancel {
         () => {
             if let Ok(s) = shared.lock() {
-                if s.command == WizardCommand::Cancel { return; }
+                if s.command == WizardCommand::Cancel {
+                    return;
+                }
             }
         };
     }
@@ -254,7 +268,9 @@ fn run_wizard(
             let mut cmd = WizardCommand::None;
             if let Ok(mut s) = shared.lock() {
                 cmd = s.command.clone();
-                if cmd != WizardCommand::None { s.command = WizardCommand::None; }
+                if cmd != WizardCommand::None {
+                    s.command = WizardCommand::None;
+                }
             }
             cmd
         }};
@@ -268,7 +284,10 @@ fn run_wizard(
     ir.open_config_file(&config_ini_path);
     ir.open_patterns_file(&patterns_ini_path);
     let _ = ir.open_file(&ini_path);
-    let current_offsets = ir.read_server_config_model().map(|m| m.offsets).unwrap_or_default();
+    let current_offsets = ir
+        .read_server_config_model()
+        .map(|m| m.offsets)
+        .unwrap_or_default();
 
     let scanner = EqGameScanner::new(&exe_path);
     if !scanner.executable_exists() {
@@ -282,34 +301,41 @@ fn run_wizard(
     let scan_result = scanner.scan_executable(&ir, &current_offsets, false);
     for line in scan_result.output.lines() {
         let t = line.trim();
-        if !t.is_empty() { log!("{}", t); }
+        if !t.is_empty() {
+            log!("{}", t);
+        }
     }
 
     let secondary = scanner.scan_secondary(&ir, current_offsets.self_addr, false);
     for line in secondary.lines() {
         let t = line.trim();
-        if !t.is_empty() { log!("{}", t); }
+        if !t.is_empty() {
+            log!("{}", t);
+        }
     }
 
     // Use the addresses already in the ini (current_offsets).  The scan above
     // is informational only; if new addresses were found they will be written
     // when the user clicks "Write to INI" at the end of the wizard.
-    let char_info_addr    = current_offsets.self_addr;
+    let char_info_addr = current_offsets.self_addr;
     let spawn_header_addr = current_offsets.spawn_list;
-    let ground_addr       = current_offsets.ground;
-    let spawn_id_offset   = ir.read_integer_entry("SpawnInfo Offsets", "SpawnIDOffset", false) as usize;
+    let ground_addr = current_offsets.ground;
+    let spawn_id_offset =
+        ir.read_integer_entry("SpawnInfo Offsets", "SpawnIDOffset", false) as usize;
 
     if char_info_addr == 0 || spawn_header_addr == 0 {
-        log!("Error: primary addresses not in ini — run the Scanner tab first to populate Memory Offsets.");
+        log!(
+            "Error: primary addresses not in ini — run the Scanner tab first to populate Memory Offsets."
+        );
         set_phase!(WizardPhase::Failed);
         return;
     }
 
     if let Ok(mut s) = shared.lock() {
-        s.char_info_addr    = char_info_addr;
+        s.char_info_addr = char_info_addr;
         s.spawn_header_addr = spawn_header_addr;
-        s.ground_addr       = ground_addr;
-        s.spawn_id_offset   = spawn_id_offset;
+        s.ground_addr = ground_addr;
+        s.spawn_id_offset = spawn_id_offset;
     }
 
     check_cancel!();
@@ -331,7 +357,11 @@ fn run_wizard(
         if let Some(pid) = MemReader::find_process("eqgame.exe")
             && mem.open(pid).is_ok()
         {
-            log!("Attached — PID {} Base 0x{:X}", mem.pid(), mem.base_address());
+            log!(
+                "Attached — PID {} Base 0x{:X}",
+                mem.pid(),
+                mem.base_address()
+            );
             break;
         }
         std::thread::sleep(Duration::from_millis(500));
@@ -339,7 +369,11 @@ fn run_wizard(
 
     let pself = match get_pself(&mem, char_info_addr) {
         Some(p) if p != 0 => p,
-        _ => { log!("Error: pSelf is null — is the player logged in?"); set_phase!(WizardPhase::Failed); return; }
+        _ => {
+            log!("Error: pSelf is null — is the player logged in?");
+            set_phase!(WizardPhase::Failed);
+            return;
+        }
     };
     log!("pSelf = 0x{:X}", pself);
 
@@ -348,7 +382,11 @@ fn run_wizard(
 
     let buf = match mem.read_bytes(pself, STRUCT_SIZE) {
         Ok(b) => b,
-        Err(e) => { log!("Error reading struct: {}", e); set_phase!(WizardPhase::Failed); return; }
+        Err(e) => {
+            log!("Error reading struct: {}", e);
+            set_phase!(WizardPhase::Failed);
+            return;
+        }
     };
 
     // Name / Lastname
@@ -356,17 +394,31 @@ fn run_wizard(
     match name_candidates.len() {
         0 => log!("Name/Lastname — not found (is player logged in and named?)"),
         1 => {
-            if let Ok(mut s) = shared.lock() { s.results.name = Some(name_candidates[0].0); }
-            log!("Name → 0x{:x} (\"{}\")", name_candidates[0].0, name_candidates[0].1);
+            if let Ok(mut s) = shared.lock() {
+                s.results.name = Some(name_candidates[0].0);
+            }
+            log!(
+                "Name → 0x{:x} (\"{}\")",
+                name_candidates[0].0,
+                name_candidates[0].1
+            );
             log!("Lastname — not found");
         }
         _ => {
             if let Ok(mut s) = shared.lock() {
-                s.results.name      = Some(name_candidates[0].0);
+                s.results.name = Some(name_candidates[0].0);
                 s.results.last_name = Some(name_candidates[1].0);
             }
-            log!("Name → 0x{:x} (\"{}\")", name_candidates[0].0, name_candidates[0].1);
-            log!("Lastname → 0x{:x} (\"{}\")", name_candidates[1].0, name_candidates[1].1);
+            log!(
+                "Name → 0x{:x} (\"{}\")",
+                name_candidates[0].0,
+                name_candidates[0].1
+            );
+            log!(
+                "Lastname → 0x{:x} (\"{}\")",
+                name_candidates[1].0,
+                name_candidates[1].1
+            );
         }
     }
 
@@ -375,7 +427,9 @@ fn run_wizard(
     match ptrs.len() {
         0 => log!("Next/Prev — not found"),
         1 => {
-            if let Ok(mut s) = shared.lock() { s.results.next = Some(ptrs[0]); }
+            if let Ok(mut s) = shared.lock() {
+                s.results.next = Some(ptrs[0]);
+            }
             log!("One pointer @ 0x{:x} — need two for Next/Prev", ptrs[0]);
         }
         _ => {
@@ -390,7 +444,9 @@ fn run_wizard(
     // Player SpawnID (needed later for OwnerIDOffset discovery)
     if spawn_id_offset > 0 && spawn_id_offset + 4 <= buf.len() {
         let sid = read_u32_at(&buf, spawn_id_offset);
-        if let Ok(mut s) = shared.lock() { s.player_spawn_id = sid; }
+        if let Ok(mut s) = shared.lock() {
+            s.player_spawn_id = sid;
+        }
         log!("Player SpawnID = {}", sid);
     }
 
@@ -398,134 +454,228 @@ fn run_wizard(
 
     // ── Phase 4: stand still → establish float baseline ──────────────────────
     set_phase!(WizardPhase::StandStill);
-    log!("Stand still for a moment...");
+    log!("Stand still completely, then click 'I'm standing still' to begin baseline collection.");
 
-    let mut baseline: Vec<u8> = buf.clone();
-    let still_start = Instant::now();
-    let mut prev_buf = buf;
-    let mut stable_ticks = 0u32;
-
-    while still_start.elapsed() < STILL_WINDOW {
+    let mut still_skipped = false;
+    loop {
         check_cancel!();
-        std::thread::sleep(Duration::from_millis(250));
-        let Some(ps) = get_pself(&mem, char_info_addr) else { break };
-        let Ok(curr) = mem.read_bytes(ps, STRUCT_SIZE) else { break };
-        let changed = find_changed_floats(&prev_buf, &curr, -20000.0, 20000.0, FLOAT_DELTA);
-        if changed.is_empty() {
-            stable_ticks += 1;
-            if stable_ticks >= 3 {
-                baseline = curr.clone();
+        std::thread::sleep(Duration::from_millis(200));
+        match take_command!() {
+            WizardCommand::ActionDone => break,
+            WizardCommand::SkipStep => {
+                still_skipped = true;
+                break;
             }
-        } else {
-            stable_ticks = 0;
+            _ => {}
         }
-        prev_buf = curr;
     }
 
-    log!("Baseline established ({} stable ticks)", stable_ticks);
+    let mut baseline = buf.clone();
+    let mut stable_ticks = 0u32;
+    if !still_skipped {
+        log!("Collecting baseline for {}ms...", STILL_WINDOW.as_millis());
+        let still_start = Instant::now();
+        let mut prev_buf = buf;
+        while still_start.elapsed() < STILL_WINDOW {
+            check_cancel!();
+            std::thread::sleep(Duration::from_millis(250));
+            let Some(ps) = get_pself(&mem, char_info_addr) else {
+                break;
+            };
+            let Ok(curr) = mem.read_bytes(ps, STRUCT_SIZE) else {
+                break;
+            };
+            let changed = find_changed_floats(&prev_buf, &curr, -20000.0, 20000.0, FLOAT_DELTA);
+            if changed.is_empty() {
+                stable_ticks += 1;
+                if stable_ticks >= 3 {
+                    baseline = curr.clone();
+                }
+            } else {
+                stable_ticks = 0;
+            }
+            prev_buf = curr;
+        }
+        log!("Baseline established ({} stable ticks).", stable_ticks);
+    } else {
+        drop(buf);
+        log!("StandStill — skipped.");
+    }
     check_cancel!();
 
     // ── Phase 5: walk → collect movement candidates ──────────────────────────
     set_phase!(WizardPhase::Walking);
-    log!("Walk around continuously...");
+    log!("Click 'Start walking', then walk around continuously for a few seconds.");
 
-    let walk_start = Instant::now();
-    let mut movement_union: Vec<usize> = Vec::new();
-
-    while walk_start.elapsed() < WALK_WINDOW {
+    let mut walk_skipped = false;
+    loop {
         check_cancel!();
-        std::thread::sleep(Duration::from_millis(250));
-        let Some(ps) = get_pself(&mem, char_info_addr) else { break };
-        let Ok(curr) = mem.read_bytes(ps, STRUCT_SIZE) else { break };
-
-        // Any float in position range that changed from the baseline
-        let changed = find_changed_floats(&baseline, &curr, -20000.0, 20000.0, FLOAT_DELTA);
-        for off in changed {
-            if !movement_union.contains(&off) {
-                movement_union.push(off);
+        std::thread::sleep(Duration::from_millis(200));
+        match take_command!() {
+            WizardCommand::ActionDone => break,
+            WizardCommand::SkipStep => {
+                walk_skipped = true;
+                break;
             }
+            _ => {}
         }
     }
 
-    movement_union.sort();
-    log!("Movement candidates ({}):", movement_union.len());
-    for off in &movement_union {
-        log!("  0x{:x}", off);
+    let mut movement_union: Vec<usize> = Vec::new();
+    if !walk_skipped {
+        log!(
+            "Collecting movement data for {}ms...",
+            WALK_WINDOW.as_millis()
+        );
+        let walk_start = Instant::now();
+        while walk_start.elapsed() < WALK_WINDOW {
+            check_cancel!();
+            std::thread::sleep(Duration::from_millis(250));
+            let Some(ps) = get_pself(&mem, char_info_addr) else {
+                break;
+            };
+            let Ok(curr) = mem.read_bytes(ps, STRUCT_SIZE) else {
+                break;
+            };
+            let changed = find_changed_floats(&baseline, &curr, -20000.0, 20000.0, FLOAT_DELTA);
+            for off in changed {
+                if !movement_union.contains(&off) {
+                    movement_union.push(off);
+                }
+            }
+        }
+        movement_union.sort();
+        log!("Movement candidates ({}):", movement_union.len());
+        for off in &movement_union {
+            log!("  0x{:x}", off);
+        }
+    } else {
+        log!("Walking — skipped.");
     }
     check_cancel!();
 
     // ── Phase 6: stop → find speed (drops back to ~0) ────────────────────────
     set_phase!(WizardPhase::Stopped);
-    log!("Stop moving...");
+    log!("Stop moving completely, then click 'I'm stopped'.");
 
-    std::thread::sleep(Duration::from_millis(1500));
+    let mut stop_skipped = false;
+    loop {
+        check_cancel!();
+        std::thread::sleep(Duration::from_millis(200));
+        match take_command!() {
+            WizardCommand::ActionDone => break,
+            WizardCommand::SkipStep => {
+                stop_skipped = true;
+                break;
+            }
+            _ => {}
+        }
+    }
+
     let Some(ps) = get_pself(&mem, char_info_addr) else {
-        log!("Lost pSelf"); set_phase!(WizardPhase::Failed); return;
+        log!("Lost pSelf");
+        set_phase!(WizardPhase::Failed);
+        return;
     };
     let Ok(stopped_buf) = mem.read_bytes(ps, STRUCT_SIZE) else {
-        log!("Read error"); set_phase!(WizardPhase::Failed); return;
+        log!("Read error");
+        set_phase!(WizardPhase::Failed);
+        return;
     };
 
-    // Speed: was non-zero while walking (in movement_union), now ~0
-    let mut speed_candidates: Vec<usize> = movement_union.iter()
-        .filter(|&&off| {
-            let v = read_f32_at(&stopped_buf, off);
-            v.is_finite() && v.abs() < 0.1
-        })
-        .copied()
-        .collect();
-    speed_candidates.sort_by(|&a, &b| {
-        read_f32_at(&stopped_buf, a)
-            .abs()
-            .partial_cmp(&read_f32_at(&stopped_buf, b).abs())
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    let speed_offset = speed_candidates.first().copied();
-    if let Some(off) = speed_offset {
-        log!("Speed → 0x{:x}", off);
-        if let Ok(mut s) = shared.lock() { s.results.speed = Some(off); }
-        movement_union.retain(|&o| o != off);
+    if !stop_skipped {
+        let mut speed_candidates: Vec<usize> = movement_union
+            .iter()
+            .filter(|&&off| {
+                let v = read_f32_at(&stopped_buf, off);
+                v.is_finite() && v.abs() < 0.1
+            })
+            .copied()
+            .collect();
+        speed_candidates.sort_by(|&a, &b| {
+            read_f32_at(&stopped_buf, a)
+                .abs()
+                .partial_cmp(&read_f32_at(&stopped_buf, b).abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let speed_offset = speed_candidates.first().copied();
+        if let Some(off) = speed_offset {
+            log!("Speed → 0x{:x}", off);
+            if let Ok(mut s) = shared.lock() {
+                s.results.speed = Some(off);
+            }
+            movement_union.retain(|&o| o != off);
+        } else {
+            log!("Speed — not found among movement candidates");
+        }
     } else {
-        log!("Speed — not found among movement candidates");
+        log!("Stopped — skipped.");
     }
     check_cancel!();
 
     // ── Phase 7: turn → find heading ─────────────────────────────────────────
     set_phase!(WizardPhase::Turning);
-    log!("Turn in place (don't move forward)...");
+    log!("Click 'Start turning', then turn in place (do not move forward or backward).");
 
-    let turn_start = Instant::now();
-    let mut turn_prev = stopped_buf.clone();
-    let mut heading_changed: Vec<usize> = Vec::new();
-
-    while turn_start.elapsed() < TURN_WINDOW {
+    let mut turn_skipped = false;
+    loop {
         check_cancel!();
-        std::thread::sleep(Duration::from_millis(250));
-        let Some(ps) = get_pself(&mem, char_info_addr) else { break };
-        let Ok(curr) = mem.read_bytes(ps, STRUCT_SIZE) else { break };
-        // Heading is in [0, 512]
-        for off in find_changed_floats(&turn_prev, &curr, 0.0, 512.0, FLOAT_DELTA * 0.5) {
-            if !heading_changed.contains(&off) {
-                heading_changed.push(off);
+        std::thread::sleep(Duration::from_millis(200));
+        match take_command!() {
+            WizardCommand::ActionDone => break,
+            WizardCommand::SkipStep => {
+                turn_skipped = true;
+                break;
             }
+            _ => {}
         }
-        turn_prev = curr;
+    }
+
+    let mut heading_changed: Vec<usize> = Vec::new();
+    if !turn_skipped {
+        log!(
+            "Collecting turning data for {}ms...",
+            TURN_WINDOW.as_millis()
+        );
+        let turn_start = Instant::now();
+        let mut turn_prev = stopped_buf.clone();
+        while turn_start.elapsed() < TURN_WINDOW {
+            check_cancel!();
+            std::thread::sleep(Duration::from_millis(250));
+            let Some(ps) = get_pself(&mem, char_info_addr) else {
+                break;
+            };
+            let Ok(curr) = mem.read_bytes(ps, STRUCT_SIZE) else {
+                break;
+            };
+            for off in find_changed_floats(&turn_prev, &curr, 0.0, 512.0, FLOAT_DELTA * 0.5) {
+                if !heading_changed.contains(&off) {
+                    heading_changed.push(off);
+                }
+            }
+            turn_prev = curr;
+        }
+    } else {
+        log!("Turning — skipped.");
     }
 
     // Heading must also have changed during walking (was in movement_union)
-    let heading_candidates: Vec<usize> = heading_changed.iter()
+    let heading_candidates: Vec<usize> = heading_changed
+        .iter()
         .filter(|&&o| movement_union.contains(&o))
         .copied()
         .collect();
 
-    let heading_offset = heading_candidates.first()
+    let heading_offset = heading_candidates
+        .first()
         .or_else(|| heading_changed.first())
         .copied();
 
     if let Some(off) = heading_offset {
         log!("Heading → 0x{:x}", off);
-        if let Ok(mut s) = shared.lock() { s.results.heading = Some(off); }
+        if let Ok(mut s) = shared.lock() {
+            s.results.heading = Some(off);
+        }
         movement_union.retain(|&o| o != off);
     } else {
         log!("Heading — not found");
@@ -539,16 +689,27 @@ fn run_wizard(
     } else if movement_union.len() >= 3 {
         (movement_union[0], movement_union[1], movement_union[2])
     } else {
-        log!("Position — only {} candidates remain (need 3)", movement_union.len());
-        if let Some(&a) = movement_union.first() { (a, 0, 0) } else { (0, 0, 0) }
+        log!(
+            "Position — only {} candidates remain (need 3)",
+            movement_union.len()
+        );
+        if let Some(&a) = movement_union.first() {
+            (a, 0, 0)
+        } else {
+            (0, 0, 0)
+        }
     };
 
     if x_off != 0 {
         log!("X → 0x{:x}  Y → 0x{:x}  Z → 0x{:x}", x_off, y_off, z_off);
         if let Ok(mut s) = shared.lock() {
             s.results.x = Some(x_off);
-            if y_off != 0 { s.results.y = Some(y_off); }
-            if z_off != 0 { s.results.z = Some(z_off); }
+            if y_off != 0 {
+                s.results.y = Some(y_off);
+            }
+            if z_off != 0 {
+                s.results.z = Some(z_off);
+            }
         }
     }
     check_cancel!();
@@ -558,7 +719,11 @@ fn run_wizard(
     log!("Cast invisibility, then click 'I cast invis' (or Skip).");
 
     let pself = get_pself(&mem, char_info_addr).unwrap_or(0);
-    let pre_invis = if pself != 0 { mem.read_bytes(pself, STRUCT_SIZE).unwrap_or_default() } else { vec![] };
+    let pre_invis = if pself != 0 {
+        mem.read_bytes(pself, STRUCT_SIZE).unwrap_or_default()
+    } else {
+        vec![]
+    };
 
     loop {
         check_cancel!();
@@ -573,17 +738,24 @@ fn run_wizard(
                         0 => log!("Hide — no byte changed 0→1 (cast invis first?)"),
                         1 => {
                             log!("Hide → 0x{:x}", flipped[0]);
-                            if let Ok(mut s) = shared.lock() { s.results.hidden = Some(flipped[0]); }
+                            if let Ok(mut s) = shared.lock() {
+                                s.results.hidden = Some(flipped[0]);
+                            }
                         }
                         n => {
                             log!("Hide — {} bytes flipped, ambiguous:", n);
-                            for off in flipped.iter().take(8) { log!("  0x{:x}", off); }
+                            for off in flipped.iter().take(8) {
+                                log!("  0x{:x}", off);
+                            }
                         }
                     }
                 }
                 break;
             }
-            WizardCommand::SkipStep => { log!("Hide — skipped"); break; }
+            WizardCommand::SkipStep => {
+                log!("Hide — skipped");
+                break;
+            }
             _ => {}
         }
     }
@@ -617,17 +789,31 @@ fn run_wizard(
                 } else {
                     let pself_buf = get_pself(&mem, char_info_addr)
                         .and_then(|ps| mem.read_bytes(ps, STRUCT_SIZE).ok());
-                    match find_owner_offset(&mem, spawn_header_addr, player_spawn_id, next_off, prev_off, pself_buf.as_deref()) {
+                    match find_owner_offset(
+                        &mem,
+                        spawn_header_addr,
+                        player_spawn_id,
+                        next_off,
+                        prev_off,
+                        pself_buf.as_deref(),
+                    ) {
                         Some(off) => {
                             log!("Owner → 0x{:x}", off);
-                            if let Ok(mut s) = shared.lock() { s.results.owner = Some(off); }
+                            if let Ok(mut s) = shared.lock() {
+                                s.results.owner = Some(off);
+                            }
                         }
-                        None => log!("Owner — not found in spawn list (is pet/merc active and in range?)"),
+                        None => log!(
+                            "Owner — not found in spawn list (is pet/merc active and in range?)"
+                        ),
                     }
                 }
                 break;
             }
-            WizardCommand::SkipStep => { log!("Owner — skipped"); break; }
+            WizardCommand::SkipStep => {
+                log!("Owner — skipped");
+                break;
+            }
             _ => {}
         }
     }
@@ -646,7 +832,13 @@ fn run_wizard(
         if xo > 0 {
             get_pself(&mem, char_info_addr)
                 .and_then(|ps| mem.read_bytes(ps, STRUCT_SIZE).ok())
-                .map(|buf| (read_f32_at(&buf, xo), read_f32_at(&buf, yo), read_f32_at(&buf, zo)))
+                .map(|buf| {
+                    (
+                        read_f32_at(&buf, xo),
+                        read_f32_at(&buf, yo),
+                        read_f32_at(&buf, zo),
+                    )
+                })
         } else {
             None
         }
@@ -663,27 +855,39 @@ fn run_wizard(
                     match discover_item_offsets(&mem, ground_addr, player_pos) {
                         Some(r) => {
                             log!("GroundItem.Name  → 0x{:x}", r.item_name.unwrap_or(0));
-                            log!("GroundItem.X/Y/Z → 0x{:x}/0x{:x}/0x{:x}",
-                                r.item_x.unwrap_or(0), r.item_y.unwrap_or(0), r.item_z.unwrap_or(0));
-                            log!("GroundItem.Prev/Next → 0x{:x}/0x{:x}",
-                                r.item_prev.unwrap_or(0), r.item_next.unwrap_or(0));
+                            log!(
+                                "GroundItem.X/Y/Z → 0x{:x}/0x{:x}/0x{:x}",
+                                r.item_x.unwrap_or(0),
+                                r.item_y.unwrap_or(0),
+                                r.item_z.unwrap_or(0)
+                            );
+                            log!(
+                                "GroundItem.Prev/Next → 0x{:x}/0x{:x}",
+                                r.item_prev.unwrap_or(0),
+                                r.item_next.unwrap_or(0)
+                            );
                             if let Ok(mut s) = shared.lock() {
-                                s.results.item_name     = r.item_name;
-                                s.results.item_x        = r.item_x;
-                                s.results.item_y        = r.item_y;
-                                s.results.item_z        = r.item_z;
-                                s.results.item_prev     = r.item_prev;
-                                s.results.item_next     = r.item_next;
-                                s.results.item_id       = r.item_id;
-                                s.results.item_drop_id  = r.item_drop_id;
+                                s.results.item_name = r.item_name;
+                                s.results.item_x = r.item_x;
+                                s.results.item_y = r.item_y;
+                                s.results.item_z = r.item_z;
+                                s.results.item_prev = r.item_prev;
+                                s.results.item_next = r.item_next;
+                                s.results.item_id = r.item_id;
+                                s.results.item_drop_id = r.item_drop_id;
                             }
                         }
-                        None => log!("GroundItem — could not read item struct (is item on ground nearby?)"),
+                        None => log!(
+                            "GroundItem — could not read item struct (is item on ground nearby?)"
+                        ),
                     }
                 }
                 break;
             }
-            WizardCommand::SkipStep => { log!("GroundItem — skipped"); break; }
+            WizardCommand::SkipStep => {
+                log!("GroundItem — skipped");
+                break;
+            }
             _ => {}
         }
     }
@@ -695,7 +899,9 @@ fn run_wizard(
 // ── Memory helpers ────────────────────────────────────────────────────────────
 
 fn get_pself(mem: &MemReader, char_info_canonical: u64) -> Option<u64> {
-    if char_info_canonical == 0 { return None; }
+    if char_info_canonical == 0 {
+        return None;
+    }
     let ptr = mem.read_raw_pointer(char_info_canonical).ok()?;
     if ptr == 0 { None } else { Some(ptr) }
 }
@@ -710,7 +916,9 @@ fn find_name_candidates(buf: &[u8]) -> Vec<(usize, String)> {
     while i < buf.len() {
         if is_name_char(buf[i]) {
             let start = i;
-            while i < buf.len() && is_name_char(buf[i]) { i += 1; }
+            while i < buf.len() && is_name_char(buf[i]) {
+                i += 1;
+            }
             let len = i - start;
             if (3..=30).contains(&len) && i < buf.len() && buf[i] == 0 {
                 // Must start with uppercase letter
@@ -729,10 +937,14 @@ fn find_name_candidates(buf: &[u8]) -> Vec<(usize, String)> {
     let mut deduped: Vec<(usize, String)> = Vec::new();
     'outer: for (off, s) in results {
         for (_, existing) in &deduped {
-            if existing.contains(&*s) { continue 'outer; }
+            if existing.contains(&*s) {
+                continue 'outer;
+            }
         }
         deduped.push((off, s));
-        if deduped.len() >= 4 { break; }
+        if deduped.len() >= 4 {
+            break;
+        }
     }
     deduped
 }
@@ -764,8 +976,7 @@ fn find_changed_floats(prev: &[u8], curr: &[u8], min: f32, max: f32, threshold: 
     for off in (0..len).step_by(4) {
         let pv = read_f32_at(prev, off);
         let cv = read_f32_at(curr, off);
-        if pv.is_finite() && cv.is_finite() && cv >= min && cv <= max
-            && (cv - pv).abs() > threshold
+        if pv.is_finite() && cv.is_finite() && cv >= min && cv <= max && (cv - pv).abs() > threshold
         {
             results.push(off);
         }
@@ -786,7 +997,9 @@ fn find_byte_flip(prev: &[u8], curr: &[u8], from_val: u8, to_val: u8) -> Vec<usi
 /// From a sorted list of offsets, find the first run of `count` values that are
 /// exactly `step` apart (e.g., 3 consecutive 4-byte-aligned floats).
 fn find_consecutive_cluster(offsets: &[usize], count: usize, step: usize) -> Vec<usize> {
-    if offsets.len() < count { return Vec::new(); }
+    if offsets.len() < count {
+        return Vec::new();
+    }
     for i in 0..=offsets.len().saturating_sub(count) {
         let window = &offsets[i..i + count];
         let consecutive = window.windows(2).all(|w| w[1] == w[0] + step);
@@ -808,32 +1021,48 @@ fn find_owner_offset(
     player_buf: Option<&[u8]>,
 ) -> Option<usize> {
     let header_ptr = mem.read_raw_pointer(spawn_header_canonical).ok()?;
-    if header_ptr == 0 { return None; }
+    if header_ptr == 0 {
+        return None;
+    }
 
-    // Walk backward to head
+    // Walk backward to head; skip unreadable nodes rather than aborting.
     let mut ptr = header_ptr;
     for _ in 0..2000 {
-        let buf = mem.read_bytes(ptr, STRUCT_SIZE).ok()?;
+        let buf = match mem.read_bytes(ptr, STRUCT_SIZE) {
+            Ok(b) => b,
+            Err(_) => break,
+        };
         let prev = read_u64_at(&buf, prev_off);
-        if prev == 0 { break; }
+        if prev == 0 {
+            break;
+        }
         ptr = prev;
     }
 
     // Walk forward looking for player_spawn_id in a non-player spawn
     let mut visited = 0u32;
     loop {
-        if ptr == 0 || visited > 2000 { break; }
+        if ptr == 0 || visited > 2000 {
+            break;
+        }
         visited += 1;
-        let buf = mem.read_bytes(ptr, STRUCT_SIZE).ok()?;
+        let buf = match mem.read_bytes(ptr, STRUCT_SIZE) {
+            Ok(b) => b,
+            Err(_) => {
+                // Skip unreadable node; try to advance via next pointer if possible.
+                break;
+            }
+        };
 
         // Scan for player_spawn_id as a u32 at any 4-byte-aligned offset
         for off in (0..STRUCT_SIZE.saturating_sub(4)).step_by(4) {
             if read_u32_at(&buf, off) == player_spawn_id {
-                // Verify the same offset is 0 in the player's own struct (player's owner = 0)
+                // Verify the same offset is 0 in the player's own struct (player's owner = 0).
+                // If player_buf is unavailable, reject the match rather than accepting blindly.
                 let player_is_zero = player_buf
                     .and_then(|pb| pb.get(off..off + 4))
                     .map(|b| read_u32_at(b, 0) == 0)
-                    .unwrap_or(true);
+                    .unwrap_or(false);
                 if player_is_zero {
                     return Some(off);
                 }
@@ -841,7 +1070,9 @@ fn find_owner_offset(
         }
 
         let next = read_u64_at(&buf, next_off);
-        if next == 0 || next == ptr { break; }
+        if next == 0 || next == ptr {
+            break;
+        }
         ptr = next;
     }
     None
@@ -855,7 +1086,9 @@ fn discover_item_offsets(
 ) -> Option<WizardResults> {
     // Resolve item struct pointer (mirrors server_logic ground item logic)
     let base_ptr = mem.read_raw_pointer(ground_addr_canonical).ok()?;
-    if base_ptr == 0 { return None; }
+    if base_ptr == 0 {
+        return None;
+    }
 
     let name_check = mem.read_string(base_ptr + 0x38, 4).unwrap_or_default();
     let item_ptr = if name_check.starts_with("IT") {
@@ -883,7 +1116,7 @@ fn discover_item_offsets(
     let item_next = ptr_offsets.get(1).copied();
 
     // ID / DropID: small u32 values after the pointer block (typically 0x10, 0x18)
-    let item_id     = Some(0x10usize); // stable across builds in practice
+    let item_id = Some(0x10usize); // stable across builds in practice
     let item_drop_id = Some(0x18usize);
 
     // X/Y/Z: floats near player position
@@ -894,7 +1127,7 @@ fn discover_item_offsets(
     };
 
     Some(WizardResults {
-        item_name:    Some(name_off),
+        item_name: Some(name_off),
         item_prev,
         item_next,
         item_id,
@@ -911,7 +1144,9 @@ fn find_item_name_offset(buf: &[u8]) -> Option<usize> {
         if buf[i] == b'I' && buf[i + 1] == b'T' && buf[i + 2].is_ascii_alphanumeric() {
             // Verify it's a null-terminated string of reasonable length
             let end = buf[i..].iter().position(|&b| b == 0).unwrap_or(0);
-            if (4..=64).contains(&end) { return Some(i); }
+            if (4..=64).contains(&end) {
+                return Some(i);
+            }
         }
     }
     None
@@ -929,9 +1164,7 @@ fn find_item_position_offsets(
         .filter(|&off| {
             let v = read_f32_at(buf, off);
             v.is_finite()
-                && ((v - px).abs() < 50.0
-                    || (v - py).abs() < 50.0
-                    || (v - pz).abs() < 50.0)
+                && ((v - px).abs() < 50.0 || (v - py).abs() < 50.0 || (v - pz).abs() < 50.0)
         })
         .collect();
 
@@ -940,8 +1173,16 @@ fn find_item_position_offsets(
     if cluster.len() >= 3 {
         (Some(cluster[0]), Some(cluster[1]), Some(cluster[2]))
     } else if candidates.len() >= 3 {
-        (Some(candidates[0]), Some(candidates[1]), Some(candidates[2]))
+        (
+            Some(candidates[0]),
+            Some(candidates[1]),
+            Some(candidates[2]),
+        )
     } else {
-        (candidates.first().copied(), candidates.get(1).copied(), candidates.get(2).copied())
+        (
+            candidates.first().copied(),
+            candidates.get(1).copied(),
+            candidates.get(2).copied(),
+        )
     }
 }

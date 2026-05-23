@@ -43,7 +43,9 @@ impl AboutDialog {
                         });
                         ui.horizontal(|ui| {
                             if ui.link("eframe").clicked() {
-                                let _ = open_url("https://github.com/emilk/egui/tree/master/crates/eframe");
+                                let _ = open_url(
+                                    "https://github.com/emilk/egui/tree/master/crates/eframe",
+                                );
                             }
                             ui.label("— Desktop application framework");
                         });
@@ -124,16 +126,12 @@ fn open_url(url: &str) -> std::io::Result<()> {
 
 #[cfg(target_os = "macos")]
 fn open_url(url: &str) -> std::io::Result<()> {
-    std::process::Command::new("open")
-        .arg(url)
-        .spawn()?;
+    std::process::Command::new("open").arg(url).spawn()?;
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 fn open_url(url: &str) -> std::io::Result<()> {
-    std::process::Command::new("xdg-open")
-        .arg(url)
-        .spawn()?;
+    std::process::Command::new("xdg-open").arg(url).spawn()?;
     Ok(())
 }
