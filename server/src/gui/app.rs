@@ -10,6 +10,7 @@ use tray_icon::{
 use crate::config::IniReader;
 use crate::scanner::EqGameScanner;
 use crate::session::SessionState;
+use crate::wizard::{WizardCommand, WizardPhase, WizardShared, start_wizard, write_wizard_results};
 use super::GuiState;
 
 const WINDOW_PADDING: i8 = 10;
@@ -24,6 +25,12 @@ enum ScanKind {
     Both,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum OffsetFinderTab {
+    Scanner,
+    Wizard,
+}
+
 struct OffsetFinderState {
     open: bool,
     exe_path: String,
@@ -31,6 +38,11 @@ struct OffsetFinderState {
     last_kind: Option<ScanKind>,
     pending: Arc<Mutex<Option<String>>>,
     display_text: String,
+    // Wizard tab
+    active_tab: OffsetFinderTab,
+    wizard_running: bool,
+    wizard_shared: Arc<Mutex<WizardShared>>,
+    wizard_write_result: String,
 }
 
 impl Default for OffsetFinderState {
@@ -42,6 +54,10 @@ impl Default for OffsetFinderState {
             last_kind: None,
             pending: Arc::new(Mutex::new(None)),
             display_text: String::new(),
+            active_tab: OffsetFinderTab::Scanner,
+            wizard_running: false,
+            wizard_shared: Arc::new(Mutex::new(WizardShared::default())),
+            wizard_write_result: String::new(),
         }
     }
 }
@@ -189,6 +205,21 @@ impl WinShowEQApp {
         });
     }
 
+    fn start_wizard_thread(&mut self) {
+        // Reset shared state for a fresh run.
+        self.offset_finder.wizard_shared = Arc::new(Mutex::new(WizardShared::default()));
+        self.offset_finder.wizard_write_result.clear();
+        self.offset_finder.wizard_running = true;
+
+        start_wizard(
+            self.ini_path.clone(),
+            self.config_ini_path.clone(),
+            self.patterns_ini_path.clone(),
+            self.offset_finder.exe_path.clone(),
+            Arc::clone(&self.offset_finder.wizard_shared),
+        );
+    }
+
     fn render_offset_finder(&mut self, ctx: &egui::Context) {
         if !self.offset_finder.open {
             return;
@@ -205,13 +236,35 @@ impl WinShowEQApp {
         let mut open = true;
         let mut start_scan: Option<(ScanKind, bool)> = None;
         let mut do_browse = false;
+        let mut tab_switch: Option<OffsetFinderTab> = None;
         let scanning = self.offset_finder.scanning;
         let has_path = !self.offset_finder.exe_path.trim().is_empty();
         let last_kind = self.offset_finder.last_kind;
         let display_empty = self.offset_finder.display_text.is_empty();
+        let active_tab = self.offset_finder.active_tab;
         // Take exe_path out so we can move it into the closure without a borrow conflict.
         let mut exe_path = std::mem::take(&mut self.offset_finder.exe_path);
         let mut display_text = self.offset_finder.display_text.clone();
+
+        // Extract wizard state into locals before the closure (can't call &mut self methods inside).
+        let (wizard_phase, wizard_log, wizard_results) = {
+            match self.offset_finder.wizard_shared.lock() {
+                Ok(s) => (s.phase.clone(), s.log.clone(), s.results.clone()),
+                Err(_) => (WizardPhase::Idle, vec![], Default::default()),
+            }
+        };
+        if self.offset_finder.wizard_running
+            && matches!(wizard_phase, WizardPhase::Complete | WizardPhase::Failed)
+        {
+            self.offset_finder.wizard_running = false;
+        }
+        let wizard_running = self.offset_finder.wizard_running;
+        let wizard_write_result = self.offset_finder.wizard_write_result.clone();
+
+        // Command flags set inside the closure, applied after.
+        let mut do_start_wizard = false;
+        let mut wizard_cmd: Option<WizardCommand> = None;
+        let mut do_write_ini = false;
 
         ctx.show_viewport_immediate(
             egui::ViewportId::from_hash_of("offset_finder"),
@@ -247,16 +300,14 @@ impl WinShowEQApp {
                                 });
                         });
 
-                    // Header — claimed from the top after footer.
-                    // Panel::top draws its own separator at the bottom edge.
+                    // Header — exe path + tab bar + scanner controls
                     egui::Panel::top("offset_finder_header")
                         .resizable(false)
                         .show_inside(ui, |ui| {
                             egui::Frame::NONE
                                 .inner_margin(egui::Margin::same(WINDOW_PADDING))
                                 .show(ui, |ui| {
-                                    // Browse allocated before TextEdit so it is
-                                    // never pushed off the right edge.
+                                    // Exe path row
                                     ui.horizontal(|ui| {
                                         ui.label("EQ Executable:");
                                         if ui.button("Browse…").clicked() {
@@ -270,26 +321,42 @@ impl WinShowEQApp {
 
                                     ui.add_space(4.0);
 
+                                    // Tab bar
                                     ui.horizontal(|ui| {
-                                        ui.add_enabled_ui(!scanning && has_path, |ui| {
-                                            if ui.button("Scan Primary").clicked() {
-                                                start_scan = Some((ScanKind::Primary, false));
-                                            }
-                                            if ui.button("Scan Secondary").clicked() {
-                                                start_scan = Some((ScanKind::Secondary, false));
-                                            }
-                                            if ui.button("Scan Both").clicked() {
-                                                start_scan = Some((ScanKind::Both, false));
-                                            }
-                                        });
-                                        if scanning {
-                                            ui.add(egui::Spinner::new());
+                                        let scanner_sel = active_tab == OffsetFinderTab::Scanner;
+                                        if ui.selectable_label(scanner_sel, "Scanner").clicked() {
+                                            tab_switch = Some(OffsetFinderTab::Scanner);
+                                        }
+                                        let wizard_sel = active_tab == OffsetFinderTab::Wizard;
+                                        if ui.selectable_label(wizard_sel, "Wizard").clicked() {
+                                            tab_switch = Some(OffsetFinderTab::Wizard);
                                         }
                                     });
+
+                                    // Scanner controls (only shown on Scanner tab)
+                                    if active_tab == OffsetFinderTab::Scanner {
+                                        ui.add_space(4.0);
+                                        ui.horizontal(|ui| {
+                                            ui.add_enabled_ui(!scanning && has_path, |ui| {
+                                                if ui.button("Scan Primary").clicked() {
+                                                    start_scan = Some((ScanKind::Primary, false));
+                                                }
+                                                if ui.button("Scan Secondary").clicked() {
+                                                    start_scan = Some((ScanKind::Secondary, false));
+                                                }
+                                                if ui.button("Scan Both").clicked() {
+                                                    start_scan = Some((ScanKind::Both, false));
+                                                }
+                                            });
+                                            if scanning {
+                                                ui.add(egui::Spinner::new());
+                                            }
+                                        });
+                                    }
                                 });
                         });
 
-                    // Central area — fill whatever space the two panels left.
+                    // Central area
                     egui::Frame::NONE
                         .inner_margin(egui::Margin {
                             left: WINDOW_PADDING,
@@ -298,22 +365,132 @@ impl WinShowEQApp {
                             bottom: 4,
                         })
                         .show(ui, |ui| {
-                            let h = ui.available_height();
-                            let w = ui.available_width();
-                            // ScrollArea provides the hard height bound when content overflows.
-                            // add_sized forces the TextEdit to fill h when content is short.
-                            egui::ScrollArea::vertical()
-                                .max_height(h)
-                                .auto_shrink([false, false])
-                                .show(ui, |ui| {
-                                    ui.add_sized(
-                                        [w, h],
-                                        egui::TextEdit::multiline(&mut display_text)
-                                            .font(egui::TextStyle::Monospace)
-                                            .desired_width(f32::INFINITY)
-                                            .interactive(false),
-                                    );
+                            if active_tab == OffsetFinderTab::Scanner {
+                                let h = ui.available_height();
+                                let w = ui.available_width();
+                                egui::ScrollArea::vertical()
+                                    .max_height(h)
+                                    .auto_shrink([false, false])
+                                    .show(ui, |ui| {
+                                        ui.add_sized(
+                                            [w, h],
+                                            egui::TextEdit::multiline(&mut display_text)
+                                                .font(egui::TextStyle::Monospace)
+                                                .desired_width(f32::INFINITY)
+                                                .interactive(false),
+                                        );
+                                    });
+                            } else {
+                                // ── Wizard tab ────────────────────────────────────────────────
+                                ui.add_space(4.0);
+                                ui.horizontal(|ui| {
+                                    ui.add_enabled_ui(!wizard_running && has_path, |ui| {
+                                        if ui.button("Start Wizard").clicked() {
+                                            do_start_wizard = true;
+                                        }
+                                    });
+                                    ui.add_enabled_ui(wizard_running, |ui| {
+                                        if ui.button("Cancel").clicked() {
+                                            wizard_cmd = Some(WizardCommand::Cancel);
+                                        }
+                                    });
+                                    if wizard_running {
+                                        ui.add(egui::Spinner::new());
+                                    }
+                                    ui.label(egui::RichText::new(wizard_phase.instruction()).italics());
                                 });
+
+                                ui.separator();
+
+                                // Phase action buttons (for prompted steps).
+                                if wizard_running {
+                                    let show_action = matches!(
+                                        wizard_phase,
+                                        WizardPhase::WaitInvis | WizardPhase::WaitPet | WizardPhase::WaitItem
+                                    );
+                                    if show_action {
+                                        ui.horizontal(|ui| {
+                                            let action_label = match wizard_phase {
+                                                WizardPhase::WaitInvis => "I cast invis",
+                                                WizardPhase::WaitPet   => "I have a pet",
+                                                WizardPhase::WaitItem  => "Item dropped",
+                                                _                      => "Done",
+                                            };
+                                            if ui.button(action_label).clicked() {
+                                                wizard_cmd = Some(WizardCommand::ActionDone);
+                                            }
+                                            if ui.button("Skip").clicked() {
+                                                wizard_cmd = Some(WizardCommand::SkipStep);
+                                            }
+                                        });
+                                        ui.add_space(4.0);
+                                    }
+                                }
+
+                                // Results summary.
+                                if matches!(wizard_phase, WizardPhase::Complete) || wizard_results.name.is_some() {
+                                    ui.collapsing("Discovered offsets", |ui| {
+                                        egui::Grid::new("wizard_results")
+                                            .num_columns(2)
+                                            .spacing([12.0, 2.0])
+                                            .show(ui, |ui| {
+                                                let mut row = |label: &str, val: Option<usize>| {
+                                                    ui.label(label);
+                                                    match val {
+                                                        Some(v) => { ui.monospace(format!("0x{v:x}")); }
+                                                        None    => { ui.label(RichText::new("—").weak()); }
+                                                    }
+                                                    ui.end_row();
+                                                };
+                                                row("Name",        wizard_results.name);
+                                                row("Lastname",    wizard_results.last_name);
+                                                row("Next",        wizard_results.next);
+                                                row("Prev",        wizard_results.prev);
+                                                row("X",           wizard_results.x);
+                                                row("Y",           wizard_results.y);
+                                                row("Z",           wizard_results.z);
+                                                row("Heading",     wizard_results.heading);
+                                                row("Speed",       wizard_results.speed);
+                                                row("Hide",        wizard_results.hidden);
+                                                row("Owner",       wizard_results.owner);
+                                                row("Item.Name",   wizard_results.item_name);
+                                                row("Item.X",      wizard_results.item_x);
+                                                row("Item.Y",      wizard_results.item_y);
+                                                row("Item.Z",      wizard_results.item_z);
+                                                row("Item.Prev",   wizard_results.item_prev);
+                                                row("Item.Next",   wizard_results.item_next);
+                                                row("Item.Id",     wizard_results.item_id);
+                                                row("Item.DropId", wizard_results.item_drop_id);
+                                            });
+                                    });
+
+                                    if matches!(wizard_phase, WizardPhase::Complete) {
+                                        ui.horizontal(|ui| {
+                                            if ui.button("Write to INI").clicked() {
+                                                do_write_ini = true;
+                                            }
+                                        });
+                                        if !wizard_write_result.is_empty() {
+                                            ui.monospace(&wizard_write_result);
+                                        }
+                                    }
+
+                                    ui.separator();
+                                }
+
+                                // Log.
+                                ui.label(RichText::new("Log").strong());
+                                let log_h = ui.available_height() - 4.0;
+                                egui::ScrollArea::vertical()
+                                    .max_height(log_h)
+                                    .auto_shrink([false, false])
+                                    .stick_to_bottom(true)
+                                    .show(ui, |ui| {
+                                        for line in &wizard_log {
+                                            ui.label(RichText::new(line).monospace().size(11.0));
+                                        }
+                                    });
+                            }
                         });
                 });
             },
@@ -321,6 +498,9 @@ impl WinShowEQApp {
 
         self.offset_finder.open = open;
         self.offset_finder.exe_path = exe_path;
+        if let Some(tab) = tab_switch {
+            self.offset_finder.active_tab = tab;
+        }
 
         // Browse must run outside the egui closure so it can block for the dialog.
         if do_browse
@@ -332,6 +512,24 @@ impl WinShowEQApp {
         if let Some((kind, write_out)) = start_scan {
             self.save_exe_path();
             self.start_scan(kind, write_out);
+        }
+
+        // Apply wizard commands collected inside the closure.
+        if do_start_wizard {
+            self.start_wizard_thread();
+        }
+        if let Some(cmd) = wizard_cmd
+            && let Ok(mut s) = self.offset_finder.wizard_shared.lock()
+        {
+            s.command = cmd;
+        }
+        if do_write_ini {
+            self.offset_finder.wizard_write_result = write_wizard_results(
+                &wizard_results,
+                &self.ini_path,
+                &self.config_ini_path,
+            );
+            self.reload_flag.store(true, Ordering::Relaxed);
         }
     }
 }

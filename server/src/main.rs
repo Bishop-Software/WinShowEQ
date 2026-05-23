@@ -10,6 +10,7 @@ mod notifier;
 mod scanner;
 mod server_logic;
 mod session;
+mod wizard;
 
 use std::sync::{Arc, Mutex};
 

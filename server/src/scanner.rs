@@ -107,44 +107,7 @@ static PRIMARY_SCANS: &[PrimaryPatternEntry] = &[
     },
 ];
 
-/// Mirrors kSecondaryScans in EQGameScanner.cpp::ScanSecondary.
 static SECONDARY_SCANS: &[SecondaryPatternEntry] = &[
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoNextOffset",
-        output_label: "NextOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoPrevOffset",
-        output_label: "PrevOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoLastnameOffset",
-        output_label: "LastnameOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoXOffset",
-        output_label: "XOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoYOffset",
-        output_label: "YOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoZOffset",
-        output_label: "ZOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoSpeedOffset",
-        output_label: "SpeedOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoHeadingOffset",
-        output_label: "HeadingOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoNameOffset",
-        output_label: "NameOffset",
-    },
     SecondaryPatternEntry {
         ini_section: "SpawnInfoTypeOffset",
         output_label: "TypeOffset",
@@ -152,14 +115,6 @@ static SECONDARY_SCANS: &[SecondaryPatternEntry] = &[
     SecondaryPatternEntry {
         ini_section: "SpawnInfoSpawnIDOffset",
         output_label: "SpawnIDOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoOwnerIDOffset",
-        output_label: "OwnerIDOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoHideOffset",
-        output_label: "HideOffset",
     },
     SecondaryPatternEntry {
         ini_section: "SpawnInfoLevelOffset",
