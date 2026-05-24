@@ -1509,26 +1509,28 @@ fn read_verify_readings(
     }
 
     // Position
-    if let (Some(xo), Some(yo), Some(zo)) = (results.x, results.y, results.z) {
-        if xo + 4 <= buf.len() && yo + 4 <= buf.len() && zo + 4 <= buf.len() {
-            r.x = read_f32_at(&buf, xo);
-            r.y = read_f32_at(&buf, yo);
-            r.z = read_f32_at(&buf, zo);
-            r.pos_ok = r.x.is_finite()
-                && r.y.is_finite()
-                && r.z.is_finite()
-                && r.x.abs() <= 15_000.0
-                && r.y.abs() <= 15_000.0
-                && r.z.abs() <= 15_000.0;
-        }
+    if let (Some(xo), Some(yo), Some(zo)) = (results.x, results.y, results.z)
+        && xo + 4 <= buf.len()
+        && yo + 4 <= buf.len()
+        && zo + 4 <= buf.len()
+    {
+        r.x = read_f32_at(&buf, xo);
+        r.y = read_f32_at(&buf, yo);
+        r.z = read_f32_at(&buf, zo);
+        r.pos_ok = r.x.is_finite()
+            && r.y.is_finite()
+            && r.z.is_finite()
+            && r.x.abs() <= 15_000.0
+            && r.y.abs() <= 15_000.0
+            && r.z.abs() <= 15_000.0;
     }
 
     // Heading
-    if let Some(ho) = results.heading {
-        if ho + 4 <= buf.len() {
-            r.heading = read_f32_at(&buf, ho);
-            r.heading_ok = (0.0..=512.0).contains(&r.heading);
-        }
+    if let Some(ho) = results.heading
+        && ho + 4 <= buf.len()
+    {
+        r.heading = read_f32_at(&buf, ho);
+        r.heading_ok = (0.0..=512.0).contains(&r.heading);
     }
 
     // Level (byte field; offset comes from secondary scan, not wizard results)
@@ -1538,29 +1540,28 @@ fn read_verify_readings(
     }
 
     // Spawn count — walk forward from spawn header pointer, cap at 500
-    if spawn_header_addr != 0 {
-        if let Ok(header_ptr) = mem.read_raw_pointer(spawn_header_addr) {
-            if header_ptr != 0 {
-                let mut ptr = header_ptr;
-                let mut count = 0usize;
-                for _ in 0..500 {
-                    if ptr == 0 {
-                        break;
-                    }
-                    count += 1;
-                    let Ok(node) = mem.read_bytes(ptr, next_off + 8) else {
-                        break;
-                    };
-                    let next = read_u64_at(&node, next_off);
-                    if next == 0 || next == ptr {
-                        break;
-                    }
-                    ptr = next;
-                }
-                r.spawn_count = count;
-                r.spawn_count_ok = count >= 1;
+    if spawn_header_addr != 0
+        && let Ok(header_ptr) = mem.read_raw_pointer(spawn_header_addr)
+        && header_ptr != 0
+    {
+        let mut ptr = header_ptr;
+        let mut count = 0usize;
+        for _ in 0..500 {
+            if ptr == 0 {
+                break;
             }
+            count += 1;
+            let Ok(node) = mem.read_bytes(ptr, next_off + 8) else {
+                break;
+            };
+            let next = read_u64_at(&node, next_off);
+            if next == 0 || next == ptr {
+                break;
+            }
+            ptr = next;
         }
+        r.spawn_count = count;
+        r.spawn_count_ok = count >= 1;
     }
 
     r
