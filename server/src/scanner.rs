@@ -28,6 +28,7 @@ pub struct ScanResult {
     pub reload: bool,
     pub has_address_mismatch: bool,
     pub output: String,
+    pub primary: PrimaryOffsets,
 }
 
 /// Which PrimaryOffsets field a primary scan entry corresponds to.
@@ -51,6 +52,17 @@ impl OffsetKind {
             OffsetKind::Target => o.target,
             OffsetKind::Ground => o.ground,
             OffsetKind::World => o.world,
+        }
+    }
+
+    fn set(self, o: &mut PrimaryOffsets, val: u64) {
+        match self {
+            OffsetKind::ZoneName => o.zone_name = val,
+            OffsetKind::SpawnList => o.spawn_list = val,
+            OffsetKind::SelfAddr => o.self_addr = val,
+            OffsetKind::Target => o.target = val,
+            OffsetKind::Ground => o.ground = val,
+            OffsetKind::World => o.world = val,
         }
     }
 }
@@ -430,7 +442,7 @@ impl EqGameScanner {
         write_out: bool,
         reload: &mut bool,
         has_mismatch: &mut bool,
-    ) -> String {
+    ) -> (String, u64) {
         let start = ir.read_pattern_int(entry.ini_section, "Start");
         let pattern = ir.read_pattern_bytes(entry.ini_section, "Pattern");
         let mask_str = ir.read_pattern_string(entry.ini_section, "Mask");
@@ -458,7 +470,10 @@ impl EqGameScanner {
             " # Not Found\r\n"
         };
 
-        format!("{}=0x{:x}{}", entry.output_label, match_addr, suffix)
+        (
+            format!("{}=0x{:x}{}", entry.output_label, match_addr, suffix),
+            match_addr,
+        )
     }
 
     fn run_secondary_scan(
@@ -515,6 +530,7 @@ impl EqGameScanner {
             reload: false,
             has_address_mismatch: false,
             output: String::new(),
+            primary: PrimaryOffsets::default(),
         };
 
         if !self.executable_exists() {
@@ -562,7 +578,7 @@ impl EqGameScanner {
         let _ = write!(out, "[Port]\r\nPort={}\r\n\r\n[Memory Offsets]\r\n", port);
 
         for entry in PRIMARY_SCANS {
-            let line = self.run_primary_scan(
+            let (line, addr) = self.run_primary_scan(
                 ir,
                 current_offsets,
                 entry,
@@ -571,6 +587,9 @@ impl EqGameScanner {
                 &mut result.has_address_mismatch,
             );
             out.push_str(&line);
+            if addr != 0 {
+                entry.kind.set(&mut result.primary, addr);
+            }
         }
 
         result.output = out;

@@ -8,7 +8,7 @@ use tray_icon::{
 };
 
 use super::GuiState;
-use crate::config::IniReader;
+use crate::config::{IniReader, PrimaryOffsets};
 use crate::scanner::EqGameScanner;
 use crate::session::SessionState;
 use crate::wizard::{WizardCommand, WizardPhase, WizardShared, start_wizard, write_wizard_results};
@@ -174,21 +174,20 @@ impl WinShowEQApp {
                 .unwrap_or_default();
 
             let scanner = EqGameScanner::new(&exe_path);
-            let mut output = scanner.scan_executable(&ir, &current_offsets, true).output;
-            output.push_str("\n[Base addresses written to INI]\n");
+            let scan_result = scanner.scan_executable(&ir, &current_offsets, false);
+            let mut output = scan_result.output.clone();
+            output.push_str("\n[Primary scan complete — not yet written]\n");
 
-            // Re-read INI to pick up the freshly written CharInfo address, then run
-            // the secondary (pattern-based SpawnInfo field offset) scan.
-            let mut ir2 = IniReader::new();
-            ir2.open_patterns_file(&patterns_ini_path);
-            let _ = ir2.open_file(&ini_path);
-            let new_char_info = ir2
-                .read_server_config_model()
-                .map(|m| m.offsets.self_addr)
-                .unwrap_or(current_offsets.self_addr);
-            let secondary = scanner.scan_secondary(&ir2, new_char_info, true);
+            // Use the just-scanned CharInfo address for the secondary scan;
+            // fall back to the INI value if the pattern didn't match.
+            let new_char_info = if scan_result.primary.self_addr != 0 {
+                scan_result.primary.self_addr
+            } else {
+                current_offsets.self_addr
+            };
+            let secondary = scanner.scan_secondary(&ir, new_char_info, false);
             output.push_str(&secondary);
-            output.push_str("\n[SpawnInfo offsets written to INI]");
+            output.push_str("\n[Secondary scan complete — not yet written]");
 
             if let Ok(mut guard) = pending.lock() {
                 *guard = Some(output);
@@ -201,6 +200,66 @@ impl WinShowEQApp {
         self.offset_finder.wizard_shared = Arc::new(Mutex::new(WizardShared::default()));
         self.offset_finder.wizard_write_result.clear();
         self.offset_finder.wizard_running = true;
+
+        // Seed WizardShared with addresses from the scan log so the wizard
+        // doesn't need to read them from the INI (which hasn't been written yet).
+        let (primary_addrs, secondary_offsets) = parse_scan_log(&self.offset_finder.scan_log);
+
+        let get_addr = |key: &str| -> u64 {
+            primary_addrs
+                .iter()
+                .find(|(k, _)| k == key)
+                .and_then(|(_, v)| u64::from_str_radix(v.trim_start_matches("0x"), 16).ok())
+                .unwrap_or(0)
+        };
+        let scan_primary = PrimaryOffsets {
+            zone_name: get_addr("ZoneAddr"),
+            spawn_list: get_addr("SpawnHeaderAddr"),
+            self_addr: get_addr("CharInfo"),
+            ground: get_addr("ItemsAddr"),
+            target: get_addr("TargetAddr"),
+            world: get_addr("WorldAddr"),
+        };
+        let scan_secondary: Vec<(String, u64)> = secondary_offsets
+            .iter()
+            .filter_map(|(k, v)| {
+                u64::from_str_radix(v.trim_start_matches("0x"), 16)
+                    .ok()
+                    .map(|n| (k.clone(), n))
+            })
+            .collect();
+
+        let scan_file_info: Vec<(String, String)> = {
+            let mut items = Vec::new();
+            let mut in_section = false;
+            for line in self.offset_finder.scan_log.lines() {
+                let line = line.trim();
+                if line.eq_ignore_ascii_case("[file info]") {
+                    in_section = true;
+                    continue;
+                }
+                if line.starts_with('[') {
+                    in_section = false;
+                    continue;
+                }
+                if in_section {
+                    if let Some(eq) = line.find('=') {
+                        let key = line[..eq].trim().to_owned();
+                        let val = line[eq + 1..].trim().to_owned();
+                        if !val.is_empty() {
+                            items.push((key, val));
+                        }
+                    }
+                }
+            }
+            items
+        };
+
+        if let Ok(mut s) = self.offset_finder.wizard_shared.lock() {
+            s.scan_primary = scan_primary;
+            s.scan_secondary = scan_secondary;
+            s.scan_file_info = scan_file_info;
+        }
 
         start_wizard(
             self.ini_path.clone(),
@@ -638,8 +697,23 @@ impl WinShowEQApp {
             s.command = cmd;
         }
         if do_write_ini {
-            self.offset_finder.wizard_write_result =
-                write_wizard_results(&wizard_results, &self.ini_path, &self.config_ini_path);
+            let (scan_primary, scan_secondary, scan_file_info) =
+                match self.offset_finder.wizard_shared.lock() {
+                    Ok(s) => (
+                        s.scan_primary.clone(),
+                        s.scan_secondary.clone(),
+                        s.scan_file_info.clone(),
+                    ),
+                    Err(_) => (PrimaryOffsets::default(), vec![], vec![]),
+                };
+            self.offset_finder.wizard_write_result = write_wizard_results(
+                &wizard_results,
+                &scan_primary,
+                &scan_secondary,
+                &scan_file_info,
+                &self.ini_path,
+                &self.config_ini_path,
+            );
             self.reload_flag.store(true, Ordering::Relaxed);
         }
     }

@@ -4,7 +4,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::config::IniReader;
+use crate::config::{IniReader, PrimaryOffsets};
 use crate::mem_reader::MemReader;
 use crate::scanner::EqGameScanner;
 use crate::server_logic::{read_f32_at, read_u32_at, read_u64_at};
@@ -121,6 +121,10 @@ pub struct WizardShared {
     // entered by user during EnterName phase
     pub char_name: String,
     pub char_last_name: String,
+    // populated from scan before wizard starts; written to INI on "Write to INI"
+    pub scan_primary: PrimaryOffsets,
+    pub scan_secondary: Vec<(String, u64)>,
+    pub scan_file_info: Vec<(String, String)>,
 }
 
 impl Default for WizardShared {
@@ -137,6 +141,9 @@ impl Default for WizardShared {
             player_spawn_id: 0,
             char_name: String::new(),
             char_last_name: String::new(),
+            scan_primary: PrimaryOffsets::default(),
+            scan_secondary: Vec::new(),
+            scan_file_info: Vec::new(),
         }
     }
 }
@@ -164,9 +171,13 @@ pub fn start_wizard(
 }
 
 /// Write all discovered results back to myseqserver.ini.
+/// Includes primary addresses and secondary offsets from the scan, plus wizard fields.
 /// Returns a summary of what was written.
 pub fn write_wizard_results(
     results: &WizardResults,
+    scan_primary: &PrimaryOffsets,
+    scan_secondary: &[(String, u64)],
+    scan_file_info: &[(String, String)],
     ini_path: &str,
     config_ini_path: &str,
 ) -> String {
@@ -176,6 +187,71 @@ pub fn write_wizard_results(
 
     let mut written = Vec::new();
     let mut skipped = Vec::new();
+
+    let fmt_addr = |v: u64| format!("0x{:x}", v);
+
+    // File info from scan (PatchDate, ClientHash, BuildString)
+    for (key, val) in scan_file_info {
+        if !val.is_empty() {
+            if ir.write_string_entry("File Info", key, val, false) {
+                written.push(format!("File Info.{} = {}", key, val));
+            } else {
+                skipped.push(format!("File Info.{}", key));
+            }
+        }
+    }
+
+    // [Port] — preserve existing value or default to 5555
+    let port = {
+        let existing = ir.read_integer_entry("Port", "Port", false) as u16;
+        if existing != 0 { existing } else { 5555 }
+    };
+    ir.write_string_entry("Port", "Port", &port.to_string(), false);
+
+    let mut write_mem = |key: &str, val: u64| {
+        if val != 0 {
+            if ir.write_string_entry("Memory Offsets", key, &fmt_addr(val), false) {
+                written.push(format!("{} = 0x{:x}", key, val));
+            } else {
+                skipped.push(key.to_string());
+            }
+        }
+    };
+
+    // [Memory Offsets] — primary addresses from scan
+    write_mem("ZoneAddr", scan_primary.zone_name);
+    write_mem("SpawnHeaderAddr", scan_primary.spawn_list);
+    write_mem("CharInfo", scan_primary.self_addr);
+    write_mem("ItemsAddr", scan_primary.ground);
+    write_mem("TargetAddr", scan_primary.target);
+    write_mem("WorldAddr", scan_primary.world);
+
+    // [WorldInfo Offsets] — fixed constants, never change across patches
+    let world_info: &[(&str, &str)] = &[
+        ("WorldHourOffset", "8"),
+        ("WorldMinuteOffset", "9"),
+        ("WorldDayOffset", "10"),
+        ("WorldMonthOffset", "11"),
+        ("WorldYearOffset", "12"),
+    ];
+    for (key, val) in world_info {
+        if ir.write_string_entry("WorldInfo Offsets", key, val, false) {
+            written.push(format!("WorldInfo.{} = {}", key, val));
+        } else {
+            skipped.push(format!("WorldInfo.{}", key));
+        }
+    }
+
+    // [SpawnInfo Offsets] — secondary offsets from scan
+    for (key, val) in scan_secondary {
+        if *val != 0 {
+            if ir.write_string_entry("SpawnInfo Offsets", key, &fmt_addr(*val), false) {
+                written.push(format!("{} = 0x{:x}", key, val));
+            } else {
+                skipped.push(key.clone());
+            }
+        }
+    }
 
     let mut write_spawn = |key: &str, val: Option<usize>| {
         if let Some(v) = val {
@@ -188,14 +264,14 @@ pub fn write_wizard_results(
         }
     };
 
-    // Only write fields discovered by specific, low-false-positive methods:
+    // [SpawnInfo Offsets] — wizard-discovered fields (only reliable methods):
     //   NameOffset/LastNameOffset  — exact match on user-provided character name
     //   XOffset/YOffset/ZOffset    — consecutive 4-byte float cluster during movement
     //   HeadingOffset              — float in [0,512] changing only during turning
     //   HideOffset                 — single byte flipping 0→1 after casting invisibility
     //   OwnerIDOffset              — u32 matching the player's known spawn ID
     //
-    // Excluded (heuristics too error-prone; verify manually from the log above):
+    // Excluded (heuristics too error-prone):
     //   NameOffset/LastNameOffset — when name not confirmed by user (heuristic only)
     //   SpeedOffset               — "drops near 0 when stopped" matches multiple floats
     //   NextOffset/PrevOffset     — pointer scan picks wrong heap pointer too often
@@ -210,6 +286,7 @@ pub fn write_wizard_results(
     write_spawn("HideOffset", results.hidden);
     write_spawn("OwnerIDOffset", results.owner);
 
+    // [GroundItem Offsets] — wizard-discovered item fields
     let mut write_item = |key: &str, val: Option<usize>| {
         if let Some(v) = val {
             let s = format!("0x{:x}", v);
@@ -336,15 +413,37 @@ fn run_wizard(
         }
     }
 
-    let char_info_addr = current_offsets.self_addr;
-    let spawn_header_addr = current_offsets.spawn_list;
-    let ground_addr = current_offsets.ground;
-    let spawn_id_offset =
-        ir.read_integer_entry("SpawnInfo Offsets", "SpawnIDOffset", false) as usize;
+    let (char_info_addr, spawn_header_addr, ground_addr, spawn_id_offset) = {
+        let s = shared.lock().unwrap();
+        let cid = if s.scan_primary.self_addr != 0 {
+            s.scan_primary.self_addr
+        } else {
+            current_offsets.self_addr
+        };
+        let shl = if s.scan_primary.spawn_list != 0 {
+            s.scan_primary.spawn_list
+        } else {
+            current_offsets.spawn_list
+        };
+        let gnd = if s.scan_primary.ground != 0 {
+            s.scan_primary.ground
+        } else {
+            current_offsets.ground
+        };
+        let sio = s
+            .scan_secondary
+            .iter()
+            .find(|(k, _)| k == "SpawnIDOffset")
+            .map(|(_, v)| *v as usize)
+            .unwrap_or_else(|| {
+                ir.read_integer_entry("SpawnInfo Offsets", "SpawnIDOffset", false) as usize
+            });
+        (cid, shl, gnd, sio)
+    };
 
     if char_info_addr == 0 || spawn_header_addr == 0 {
         log!(
-            "Error: primary addresses not in ini — run the Scanner tab first to populate Memory Offsets."
+            "Error: primary addresses not found — run Update Offsets first to populate Memory Offsets."
         );
         set_phase!(WizardPhase::Failed);
         return;
