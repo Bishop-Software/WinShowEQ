@@ -1418,3 +1418,127 @@ fn find_item_position_offsets(
         )
     }
 }
+
+// ── Verify phase helper ───────────────────────────────────────────────────────
+
+/// Read live memory using the just-discovered offsets and return a snapshot for
+/// the Verify phase UI. Never panics — missing or unreadable fields are left at
+/// their Default values so the GUI can show partial results gracefully.
+fn read_verify_readings(
+    mem: &MemReader,
+    shared: &Arc<Mutex<WizardShared>>,
+    results: &WizardResults,
+) -> VerifyReadings {
+    let (char_info_addr, spawn_header_addr, char_name, zone_canonical, level_off, next_off) = {
+        let s = shared.lock().unwrap();
+        let level_off = s
+            .scan_secondary
+            .iter()
+            .find(|(k, _)| k == "LevelOffset")
+            .map(|(_, v)| *v as usize)
+            .unwrap_or(0);
+        let next_off = s
+            .scan_secondary
+            .iter()
+            .find(|(k, _)| k == "NextOffset")
+            .map(|(_, v)| *v as usize)
+            .unwrap_or(0x8);
+        (
+            s.char_info_addr,
+            s.spawn_header_addr,
+            s.char_name.clone(),
+            s.scan_primary.zone_name,
+            level_off,
+            next_off,
+        )
+    };
+
+    let mut r = VerifyReadings::default();
+
+    // pSelf
+    let pself = match mem.read_raw_pointer(char_info_addr) {
+        Ok(p) if p != 0 => p,
+        _ => return r,
+    };
+
+    let buf = match mem.read_bytes(pself, STRUCT_SIZE) {
+        Ok(b) => b,
+        Err(_) => return r,
+    };
+
+    // Name
+    if let Some(name_off) = results.name {
+        r.name = mem
+            .read_string(pself + name_off as u64, 64)
+            .unwrap_or_default();
+        r.name_ok = if !char_name.is_empty() {
+            Some(r.name == char_name)
+        } else {
+            None
+        };
+    }
+
+    // Zone — canonical address remapped to actual points directly to the string
+    if zone_canonical != 0 {
+        r.zone = mem
+            .read_string(mem.canonical_to_actual(zone_canonical), 64)
+            .unwrap_or_default();
+    }
+
+    // Position
+    if let (Some(xo), Some(yo), Some(zo)) = (results.x, results.y, results.z) {
+        if xo + 4 <= buf.len() && yo + 4 <= buf.len() && zo + 4 <= buf.len() {
+            r.x = read_f32_at(&buf, xo);
+            r.y = read_f32_at(&buf, yo);
+            r.z = read_f32_at(&buf, zo);
+            r.pos_ok = r.x.is_finite()
+                && r.y.is_finite()
+                && r.z.is_finite()
+                && r.x.abs() <= 15_000.0
+                && r.y.abs() <= 15_000.0
+                && r.z.abs() <= 15_000.0;
+        }
+    }
+
+    // Heading
+    if let Some(ho) = results.heading {
+        if ho + 4 <= buf.len() {
+            r.heading = read_f32_at(&buf, ho);
+            r.heading_ok = (0.0..=512.0).contains(&r.heading);
+        }
+    }
+
+    // Level (byte field; offset comes from secondary scan, not wizard results)
+    if level_off > 0 && level_off < buf.len() {
+        r.level = buf[level_off];
+        r.level_ok = (1..=120).contains(&r.level);
+    }
+
+    // Spawn count — walk forward from spawn header pointer, cap at 500
+    if spawn_header_addr != 0 {
+        if let Ok(header_ptr) = mem.read_raw_pointer(spawn_header_addr) {
+            if header_ptr != 0 {
+                let mut ptr = header_ptr;
+                let mut count = 0usize;
+                for _ in 0..500 {
+                    if ptr == 0 {
+                        break;
+                    }
+                    count += 1;
+                    let Ok(node) = mem.read_bytes(ptr, next_off + 8) else {
+                        break;
+                    };
+                    let next = read_u64_at(&node, next_off);
+                    if next == 0 || next == ptr {
+                        break;
+                    }
+                    ptr = next;
+                }
+                r.spawn_count = count;
+                r.spawn_count_ok = count >= 1;
+            }
+        }
+    }
+
+    r
+}
