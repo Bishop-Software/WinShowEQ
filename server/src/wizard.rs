@@ -43,6 +43,7 @@ pub enum WizardPhase {
     WaitInvis,  // user casts invis → detect HideOffset byte flip
     WaitPet,    // user summons pet → detect OwnerIDOffset
     WaitItem,   // user drops item → detect GroundItem offsets
+    Verify,     // live memory readback — user confirms before writing to INI
     Complete,
     Cancelled,
     Failed,
@@ -65,11 +66,32 @@ impl WizardPhase {
             Self::WaitInvis => "Cast invisibility, then click 'I cast invis'.",
             Self::WaitPet => "Summon a pet or hire a mercenary, then click 'I have a pet'.",
             Self::WaitItem => "Drop any item on the ground, then click 'Item dropped'.",
+            Self::Verify => {
+                "Confirm the values below look correct, then click 'Accept & Write to INI'."
+            }
             Self::Complete => "Discovery complete. Review results and click 'Write to INI'.",
             Self::Cancelled => "Cancelled.",
             Self::Failed => "Wizard failed — see log for details.",
         }
     }
+}
+
+/// Live readings taken during WizardPhase::Verify.
+#[derive(Clone, Default)]
+pub struct VerifyReadings {
+    pub name: String,
+    pub name_ok: Option<bool>, // None = char_name was skipped (no exact-match basis)
+    pub zone: String,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub pos_ok: bool, // all three within ±15_000.0
+    pub heading: f32,
+    pub heading_ok: bool, // 0.0..=512.0
+    pub level: u8,
+    pub level_ok: bool, // 1..=120
+    pub spawn_count: usize,
+    pub spawn_count_ok: bool, // >= 1
 }
 
 #[derive(Clone, PartialEq)]
@@ -125,6 +147,8 @@ pub struct WizardShared {
     pub scan_primary: PrimaryOffsets,
     pub scan_secondary: Vec<(String, u64)>,
     pub scan_file_info: Vec<(String, String)>,
+    // populated during Verify phase
+    pub verify: Option<VerifyReadings>,
 }
 
 impl Default for WizardShared {
@@ -144,6 +168,7 @@ impl Default for WizardShared {
             scan_primary: PrimaryOffsets::default(),
             scan_secondary: Vec::new(),
             scan_file_info: Vec::new(),
+            verify: None,
         }
     }
 }
