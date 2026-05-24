@@ -1114,6 +1114,29 @@ fn run_wizard(
         }
     }
 
+    // ── Phase 11: verify — live readback before user commits to INI ─────────
+    set_phase!(WizardPhase::Verify);
+    log!("Verify: reading live values — confirm they look correct before writing.");
+
+    let results_snapshot = shared.lock().map(|s| s.results.clone()).unwrap_or_default();
+
+    loop {
+        check_cancel!();
+        let readings = read_verify_readings(&mem, &shared, &results_snapshot);
+        if let Ok(mut s) = shared.lock() {
+            s.verify = Some(readings);
+        }
+        std::thread::sleep(Duration::from_millis(500));
+        match take_command!() {
+            WizardCommand::ActionDone => break, // user clicked Accept & Write to INI
+            WizardCommand::Cancel => {
+                set_phase!(WizardPhase::Cancelled);
+                return;
+            }
+            _ => {}
+        }
+    }
+
     set_phase!(WizardPhase::Complete);
     log!("Discovery complete. Click 'Write to INI' to save results.");
 }
