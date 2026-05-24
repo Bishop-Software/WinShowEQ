@@ -496,8 +496,7 @@ impl EqGameScanner {
         );
 
         let suffix = if match_val != 0 {
-            let current =
-                ir.read_integer_entry("SpawnInfo Offsets", entry.output_label, false) as u64;
+            let current = ir.read_integer_entry("SpawnInfo Offsets", entry.output_label, false);
             if match_val == current {
                 " # Match\r\n"
             } else if write_out {

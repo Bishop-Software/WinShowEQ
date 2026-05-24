@@ -242,13 +242,11 @@ impl WinShowEQApp {
                     in_section = false;
                     continue;
                 }
-                if in_section {
-                    if let Some(eq) = line.find('=') {
-                        let key = line[..eq].trim().to_owned();
-                        let val = line[eq + 1..].trim().to_owned();
-                        if !val.is_empty() {
-                            items.push((key, val));
-                        }
+                if in_section && let Some(eq) = line.find('=') {
+                    let key = line[..eq].trim().to_owned();
+                    let val = line[eq + 1..].trim().to_owned();
+                    if !val.is_empty() {
+                        items.push((key, val));
                     }
                 }
             }
@@ -721,10 +719,12 @@ impl WinShowEQApp {
 
 // ── Scan log parser ───────────────────────────────────────────────────────────
 
+type KvList = Vec<(String, String)>;
+
 /// Parse the raw scan_log text into (primary_addresses, secondary_offsets).
 /// Expects lines formatted as `Key=0xvalue # status` under `[Memory Offsets]`
 /// and `[SpawnInfo Offsets]` section headers.
-fn parse_scan_log(log: &str) -> (Vec<(String, String)>, Vec<(String, String)>) {
+fn parse_scan_log(log: &str) -> (KvList, KvList) {
     let mut primary = Vec::new();
     let mut secondary = Vec::new();
     let mut in_primary = false;
