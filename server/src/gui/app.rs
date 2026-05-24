@@ -11,7 +11,9 @@ use super::GuiState;
 use crate::config::{IniReader, PrimaryOffsets};
 use crate::scanner::EqGameScanner;
 use crate::session::SessionState;
-use crate::wizard::{WizardCommand, WizardPhase, WizardShared, start_wizard, write_wizard_results};
+use crate::wizard::{
+    VerifyReadings, WizardCommand, WizardPhase, WizardShared, start_wizard, write_wizard_results,
+};
 
 const WINDOW_PADDING: i8 = 10;
 const SIDE_BY_SIDE_MIN_WIDTH: f32 = 560.0;
@@ -30,6 +32,7 @@ struct OffsetFinderState {
     wizard_write_result: String,
     name_input: String,
     last_name_input: String,
+    verify_readings: Option<VerifyReadings>,
 }
 
 impl Default for OffsetFinderState {
@@ -46,6 +49,7 @@ impl Default for OffsetFinderState {
             wizard_write_result: String::new(),
             name_input: String::new(),
             last_name_input: String::new(),
+            verify_readings: None,
         }
     }
 }
@@ -307,7 +311,12 @@ impl WinShowEQApp {
 
         let (wizard_phase, wizard_log, wizard_results) = {
             match self.offset_finder.wizard_shared.lock() {
-                Ok(s) => (s.phase.clone(), s.log.clone(), s.results.clone()),
+                Ok(s) => {
+                    if s.phase == WizardPhase::Verify {
+                        self.offset_finder.verify_readings = s.verify.clone();
+                    }
+                    (s.phase.clone(), s.log.clone(), s.results.clone())
+                }
                 Err(_) => (WizardPhase::Idle, vec![], Default::default()),
             }
         };
