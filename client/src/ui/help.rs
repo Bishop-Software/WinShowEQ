@@ -15,7 +15,10 @@ enum HelpTab {
 
 impl Default for HelpDialog {
     fn default() -> Self {
-        Self { open: false, tab: HelpTab::Shortcuts }
+        Self {
+            open: false,
+            tab: HelpTab::Shortcuts,
+        }
     }
 }
 
@@ -47,14 +50,12 @@ impl HelpDialog {
                 });
                 ui.separator();
 
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    match self.tab {
-                        HelpTab::Shortcuts => show_shortcuts(ui),
-                        HelpTab::MapControls => show_map_controls(ui),
-                        HelpTab::SpawnList => show_spawn_list(ui),
-                        HelpTab::Timers => show_timers(ui),
-                        HelpTab::Alerts => show_alerts(ui),
-                    }
+                egui::ScrollArea::vertical().show(ui, |ui| match self.tab {
+                    HelpTab::Shortcuts => show_shortcuts(ui),
+                    HelpTab::MapControls => show_map_controls(ui),
+                    HelpTab::SpawnList => show_spawn_list(ui),
+                    HelpTab::Timers => show_timers(ui),
+                    HelpTab::Alerts => show_alerts(ui),
                 });
 
                 ui.add_space(4.0);
@@ -99,23 +100,23 @@ fn bullet(ui: &mut egui::Ui, text: &str) {
 
 fn show_shortcuts(ui: &mut egui::Ui) {
     section(ui, "Map Navigation");
-    kv(ui, "+ / =",      "Zoom in");
-    kv(ui, "-",          "Zoom out");
-    kv(ui, "Scroll",     "Zoom in / out (map focused)");
-    kv(ui, "Home",       "Center map on player");
-    kv(ui, "Drag",       "Pan the map");
+    kv(ui, "+ / =", "Zoom in");
+    kv(ui, "-", "Zoom out");
+    kv(ui, "Scroll", "Zoom in / out (map focused)");
+    kv(ui, "Home", "Center map on player");
+    kv(ui, "Drag", "Pan the map");
 
     section(ui, "Panel Visibility");
-    kv(ui, "F5",         "Toggle Spawns panel");
-    kv(ui, "F6",         "Toggle Timers panel");
-    kv(ui, "F7",         "Toggle Ground Items panel");
+    kv(ui, "F5", "Toggle Spawns panel");
+    kv(ui, "F6", "Toggle Timers panel");
+    kv(ui, "F7", "Toggle Ground Items panel");
 
     section(ui, "Display");
-    kv(ui, "T",          "Toggle mob trails");
+    kv(ui, "T", "Toggle mob trails");
 
     section(ui, "Search");
-    kv(ui, "Ctrl+F",     "Open Find Spawn dialog");
-    kv(ui, "ESC",        "Close search / clear bearing line");
+    kv(ui, "Ctrl+F", "Open Find Spawn dialog");
+    kv(ui, "ESC", "Close search / clear bearing line");
 
     ui.add_space(6.0);
 }
@@ -127,14 +128,26 @@ fn show_map_controls(ui: &mut egui::Ui) {
     bullet(ui, "Home key — center on player");
 
     section(ui, "Bearing Line");
-    bullet(ui, "Shift+left-click — draw a line from the player to the clicked point");
-    bullet(ui, "Shows distance (EQ units), angle (degrees), and cardinal direction");
+    bullet(
+        ui,
+        "Shift+left-click — draw a line from the player to the clicked point",
+    );
+    bullet(
+        ui,
+        "Shows distance (EQ units), angle (degrees), and cardinal direction",
+    );
     bullet(ui, "ESC or plain left-click — clear the bearing line");
 
     section(ui, "Spawn Interaction");
-    bullet(ui, "Left-click a spawn dot — select it (gold ring on map, gold bar in list)");
+    bullet(
+        ui,
+        "Left-click a spawn dot — select it (gold ring on map, gold bar in list)",
+    );
     bullet(ui, "Click the same dot again — deselect");
-    bullet(ui, "Right-click a spawn dot — context menu (Add Timer, Add to Filter, Add Map Text)");
+    bullet(
+        ui,
+        "Right-click a spawn dot — context menu (Add Timer, Add to Filter, Add Map Text)",
+    );
 
     section(ui, "Spawn Colors");
     bullet(ui, "Red  — Danger");
@@ -149,7 +162,10 @@ fn show_map_controls(ui: &mut egui::Ui) {
 
 fn show_spawn_list(ui: &mut egui::Ui) {
     section(ui, "Selection");
-    bullet(ui, "Left-click a row — select spawn (gold ring on map, gold accent bar in list)");
+    bullet(
+        ui,
+        "Left-click a row — select spawn (gold ring on map, gold accent bar in list)",
+    );
     bullet(ui, "Click the same row again — deselect");
     bullet(ui, "Double-click a row — center the map on that spawn");
     bullet(ui, "Orange right-edge bar — current EQ target");
@@ -160,16 +176,31 @@ fn show_spawn_list(ui: &mut egui::Ui) {
 
     section(ui, "Context Menu (right-click)");
     bullet(ui, "Add Timer — track respawn time for this mob");
-    bullet(ui, "Add to Filter — categorize as Hunt / Caution / Danger / Rare");
+    bullet(
+        ui,
+        "Add to Filter — categorize as Hunt / Caution / Danger / Rare",
+    );
     bullet(ui, "Add Map Text — place a note at the spawn's position");
 
     section(ui, "Search");
-    bullet(ui, "Ctrl+F — find spawns by partial name (case-insensitive)");
-    bullet(ui, "Matching spawns get a white ring on the map and a cyan bar in the list");
+    bullet(
+        ui,
+        "Ctrl+F — find spawns by partial name (case-insensitive)",
+    );
+    bullet(
+        ui,
+        "Matching spawns get a white ring on the map and a cyan bar in the list",
+    );
 
     section(ui, "Filters");
-    bullet(ui, "Filters are loaded from the configured filter directory (global.xml, {zone}.xml)");
-    bullet(ui, "Each spawn is classified as Hunt / Caution / Danger / Rare based on name");
+    bullet(
+        ui,
+        "Filters are loaded from the configured filter directory (global.xml, {zone}.xml)",
+    );
+    bullet(
+        ui,
+        "Each spawn is classified as Hunt / Caution / Danger / Rare based on name",
+    );
 
     ui.add_space(6.0);
 }
@@ -185,7 +216,10 @@ fn show_timers(ui: &mut egui::Ui) {
     bullet(ui, "Click a column header to sort");
 
     section(ui, "Persistence");
-    bullet(ui, "Timers are saved per zone and restored automatically on zone entry");
+    bullet(
+        ui,
+        "Timers are saved per zone and restored automatically on zone entry",
+    );
     bullet(ui, "Stored in the configured timer directory");
 
     ui.add_space(6.0);
@@ -193,19 +227,28 @@ fn show_timers(ui: &mut egui::Ui) {
 
 fn show_alerts(ui: &mut egui::Ui) {
     section(ui, "Configuration");
-    bullet(ui, "Open File → Options → Alerts tab to configure alert behavior");
-    bullet(ui, "Each category (Danger, Caution, Hunt, Rare) has its own mode");
+    bullet(
+        ui,
+        "Open File → Options → Alerts tab to configure alert behavior",
+    );
+    bullet(
+        ui,
+        "Each category (Danger, Caution, Hunt, Rare) has its own mode",
+    );
 
     section(ui, "Alert Modes");
-    kv(ui, "None",    "No alert");
-    kv(ui, "Beep",    "System beep");
-    kv(ui, "Speech",  "Text-to-speech announcement");
-    kv(ui, "Sound",   "Play a custom sound file (.wav)");
+    kv(ui, "None", "No alert");
+    kv(ui, "Beep", "System beep");
+    kv(ui, "Speech", "Text-to-speech announcement");
+    kv(ui, "Sound", "Play a custom sound file (.wav)");
 
     section(ui, "Discord");
     bullet(ui, "Configure a webhook URL in Options → Discord");
     bullet(ui, "Enable per-category posting (Danger, Hunt)");
-    bullet(ui, "Posts spawn name, level, and location to your Discord channel");
+    bullet(
+        ui,
+        "Posts spawn name, level, and location to your Discord channel",
+    );
 
     ui.add_space(6.0);
 }

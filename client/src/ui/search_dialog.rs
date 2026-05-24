@@ -20,7 +20,6 @@ pub struct SearchDialog {
     needs_focus: bool,
 }
 
-
 impl SearchDialog {
     /// Show the search dialog. Returns `Some(spawn_id)` if the user clicked a result row.
     pub fn show(&mut self, ctx: &Context, data: &mut AppData) -> Option<u32> {
@@ -103,37 +102,44 @@ impl SearchDialog {
                             // behind the text rather than on top of it.
                             let bg_slot = ui.painter().add(egui::Shape::Noop);
 
-                            let row_rect = ui.horizontal(|ui| {
-                                let name_color = ui.visuals().strong_text_color();
-                                let dim_color = ui.visuals().text_color();
-                                ui.add_sized(
-                                    [COL_NAME, row_h],
-                                    egui::Label::new(
-                                        egui::RichText::new(&r.name).color(name_color),
-                                    ).truncate(),
-                                );
-                                ui.add_sized(
-                                    [COL_LVL, row_h],
-                                    egui::Label::new(
-                                        egui::RichText::new(r.level.to_string()).color(dim_color),
-                                    ),
-                                );
-                                ui.add_sized(
-                                    [COL_CLASS, row_h],
-                                    egui::Label::new(
-                                        egui::RichText::new(data.game_data.class_name(r.class)).color(dim_color),
-                                    ).truncate(),
-                                );
-                                for coord in [r.x, r.y, r.z] {
+                            let row_rect = ui
+                                .horizontal(|ui| {
+                                    let name_color = ui.visuals().strong_text_color();
+                                    let dim_color = ui.visuals().text_color();
                                     ui.add_sized(
-                                        [COL_COORD, row_h],
+                                        [COL_NAME, row_h],
                                         egui::Label::new(
-                                            egui::RichText::new(format!("{:.1}", coord))
+                                            egui::RichText::new(&r.name).color(name_color),
+                                        )
+                                        .truncate(),
+                                    );
+                                    ui.add_sized(
+                                        [COL_LVL, row_h],
+                                        egui::Label::new(
+                                            egui::RichText::new(r.level.to_string())
                                                 .color(dim_color),
                                         ),
                                     );
-                                }
-                            }).response.rect;
+                                    ui.add_sized(
+                                        [COL_CLASS, row_h],
+                                        egui::Label::new(
+                                            egui::RichText::new(data.game_data.class_name(r.class))
+                                                .color(dim_color),
+                                        )
+                                        .truncate(),
+                                    );
+                                    for coord in [r.x, r.y, r.z] {
+                                        ui.add_sized(
+                                            [COL_COORD, row_h],
+                                            egui::Label::new(
+                                                egui::RichText::new(format!("{:.1}", coord))
+                                                    .color(dim_color),
+                                            ),
+                                        );
+                                    }
+                                })
+                                .response
+                                .rect;
 
                             let row_resp = ui.interact(
                                 row_rect,

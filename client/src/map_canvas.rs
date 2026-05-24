@@ -4,7 +4,7 @@ use egui::{Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 
 use crate::config::MapOverlaySettings;
 use crate::data::AppData;
-use crate::data::spawns::{con_color, ConColor, SpawnCategory, SpawnInfo};
+use crate::data::spawns::{ConColor, SpawnCategory, SpawnInfo, con_color};
 use crate::game_data::GameData;
 use crate::map_reader::MapData;
 
@@ -58,7 +58,13 @@ impl<'a> MapCon<'a> {
 
     /// `z_filter`: if `Some((center_z, range))`, spawns with `|z - center| > range` are hidden.
     /// Returns `Some(MapAction)` if the context menu produced an action this frame.
-    pub fn show(self, ui: &mut Ui, z_filter: Option<(f32, f32)>, overlay: &MapOverlaySettings, filtered_ids: Option<&HashSet<u32>>) -> Option<MapAction> {
+    pub fn show(
+        self,
+        ui: &mut Ui,
+        z_filter: Option<(f32, f32)>,
+        overlay: &MapOverlaySettings,
+        filtered_ids: Option<&HashSet<u32>>,
+    ) -> Option<MapAction> {
         let MapCon { data, state } = self;
 
         let size = ui.available_size();
@@ -72,7 +78,11 @@ impl<'a> MapCon<'a> {
         // Scroll to zoom — guard with hovered() so scroll in other panels doesn't zoom the map
         let scroll = ui.input(|i| i.smooth_scroll_delta.y);
         if scroll != 0.0 && response.hovered() {
-            let factor = if scroll > 0.0 { ZOOM_STEP } else { 1.0 / ZOOM_STEP };
+            let factor = if scroll > 0.0 {
+                ZOOM_STEP
+            } else {
+                1.0 / ZOOM_STEP
+            };
             state.zoom = (state.zoom * factor).clamp(ZOOM_MIN, ZOOM_MAX);
         }
 
@@ -84,7 +94,8 @@ impl<'a> MapCon<'a> {
         }
 
         // Shift+left-click → set bearing target; plain click or ESC → clear it.
-        let (shift_held, esc_pressed) = ui.input(|i| (i.modifiers.shift, i.key_pressed(egui::Key::Escape)));
+        let (shift_held, esc_pressed) =
+            ui.input(|i| (i.modifiers.shift, i.key_pressed(egui::Key::Escape)));
         if esc_pressed {
             state.bearing_target = None;
         } else if response.clicked_by(egui::PointerButton::Primary) {
@@ -102,7 +113,9 @@ impl<'a> MapCon<'a> {
         }
 
         // Right-click: save map-space position for the context menu.
-        if response.secondary_clicked() && let Some(screen_pos) = response.interact_pointer_pos() {
+        if response.secondary_clicked()
+            && let Some(screen_pos) = response.interact_pointer_pos()
+        {
             let center = response.rect.center();
             let focus = focus_world(data);
             let wx = focus.0 + (screen_pos.x - center.x - state.pan.x) / state.zoom;
@@ -143,7 +156,10 @@ impl<'a> MapCon<'a> {
         response.context_menu(|ui| {
             if let Some((wx, wy)) = state.context_menu_pos {
                 if ui.button("Add Map Note here…").clicked() {
-                    action = Some(MapAction::AddNoteAt { eq_x: -wx, eq_y: wy });
+                    action = Some(MapAction::AddNoteAt {
+                        eq_x: -wx,
+                        eq_y: wy,
+                    });
                     ui.close();
                 }
                 if ui.button("Center map here").clicked() {
@@ -159,7 +175,6 @@ impl<'a> MapCon<'a> {
 
         action
     }
-
 }
 
 /// Transform EQ spawn coordinates to map coordinate space.
@@ -190,14 +205,18 @@ fn draw_mob_trails(ctx: &DrawCtx, data: &AppData, filtered_ids: Option<&HashSet<
     }
     for (&spawn_id, trail) in &data.trails {
         if let Some(ids) = filtered_ids
-            && !ids.contains(&spawn_id) {
-                continue;
-            }
+            && !ids.contains(&spawn_id)
+        {
+            continue;
+        }
         for &(mx, my) in trail {
             let pos = ctx.to_screen(mx, my);
             if ctx.is_visible(pos) {
-                ctx.painter
-                    .circle_filled(pos, 2.0, Color32::from_rgba_premultiplied(160, 100, 40, 140));
+                ctx.painter.circle_filled(
+                    pos,
+                    2.0,
+                    Color32::from_rgba_premultiplied(160, 100, 40, 140),
+                );
             }
         }
     }
@@ -232,10 +251,8 @@ fn draw_map_lines(ctx: &DrawCtx, map: &MapData, overlay: &MapOverlaySettings) {
         let p2 = ctx.to_screen(line.p2.x, line.p2.y);
         if ctx.either_visible(p1, p2) {
             let [r, g, b] = line.color;
-            ctx.painter.line_segment(
-                [p1, p2],
-                Stroke::new(1.0, map_color(r, g, b)),
-            );
+            ctx.painter
+                .line_segment([p1, p2], Stroke::new(1.0, map_color(r, g, b)));
         }
     }
 }
@@ -268,7 +285,13 @@ fn draw_labels(ctx: &DrawCtx, map: &MapData, overlay: &MapOverlaySettings) {
     }
 }
 
-fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, overlay: &MapOverlaySettings, filtered_ids: Option<&HashSet<u32>>) {
+fn draw_spawns(
+    ctx: &DrawCtx,
+    data: &AppData,
+    z_filter: Option<(f32, f32)>,
+    overlay: &MapOverlaySettings,
+    filtered_ids: Option<&HashSet<u32>>,
+) {
     let player_level = data.self_level();
     for spawn in data.spawns.iter() {
         if Some(spawn.id) == data.self_id {
@@ -280,9 +303,11 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, over
 
         // Spawn filter — target is always shown regardless of filter state
         if let Some(ids) = filtered_ids
-            && data.target_id != Some(spawn.id) && !ids.contains(&spawn.id) {
-                continue;
-            }
+            && data.target_id != Some(spawn.id)
+            && !ids.contains(&spawn.id)
+        {
+            continue;
+        }
 
         // Visibility filtering
         let visible = match spawn.spawn_category {
@@ -308,7 +333,12 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, over
                 // PC corpse: hollow yellow square (matches C# DrawRectangle with yellowPen)
                 let r = SPAWN_RADIUS;
                 let sq = egui::Rect::from_center_size(pos, egui::Vec2::splat(r * 2.0));
-                ctx.painter.rect_stroke(sq, 0.0, Stroke::new(1.5, Color32::from_rgb(255, 210, 0)), egui::StrokeKind::Middle);
+                ctx.painter.rect_stroke(
+                    sq,
+                    0.0,
+                    Stroke::new(1.5, Color32::from_rgb(255, 210, 0)),
+                    egui::StrokeKind::Middle,
+                );
             } else {
                 // NPC corpse: cyan crosshair (matches C# DrawLine with cyanPen)
                 let d = SPAWN_RADIUS;
@@ -325,30 +355,66 @@ fn draw_spawns(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>, over
             let r = SPAWN_RADIUS;
             let sq = egui::Rect::from_center_size(pos, egui::Vec2::splat(r * 2.0));
             ctx.painter.rect_filled(sq, 0.0, color);
-            ctx.painter.rect_stroke(sq, 0.0, Stroke::new(1.0, Color32::from_rgb(255, 0, 255)), egui::StrokeKind::Middle);
+            ctx.painter.rect_stroke(
+                sq,
+                0.0,
+                Stroke::new(1.0, Color32::from_rgb(255, 0, 255)),
+                egui::StrokeKind::Middle,
+            );
             if data.selected_id == Some(spawn.id) {
-                ctx.painter.rect_stroke(sq.expand(4.0), 0.0, Stroke::new(2.0, Color32::from_rgb(255, 200, 0)), egui::StrokeKind::Outside);
+                ctx.painter.rect_stroke(
+                    sq.expand(4.0),
+                    0.0,
+                    Stroke::new(2.0, Color32::from_rgb(255, 200, 0)),
+                    egui::StrokeKind::Outside,
+                );
             } else if data.marked_ids.contains(&spawn.id) {
-                ctx.painter.rect_stroke(sq.expand(3.0), 0.0, Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Outside);
+                ctx.painter.rect_stroke(
+                    sq.expand(3.0),
+                    0.0,
+                    Stroke::new(1.5, Color32::WHITE),
+                    egui::StrokeKind::Outside,
+                );
             }
             if data.target_id == Some(spawn.id) {
-                ctx.painter.rect_stroke(sq.expand(6.0), 0.0, Stroke::new(2.0, Color32::from_rgb(255, 120, 0)), egui::StrokeKind::Outside);
+                ctx.painter.rect_stroke(
+                    sq.expand(6.0),
+                    0.0,
+                    Stroke::new(2.0, Color32::from_rgb(255, 120, 0)),
+                    egui::StrokeKind::Outside,
+                );
             }
         } else {
             ctx.painter.circle_filled(pos, SPAWN_RADIUS, color);
             if data.selected_id == Some(spawn.id) {
-                ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 4.0, Stroke::new(2.0, Color32::from_rgb(255, 200, 0)));
+                ctx.painter.circle_stroke(
+                    pos,
+                    SPAWN_RADIUS + 4.0,
+                    Stroke::new(2.0, Color32::from_rgb(255, 200, 0)),
+                );
             } else if data.marked_ids.contains(&spawn.id) {
-                ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 3.0, Stroke::new(1.5, Color32::WHITE));
+                ctx.painter.circle_stroke(
+                    pos,
+                    SPAWN_RADIUS + 3.0,
+                    Stroke::new(1.5, Color32::WHITE),
+                );
             }
             if data.target_id == Some(spawn.id) {
-                ctx.painter.circle_stroke(pos, SPAWN_RADIUS + 6.0, Stroke::new(2.0, Color32::from_rgb(255, 120, 0)));
+                ctx.painter.circle_stroke(
+                    pos,
+                    SPAWN_RADIUS + 6.0,
+                    Stroke::new(2.0, Color32::from_rgb(255, 120, 0)),
+                );
             }
         }
 
         // Map label overlay
         let label: Option<String> = if is_pc {
-            if overlay.show_player_names { Some(spawn.name.clone()) } else { None }
+            if overlay.show_player_names {
+                Some(spawn.name.clone())
+            } else {
+                None
+            }
         } else {
             match (overlay.show_npc_names, overlay.show_npc_levels) {
                 (true, true) => Some(format!("{} ({})", spawn.name, spawn.level)),
@@ -377,7 +443,8 @@ fn draw_self(ctx: &DrawCtx, data: &AppData) {
     let pos = ctx.to_screen(mx, my);
 
     ctx.painter.circle_filled(pos, SELF_RADIUS, Color32::WHITE);
-    ctx.painter.circle_stroke(pos, SELF_RADIUS, Stroke::new(1.5, Color32::BLACK));
+    ctx.painter
+        .circle_stroke(pos, SELF_RADIUS, Stroke::new(1.5, Color32::BLACK));
 
     // Direction arrow — EQ heading: 0 = north, 128 = west, 256 = south, 384 = east,
     // 512 = full circle. Increases counter-clockwise. Matches C# MySEQ xSin/xCos convention.
@@ -387,7 +454,8 @@ fn draw_self(ctx: &DrawCtx, data: &AppData) {
         pos.x - heading_rad.sin() * arrow_len,
         pos.y - heading_rad.cos() * arrow_len,
     );
-    ctx.painter.line_segment([pos, tip], Stroke::new(2.0, Color32::WHITE));
+    ctx.painter
+        .line_segment([pos, tip], Stroke::new(2.0, Color32::WHITE));
 }
 
 fn draw_ground_items(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>) {
@@ -494,7 +562,13 @@ enum HoverHit<'a> {
     Ground(&'a crate::data::ground::GroundItem),
 }
 
-fn draw_hover_tooltip(ui: &mut Ui, ctx: &DrawCtx, data: &AppData, hover_pos: Pos2, z_filter: Option<(f32, f32)>) {
+fn draw_hover_tooltip(
+    ui: &mut Ui,
+    ctx: &DrawCtx,
+    data: &AppData,
+    hover_pos: Pos2,
+    z_filter: Option<(f32, f32)>,
+) {
     const HOVER_RADIUS: f32 = 8.0;
     let mut best_dist = f32::MAX;
     let mut hit: Option<HoverHit<'_>> = None;
@@ -535,32 +609,43 @@ fn draw_hover_tooltip(ui: &mut Ui, ctx: &DrawCtx, data: &AppData, hover_pos: Pos
 
     let player = data.self_id.and_then(|id| data.spawns.get(id));
     let player_dist = |x: f32, y: f32| -> String {
-        player.map(|s| {
-            let dx = x - s.x;
-            let dy = y - s.y;
-            format!("{:.0}", (dx * dx + dy * dy).sqrt())
-        }).unwrap_or_else(|| "?".to_owned())
+        player
+            .map(|s| {
+                let dx = x - s.x;
+                let dy = y - s.y;
+                format!("{:.0}", (dx * dx + dy * dy).sqrt())
+            })
+            .unwrap_or_else(|| "?".to_owned())
     };
 
     #[allow(deprecated)]
-    egui::show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), egui::Id::new("map_hover_tooltip"), |ui| {
-        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-        match hit {
-            HoverHit::Spawn(s) => {
-                ui.label(format!("{} ({})", s.name, s.level));
-                let invis = if s.hidden != 0 { "Invis" } else { "Visible" };
-                ui.label(format!("{} / {}", data.game_data.race_name(s.race), data.game_data.class_name(s.class)));
-                ui.label(format!("Invisible: {invis}"));
-                ui.label(format!("Speed: {:.1}", s.speed));
-                ui.label(format!("Dist: {}", player_dist(s.x, s.y)));
-                ui.label(format!("Loc: {:.2}, {:.2}, {:.2}", s.x, s.y, s.z));
+    egui::show_tooltip_at_pointer(
+        ui.ctx(),
+        ui.layer_id(),
+        egui::Id::new("map_hover_tooltip"),
+        |ui| {
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            match hit {
+                HoverHit::Spawn(s) => {
+                    ui.label(format!("{} ({})", s.name, s.level));
+                    let invis = if s.hidden != 0 { "Invis" } else { "Visible" };
+                    ui.label(format!(
+                        "{} / {}",
+                        data.game_data.race_name(s.race),
+                        data.game_data.class_name(s.class)
+                    ));
+                    ui.label(format!("Invisible: {invis}"));
+                    ui.label(format!("Speed: {:.1}", s.speed));
+                    ui.label(format!("Dist: {}", player_dist(s.x, s.y)));
+                    ui.label(format!("Loc: {:.2}, {:.2}, {:.2}", s.x, s.y, s.z));
+                }
+                HoverHit::Ground(g) => {
+                    ui.label(&g.name);
+                    ui.label(format!("Dist: {}", player_dist(g.x, g.y)));
+                }
             }
-            HoverHit::Ground(g) => {
-                ui.label(&g.name);
-                ui.label(format!("Dist: {}", player_dist(g.x, g.y)));
-            }
-        }
-    });
+        },
+    );
 }
 
 fn draw_bearing_line(ctx: &DrawCtx, data: &AppData, target: (f32, f32)) {
@@ -573,10 +658,12 @@ fn draw_bearing_line(ctx: &DrawCtx, data: &AppData, target: (f32, f32)) {
     let target_screen = ctx.to_screen(target_mx, target_my);
 
     let color = Color32::from_rgb(255, 220, 0);
-    ctx.painter.line_segment([player_screen, target_screen], Stroke::new(1.5, color));
+    ctx.painter
+        .line_segment([player_screen, target_screen], Stroke::new(1.5, color));
 
     // Small crosshair circle at target
-    ctx.painter.circle_stroke(target_screen, 5.0, Stroke::new(1.5, color));
+    ctx.painter
+        .circle_stroke(target_screen, 5.0, Stroke::new(1.5, color));
 
     // Distance in EQ units (map-space distance == EQ-space distance; eq_to_map only flips sign)
     let dx = target_mx - player_mx;
@@ -585,9 +672,18 @@ fn draw_bearing_line(ctx: &DrawCtx, data: &AppData, target: (f32, f32)) {
 
     // Bearing: angle clockwise from north. Map north = +y, east = +x.
     let bearing_deg = dx.atan2(dy).to_degrees();
-    let bearing_deg = if bearing_deg < 0.0 { bearing_deg + 360.0 } else { bearing_deg };
+    let bearing_deg = if bearing_deg < 0.0 {
+        bearing_deg + 360.0
+    } else {
+        bearing_deg
+    };
 
-    let label = format!("{:.0} units  {:.0}°  {}", distance, bearing_deg, to_cardinal(bearing_deg));
+    let label = format!(
+        "{:.0} units  {:.0}°  {}",
+        distance,
+        bearing_deg,
+        to_cardinal(bearing_deg)
+    );
     ctx.painter.text(
         target_screen + Vec2::new(8.0, -8.0),
         egui::Align2::LEFT_BOTTOM,
@@ -639,7 +735,9 @@ fn spawn_color(spawn: &SpawnInfo, player_level: u8, game_data: &GameData) -> Col
     match spawn.spawn_category {
         SpawnCategory::Pc => con_to_color(con_color(player_level, spawn.level)),
         SpawnCategory::Corpse => Color32::from_rgb(80, 40, 40),
-        SpawnCategory::Pet | SpawnCategory::Merc => con_to_color(con_color(player_level, spawn.level)),
+        SpawnCategory::Pet | SpawnCategory::Merc => {
+            con_to_color(con_color(player_level, spawn.level))
+        }
         SpawnCategory::Npc => con_to_color(con_color(player_level, spawn.level)),
     }
 }

@@ -43,17 +43,29 @@ impl MapData {
 
     /// Axis-aligned bounding box over all line endpoints. Returns None for empty maps.
     #[allow(dead_code)]
-    pub fn bounding_box(&self) -> Option<(MapPoint, MapPoint) > {
+    pub fn bounding_box(&self) -> Option<(MapPoint, MapPoint)> {
         let mut pts = self.lines.iter().flat_map(|l| [l.p1, l.p2]);
         let first = pts.next()?;
         let (mut min, mut max) = (first, first);
         for p in pts {
-            if p.x < min.x { min.x = p.x; }
-            if p.y < min.y { min.y = p.y; }
-            if p.z < min.z { min.z = p.z; }
-            if p.x > max.x { max.x = p.x; }
-            if p.y > max.y { max.y = p.y; }
-            if p.z > max.z { max.z = p.z; }
+            if p.x < min.x {
+                min.x = p.x;
+            }
+            if p.y < min.y {
+                min.y = p.y;
+            }
+            if p.z < min.z {
+                min.z = p.z;
+            }
+            if p.x > max.x {
+                max.x = p.x;
+            }
+            if p.y > max.y {
+                max.y = p.y;
+            }
+            if p.z > max.z {
+                max.z = p.z;
+            }
         }
         Some((min, max))
     }
@@ -143,7 +155,11 @@ pub fn load_zone(dir: &Path, zone: &str) -> Result<MapData, MapError> {
             found = true;
         }
     }
-    if found { Ok(combined) } else { Err(MapError::NoLayersFound) }
+    if found {
+        Ok(combined)
+    } else {
+        Err(MapError::NoLayersFound)
+    }
 }
 
 // --- internal parsers ---
@@ -160,8 +176,16 @@ fn parse_map_line(rest: &str) -> Option<MapLine> {
     let g = t.u8()?;
     let b = t.u8()?;
     Some(MapLine {
-        p1: MapPoint { x: x1, y: y1, z: z1 },
-        p2: MapPoint { x: x2, y: y2, z: z2 },
+        p1: MapPoint {
+            x: x1,
+            y: y1,
+            z: z1,
+        },
+        p2: MapPoint {
+            x: x2,
+            y: y2,
+            z: z2,
+        },
         color: [r, g, b],
         layer: 0,
     })
@@ -194,16 +218,22 @@ struct Tokenizer<'a> {
 
 impl<'a> Tokenizer<'a> {
     fn new(src: &'a str) -> Self {
-        Self { src: src.trim_start_matches(|c: char| c == ',' || c.is_whitespace()) }
+        Self {
+            src: src.trim_start_matches(|c: char| c == ',' || c.is_whitespace()),
+        }
     }
 
     fn next_token(&mut self) -> Option<&str> {
-        let s = self.src.trim_start_matches(|c: char| c == ',' || c.is_whitespace());
+        let s = self
+            .src
+            .trim_start_matches(|c: char| c == ',' || c.is_whitespace());
         if s.is_empty() {
             self.src = s;
             return None;
         }
-        let end = s.find(|c: char| c == ',' || c.is_whitespace()).unwrap_or(s.len());
+        let end = s
+            .find(|c: char| c == ',' || c.is_whitespace())
+            .unwrap_or(s.len());
         let token = &s[..end];
         self.src = s[end..].trim_start_matches(|c: char| c == ',' || c.is_whitespace());
         Some(token)

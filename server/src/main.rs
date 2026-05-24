@@ -10,13 +10,14 @@ mod notifier;
 mod scanner;
 mod server_logic;
 mod session;
+mod wizard;
 
 use std::sync::{Arc, Mutex};
 
 use clap::{Parser, Subcommand};
 use config::IniReader;
-use eframe::egui;
 use debug::DebugLoop;
+use eframe::egui;
 use mem_reader::MemReader;
 use network::{NetworkServer, StubDataProvider};
 use notifier::{LoggingNotifier, UiNotifier};
@@ -92,7 +93,11 @@ fn load_icon() -> egui::IconData {
         .expect("valid PNG icon")
         .into_rgba8();
     let (width, height) = img.dimensions();
-    egui::IconData { rgba: img.into_raw(), width, height }
+    egui::IconData {
+        rgba: img.into_raw(),
+        width,
+        height,
+    }
 }
 
 fn run_gui(ini_override: Option<&str>) {
@@ -247,7 +252,9 @@ fn attach_parent_console() {
     use windows::Win32::System::Console::AttachConsole;
     // ATTACH_PARENT_PROCESS = 0xFFFFFFFF — attach to whichever console launched us.
     // Failure is silent: the process simply has no console (e.g., double-clicked).
-    unsafe { let _ = AttachConsole(u32::MAX); }
+    unsafe {
+        let _ = AttachConsole(u32::MAX);
+    }
 }
 
 fn relaunch_if_known_name(_known_stem: &str) {
@@ -282,7 +289,11 @@ fn relaunch_if_known_name(_known_stem: &str) {
         return;
     }
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if std::process::Command::new(&new_path).args(&args).spawn().is_err() {
+    if std::process::Command::new(&new_path)
+        .args(&args)
+        .spawn()
+        .is_err()
+    {
         let _ = std::fs::remove_file(&new_path);
         return;
     }
@@ -450,8 +461,11 @@ mod tests {
         std::fs::create_dir_all(&server_dir).expect("create workspace server dir");
         std::fs::create_dir_all(&target_dir).expect("create target dir");
         std::fs::create_dir_all(&winshoweq_dir).expect("create ProgramData WinShowEQ dir");
-        std::fs::write(server_dir.join("myseqserver.ini"), "[File Info]\nPatchDate=01/01/2000\n")
-            .expect("write workspace ini");
+        std::fs::write(
+            server_dir.join("myseqserver.ini"),
+            "[File Info]\nPatchDate=01/01/2000\n",
+        )
+        .expect("write workspace ini");
 
         let resolved = resolve_ini_path_with(
             "myseqserver.ini",
@@ -480,8 +494,11 @@ mod tests {
 
         std::fs::create_dir_all(&server_dir).expect("create workspace server dir");
         std::fs::create_dir_all(&cwd).expect("create cwd");
-        std::fs::write(server_dir.join("config.ini"), "[Server]\nStartMinimized=0\n")
-            .expect("write workspace config ini");
+        std::fs::write(
+            server_dir.join("config.ini"),
+            "[Server]\nStartMinimized=0\n",
+        )
+        .expect("write workspace config ini");
 
         let resolved = resolve_ini_path_with("config.ini", None, Some(cwd), None);
 

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-
 /// EQ string database parsed from dbstr_us.txt.
 /// Race entries follow the pattern: `race_id^11^RaceName^0^`
 #[derive(Default)]
@@ -65,30 +64,42 @@ impl GameData {
         for line in content.lines() {
             // Format: race_id^type^text  (type 11 = singular race name)
             let mut parts = line.splitn(4, '^');
-            let Some(race_id_str) = parts.next() else { continue };
-            let Some(type_str) = parts.next() else { continue };
+            let Some(race_id_str) = parts.next() else {
+                continue;
+            };
+            let Some(type_str) = parts.next() else {
+                continue;
+            };
             let Some(text) = parts.next() else { continue };
             if type_str != "11" {
                 continue;
             }
-            let Ok(race_id) = race_id_str.trim().parse::<u32>() else { continue };
+            let Ok(race_id) = race_id_str.trim().parse::<u32>() else {
+                continue;
+            };
             if !text.is_empty() {
                 races.insert(race_id, text.to_owned());
             }
         }
-        Self { races, classes: HashMap::new(), color_palette: HashMap::new(), spawn_colors: HashMap::new() }
+        Self {
+            races,
+            classes: HashMap::new(),
+            color_palette: HashMap::new(),
+            spawn_colors: HashMap::new(),
+        }
     }
 
     /// Load class names from a JSON file mapping class ID strings to names.
     /// Silently ignored if the file is missing or malformed.
     pub fn load_classes(&mut self, path: &Path) {
         if let Ok(content) = std::fs::read_to_string(path)
-            && let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
-                self.classes = map
-                    .into_iter()
-                    .filter_map(|(k, v)| k.parse::<u8>().ok().map(|id| (id, v)))
-                    .collect();
-            }
+            && let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content)
+        {
+            self.classes = map
+                .into_iter()
+                .filter_map(|(k, v)| k.parse::<u8>().ok().map(|id| (id, v)))
+                .collect();
+        }
     }
 
     /// Load the named color palette from `colors.json`.
@@ -96,22 +107,23 @@ impl GameData {
     /// Silently ignored if the file is missing or malformed.
     pub fn load_color_palette(&mut self, path: &Path) {
         if let Ok(content) = std::fs::read_to_string(path)
-            && let Ok(map) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) {
-                self.color_palette = map
-                    .into_iter()
-                    .filter_map(|(k, v)| {
-                        let arr = v.get("rgb")?.as_array()?;
-                        if arr.len() == 3 {
-                            let r = arr[0].as_u64()? as u8;
-                            let g = arr[1].as_u64()? as u8;
-                            let b = arr[2].as_u64()? as u8;
-                            Some((k, [r, g, b]))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-            }
+            && let Ok(map) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content)
+        {
+            self.color_palette = map
+                .into_iter()
+                .filter_map(|(k, v)| {
+                    let arr = v.get("rgb")?.as_array()?;
+                    if arr.len() == 3 {
+                        let r = arr[0].as_u64()? as u8;
+                        let g = arr[1].as_u64()? as u8;
+                        let b = arr[2].as_u64()? as u8;
+                        Some((k, [r, g, b]))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+        }
     }
 
     /// Load spawn color overrides from `spawn_colors.json`.
@@ -121,13 +133,14 @@ impl GameData {
     pub fn load_spawn_colors(&mut self, path: &Path) {
         self.spawn_colors.clear();
         if let Ok(content) = std::fs::read_to_string(path)
-            && let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
-                for (name, color_key) in map {
-                    if let Some(&rgb) = self.color_palette.get(&color_key) {
-                        self.spawn_colors.insert(name.to_lowercase(), rgb);
-                    }
+            && let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content)
+        {
+            for (name, color_key) in map {
+                if let Some(&rgb) = self.color_palette.get(&color_key) {
+                    self.spawn_colors.insert(name.to_lowercase(), rgb);
                 }
             }
+        }
     }
 
     /// Return a custom RGB color for `name` if one is configured in `spawn_colors.json`.
@@ -140,19 +153,36 @@ impl GameData {
     /// Unknown IDs render as "ID# Unknown" to aid adding new entries to classes.json.
     pub fn class_name(&self, class: u8) -> String {
         if !self.classes.is_empty() {
-            return self.classes.get(&class)
+            return self
+                .classes
+                .get(&class)
                 .cloned()
                 .unwrap_or_else(|| format!("{} Unknown", class));
         }
         match class {
-            1 => "Warrior", 2 => "Cleric", 3 => "Paladin", 4 => "Ranger",
-            5 => "Shadow Knight", 6 => "Druid", 7 => "Monk", 8 => "Bard",
-            9 => "Rogue", 10 => "Shaman", 11 => "Necromancer", 12 => "Wizard",
-            13 => "Magician", 14 => "Enchanter", 15 => "Beastlord", 16 => "Berserker",
-            40 => "Banker", 41 => "Shopkeeper", 66 => "Guild Banker",
+            1 => "Warrior",
+            2 => "Cleric",
+            3 => "Paladin",
+            4 => "Ranger",
+            5 => "Shadow Knight",
+            6 => "Druid",
+            7 => "Monk",
+            8 => "Bard",
+            9 => "Rogue",
+            10 => "Shaman",
+            11 => "Necromancer",
+            12 => "Wizard",
+            13 => "Magician",
+            14 => "Enchanter",
+            15 => "Beastlord",
+            16 => "Berserker",
+            40 => "Banker",
+            41 => "Shopkeeper",
+            66 => "Guild Banker",
             71 => "Mercenary Liaison",
             _ => return format!("{} Unknown", class),
-        }.to_owned()
+        }
+        .to_owned()
     }
 
     pub fn race_name(&self, id: u32) -> &str {
@@ -163,23 +193,22 @@ impl GameData {
     }
 }
 
-
 /// Minimal fallback table for when dbstr_us.txt is not available.
 /// Covers playable PC races only (indices match spawn race IDs).
 static FALLBACK_RACES: &[&str] = &[
-    "Unknown",    // 0
-    "Human",      // 1
-    "Barbarian",  // 2
-    "Erudite",    // 3
-    "Wood Elf",   // 4
-    "High Elf",   // 5
-    "Dark Elf",   // 6
-    "Half Elf",   // 7
-    "Dwarf",      // 8
-    "Troll",      // 9
-    "Ogre",       // 10
-    "Halfling",   // 11
-    "Gnome",      // 12
+    "Unknown",   // 0
+    "Human",     // 1
+    "Barbarian", // 2
+    "Erudite",   // 3
+    "Wood Elf",  // 4
+    "High Elf",  // 5
+    "Dark Elf",  // 6
+    "Half Elf",  // 7
+    "Dwarf",     // 8
+    "Troll",     // 9
+    "Ogre",      // 10
+    "Halfling",  // 11
+    "Gnome",     // 12
 ];
 
 #[cfg(test)]
@@ -217,7 +246,11 @@ mod tests {
 
         let palette_path = dir.join("test_colors.json");
         let mut f = std::fs::File::create(&palette_path).unwrap();
-        write!(f, r##"{{"flame": {{"name": "Flame", "hex": "#e25822", "rgb": [226, 88, 34]}}}}"##).unwrap();
+        write!(
+            f,
+            r##"{{"flame": {{"name": "Flame", "hex": "#e25822", "rgb": [226, 88, 34]}}}}"##
+        )
+        .unwrap();
 
         let overrides_path = dir.join("test_spawn_colors.json");
         let mut f = std::fs::File::create(&overrides_path).unwrap();
@@ -227,7 +260,10 @@ mod tests {
         gd.load_color_palette(&palette_path);
         gd.load_spawn_colors(&overrides_path);
 
-        assert_eq!(gd.spawn_color_override("Fippy Darkpaw"), Some([226, 88, 34]));
+        assert_eq!(
+            gd.spawn_color_override("Fippy Darkpaw"),
+            Some([226, 88, 34])
+        );
     }
 
     #[test]
@@ -237,7 +273,11 @@ mod tests {
 
         let palette_path = dir.join("test_colors2.json");
         let mut f = std::fs::File::create(&palette_path).unwrap();
-        write!(f, r##"{{"cobalt": {{"name": "Cobalt", "hex": "#0047ab", "rgb": [0, 71, 171]}}}}"##).unwrap();
+        write!(
+            f,
+            r##"{{"cobalt": {{"name": "Cobalt", "hex": "#0047ab", "rgb": [0, 71, 171]}}}}"##
+        )
+        .unwrap();
 
         let overrides_path = dir.join("test_spawn_colors2.json");
         let mut f = std::fs::File::create(&overrides_path).unwrap();

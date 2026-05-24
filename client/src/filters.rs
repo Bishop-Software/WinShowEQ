@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::events::Event;
 
 /// Filter category. Priority for overlapping matches: Danger > Caution > Hunt > Rare.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -415,7 +415,10 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         set.save(tmp.path()).unwrap();
         let loaded = FilterSet::load(tmp.path());
-        assert_eq!(loaded.classify("Lord Nagafen"), Some(FilterCategory::Danger));
+        assert_eq!(
+            loaded.classify("Lord Nagafen"),
+            Some(FilterCategory::Danger)
+        );
         assert_eq!(loaded.classify("Fippy Darkpaw"), Some(FilterCategory::Hunt));
         assert_eq!(loaded.classify("a gnoll"), Some(FilterCategory::Caution));
         assert_eq!(loaded.classify("Lockjaw"), Some(FilterCategory::Rare));
@@ -467,10 +470,19 @@ mod tests {
 
     #[test]
     fn extract_old_filter_name_strips_prefix() {
-        assert_eq!(extract_old_filter_name("Name:Fippy Darkpaw"), Some("Fippy Darkpaw".to_owned()));
-        assert_eq!(extract_old_filter_name("name:fippy darkpaw"), Some("fippy darkpaw".to_owned()));
+        assert_eq!(
+            extract_old_filter_name("Name:Fippy Darkpaw"),
+            Some("Fippy Darkpaw".to_owned())
+        );
+        assert_eq!(
+            extract_old_filter_name("name:fippy darkpaw"),
+            Some("fippy darkpaw".to_owned())
+        );
         // '#' prefix is part of EQ named mob names — keep as-is
-        assert_eq!(extract_old_filter_name("Name:#Fippy"), Some("#Fippy".to_owned()));
+        assert_eq!(
+            extract_old_filter_name("Name:#Fippy"),
+            Some("#Fippy".to_owned())
+        );
         assert_eq!(extract_old_filter_name("Name:"), None);
         assert_eq!(extract_old_filter_name("Name:some[regex]"), None);
         assert_eq!(extract_old_filter_name("Name:^anchored"), None);

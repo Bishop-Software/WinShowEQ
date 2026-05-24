@@ -402,13 +402,14 @@ fn try_attach(
     let n = counter.fetch_add(1, Ordering::Relaxed);
     if n % 10 == 2
         && let Some(pid) = MemReader::find_process("eqgame.exe")
-            && mem.open(pid).is_ok() {
-                if let Some(notifier) = notifier {
-                    notifier.on_log_event(&format!("Attached to eqgame.exe PID={pid}"));
-                } else {
-                    println!("[STATE] Attached to eqgame.exe PID={pid}");
-                }
-            }
+        && mem.open(pid).is_ok()
+    {
+        if let Some(notifier) = notifier {
+            notifier.on_log_event(&format!("Attached to eqgame.exe PID={pid}"));
+        } else {
+            println!("[STATE] Attached to eqgame.exe PID={pid}");
+        }
+    }
     mem.pid() != 0
 }
 

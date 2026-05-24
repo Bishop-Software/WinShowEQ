@@ -4,7 +4,16 @@ use egui::Ui;
 use crate::data::AppData;
 
 const HEADERS: &[&str] = &[
-    "Name", "Remain", "Interval", "Zone", "X", "Y", "Z", "Count", "Spawn Time", "Kill Time",
+    "Name",
+    "Remain",
+    "Interval",
+    "Zone",
+    "X",
+    "Y",
+    "Z",
+    "Count",
+    "Spawn Time",
+    "Kill Time",
 ];
 
 fn format_timestamp(dt: chrono::DateTime<chrono::Utc>) -> String {
@@ -26,13 +35,23 @@ pub fn show(
     ui.horizontal(|ui| {
         for (col_idx, (header, width)) in HEADERS.iter().zip(col_widths.iter_mut()).enumerate() {
             let indicator = match sort_column {
-                Some(c) if *c == col_idx => if *sort_ascending { " ▲" } else { " ▼" },
+                Some(c) if *c == col_idx => {
+                    if *sort_ascending {
+                        " ▲"
+                    } else {
+                        " ▼"
+                    }
+                }
                 _ => "",
             };
             let label = format!("{}{}", header, indicator);
 
             let header_rect = ui.allocate_space(egui::vec2(*width, row_h)).1;
-            let header_resp = ui.interact(header_rect, ui.id().with("header").with(col_idx), egui::Sense::click());
+            let header_resp = ui.interact(
+                header_rect,
+                ui.id().with("header").with(col_idx),
+                egui::Sense::click(),
+            );
 
             let text_color = if header_resp.hovered() {
                 egui::Color32::WHITE
@@ -87,9 +106,21 @@ pub fn show(
                 1 => a.1.secs_remaining().cmp(&b.1.secs_remaining()),
                 2 => a.1.respawn_secs.cmp(&b.1.respawn_secs),
                 3 => a.1.zone.cmp(&b.1.zone),
-                4 => a.1.x.partial_cmp(&b.1.x).unwrap_or(std::cmp::Ordering::Equal),
-                5 => a.1.y.partial_cmp(&b.1.y).unwrap_or(std::cmp::Ordering::Equal),
-                6 => a.1.z.partial_cmp(&b.1.z).unwrap_or(std::cmp::Ordering::Equal),
+                4 => {
+                    a.1.x
+                        .partial_cmp(&b.1.x)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                }
+                5 => {
+                    a.1.y
+                        .partial_cmp(&b.1.y)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                }
+                6 => {
+                    a.1.z
+                        .partial_cmp(&b.1.z)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                }
                 7 => a.1.spawn_count.cmp(&b.1.spawn_count),
                 8 => a.1.spawn_time.cmp(&b.1.spawn_time),
                 9 => a.1.killed_at.cmp(&b.1.killed_at),
@@ -127,29 +158,45 @@ pub fn show(
                     format!("{:.2}", t.x),
                     format!("{:.2}", t.y),
                     format!("{:.2}", t.z),
-                    if t.spawn_count > 0 { t.spawn_count.to_string() } else { String::new() },
+                    if t.spawn_count > 0 {
+                        t.spawn_count.to_string()
+                    } else {
+                        String::new()
+                    },
                     t.spawn_time.map(format_timestamp).unwrap_or_default(),
                     format_timestamp(t.killed_at),
                 ];
 
-                let row_rect = ui.horizontal(|ui| {
-                    for (col_idx, text) in cells.iter().enumerate() {
-                        let cell_color = if col_idx == 1 { color } else { ui.visuals().text_color() };
-                        let (_, cell_rect) = ui.allocate_space(egui::vec2(col_widths[col_idx], row_h));
-                        ui.painter().with_clip_rect(cell_rect).text(
-                            egui::pos2(cell_rect.min.x + 4.0, cell_rect.center().y),
-                            egui::Align2::LEFT_CENTER,
-                            text,
-                            egui::FontId::default(),
-                            cell_color,
-                        );
-                        if col_idx < cells.len() - 1 {
-                            ui.allocate_space(egui::vec2(4.0, row_h));
+                let row_rect = ui
+                    .horizontal(|ui| {
+                        for (col_idx, text) in cells.iter().enumerate() {
+                            let cell_color = if col_idx == 1 {
+                                color
+                            } else {
+                                ui.visuals().text_color()
+                            };
+                            let (_, cell_rect) =
+                                ui.allocate_space(egui::vec2(col_widths[col_idx], row_h));
+                            ui.painter().with_clip_rect(cell_rect).text(
+                                egui::pos2(cell_rect.min.x + 4.0, cell_rect.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                text,
+                                egui::FontId::default(),
+                                cell_color,
+                            );
+                            if col_idx < cells.len() - 1 {
+                                ui.allocate_space(egui::vec2(4.0, row_h));
+                            }
                         }
-                    }
-                }).response.rect;
+                    })
+                    .response
+                    .rect;
 
-                let row_resp = ui.interact(row_rect, ui.id().with("timer").with(i), egui::Sense::click());
+                let row_resp = ui.interact(
+                    row_rect,
+                    ui.id().with("timer").with(i),
+                    egui::Sense::click(),
+                );
                 row_resp.context_menu(|ui| {
                     if ui.button("Remove timer").clicked() {
                         remove_idx = Some(i);

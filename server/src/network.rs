@@ -70,7 +70,10 @@ impl NetworkServer {
             }
         };
 
-        self.log_info(&format!("WinShowEQServer: Listening on 0.0.0.0:{}", self.port));
+        self.log_info(&format!(
+            "WinShowEQServer: Listening on 0.0.0.0:{}",
+            self.port
+        ));
 
         if let Some(n) = &self.notifier {
             n.on_connection_changed(&ConnectionEvent {
@@ -163,13 +166,18 @@ impl NetworkServer {
             }
 
             if request & IPT_SELF != 0
-                && let Some(mut rec) = provider.self_spawn() {
-                    rec.flags = OPT_SELF;
-                    let len = rec.name.iter().position(|&b| b == 0).unwrap_or(rec.name.len());
-                    ui_snap.character_name = String::from_utf8_lossy(&rec.name[..len]).into_owned();
-                    ui_dirty = true;
-                    records.push(rec);
-                }
+                && let Some(mut rec) = provider.self_spawn()
+            {
+                rec.flags = OPT_SELF;
+                let len = rec
+                    .name
+                    .iter()
+                    .position(|&b| b == 0)
+                    .unwrap_or(rec.name.len());
+                ui_snap.character_name = String::from_utf8_lossy(&rec.name[..len]).into_owned();
+                ui_dirty = true;
+                records.push(rec);
+            }
 
             if request & IPT_SPAWNS != 0 {
                 let mut npc = 0i32;
@@ -184,8 +192,8 @@ impl NetworkServer {
                     rec.flags = OPT_SPAWNS;
                     records.push(rec);
                 }
-                ui_snap.npc_count    = npc;
-                ui_snap.pc_count     = pc;
+                ui_snap.npc_count = npc;
+                ui_snap.pc_count = pc;
                 ui_snap.corpse_count = corpse;
                 ui_dirty = true;
             }
@@ -217,14 +225,14 @@ impl NetworkServer {
             }
 
             if request & IPT_WORLD != 0
-                && let Some(wt) = provider.world_time() {
-                    records.push(world_time_to_record(wt));
-                }
+                && let Some(wt) = provider.world_time()
+            {
+                records.push(world_time_to_record(wt));
+            }
 
-            if ui_dirty
-                && let Some(n) = &self.notifier {
-                    n.on_status_update(&ui_snap);
-                }
+            if ui_dirty && let Some(n) = &self.notifier {
+                n.on_status_update(&ui_snap);
+            }
 
             if flush_records(&mut stream, &records).is_err() {
                 break;

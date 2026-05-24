@@ -37,10 +37,7 @@ impl LoginDialog {
 
                 let parsed = self.server_str.parse::<SocketAddr>();
                 if parsed.is_err() {
-                    ui.colored_label(
-                        egui::Color32::RED,
-                        "Invalid address (e.g. 127.0.0.1:5555)",
-                    );
+                    ui.colored_label(egui::Color32::RED, "Invalid address (e.g. 127.0.0.1:5555)");
                 }
 
                 ui.add_space(4.0);

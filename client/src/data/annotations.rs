@@ -26,7 +26,15 @@ impl AnnotationStore {
     pub fn add(&mut self, text: String, x: f32, y: f32, z: f32, color: [u8; 3], size: u8) {
         let id = self.next_id;
         self.next_id += 1;
-        self.items.push(MapAnnotation { id, text, x, y, z, color, size });
+        self.items.push(MapAnnotation {
+            id,
+            text,
+            x,
+            y,
+            z,
+            color,
+            size,
+        });
     }
 
     #[allow(dead_code)]
@@ -74,8 +82,7 @@ impl AnnotationStore {
             writeln!(
                 f,
                 "{};{};{};{};{};{};{};{};{}",
-                a.id, a.text, a.x, a.y, a.z,
-                a.color[0], a.color[1], a.color[2], a.size
+                a.id, a.text, a.x, a.y, a.z, a.color[0], a.color[1], a.color[2], a.size
             )?;
         }
         Ok(())
@@ -97,7 +104,15 @@ fn parse_line(line: &str) -> Option<MapAnnotation> {
     let g: u8 = parts.next()?.parse().ok()?;
     let b: u8 = parts.next()?.parse().ok()?;
     let size: u8 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(12);
-    Some(MapAnnotation { id, text, x, y, z, color: [r, g, b], size })
+    Some(MapAnnotation {
+        id,
+        text,
+        x,
+        y,
+        z,
+        color: [r, g, b],
+        size,
+    })
 }
 
 #[cfg(test)]

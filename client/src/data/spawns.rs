@@ -77,7 +77,11 @@ fn categorize(spawn_type: u8, owner_id: u32, class: u8) -> SpawnCategory {
         2 => SpawnCategory::Corpse,
         _ => {
             if owner_id != 0 {
-                if class == 71 { SpawnCategory::Merc } else { SpawnCategory::Pet }
+                if class == 71 {
+                    SpawnCategory::Merc
+                } else {
+                    SpawnCategory::Pet
+                }
             } else {
                 SpawnCategory::Npc
             }
@@ -128,10 +132,36 @@ impl SpawnInfo {
         // offset 34 is EQ's east-west axis ('x'). The SpawnRecord field names are
         // swapped relative to EQ convention, so we cross-assign here so that
         // SpawnInfo.x = east-west and SpawnInfo.y = north-south, matching map files.
-        let (id, x, y, z, heading, speed, owner, class, race, level, hidden, primary, offhand, spawn_type) = (
-            rec.id, rec.y, rec.x, rec.z, rec.heading, rec.speed,
-            rec.owner, rec.class, rec.race, rec.level, rec.hidden,
-            rec.primary, rec.offhand, rec.spawn_type,
+        let (
+            id,
+            x,
+            y,
+            z,
+            heading,
+            speed,
+            owner,
+            class,
+            race,
+            level,
+            hidden,
+            primary,
+            offhand,
+            spawn_type,
+        ) = (
+            rec.id,
+            rec.y,
+            rec.x,
+            rec.z,
+            rec.heading,
+            rec.speed,
+            rec.owner,
+            rec.class,
+            rec.race,
+            rec.level,
+            rec.hidden,
+            rec.primary,
+            rec.offhand,
+            rec.spawn_type,
         );
         Self {
             id,
@@ -268,10 +298,22 @@ impl SpawnStore {
 #[allow(dead_code)]
 pub fn race_name(race: u32) -> &'static str {
     match race {
-        1 => "Human", 2 => "Barbarian", 3 => "Erudite", 4 => "Wood Elf",
-        5 => "High Elf", 6 => "Dark Elf", 7 => "Half Elf", 8 => "Dwarf",
-        9 => "Troll", 10 => "Ogre", 11 => "Halfling", 12 => "Gnome",
-        13 => "Iksar", 14 => "Vah Shir", 15 => "Froglok", 16 => "Drakkin",
+        1 => "Human",
+        2 => "Barbarian",
+        3 => "Erudite",
+        4 => "Wood Elf",
+        5 => "High Elf",
+        6 => "Dark Elf",
+        7 => "Half Elf",
+        8 => "Dwarf",
+        9 => "Troll",
+        10 => "Ogre",
+        11 => "Halfling",
+        12 => "Gnome",
+        13 => "Iksar",
+        14 => "Vah Shir",
+        15 => "Froglok",
+        16 => "Drakkin",
         _ => "---",
     }
 }
@@ -417,14 +459,20 @@ mod tests {
     fn pc_spawn_type_is_pc() {
         let mut rec = SpawnRecord::zeroed();
         rec.spawn_type = 0;
-        assert_eq!(SpawnInfo::from_record(&rec).spawn_category, SpawnCategory::Pc);
+        assert_eq!(
+            SpawnInfo::from_record(&rec).spawn_category,
+            SpawnCategory::Pc
+        );
     }
 
     #[test]
     fn corpse_spawn_type_is_corpse() {
         let mut rec = SpawnRecord::zeroed();
         rec.spawn_type = 2;
-        assert_eq!(SpawnInfo::from_record(&rec).spawn_category, SpawnCategory::Corpse);
+        assert_eq!(
+            SpawnInfo::from_record(&rec).spawn_category,
+            SpawnCategory::Corpse
+        );
     }
 
     #[test]
@@ -432,7 +480,10 @@ mod tests {
         let mut rec = SpawnRecord::zeroed();
         rec.spawn_type = 1;
         rec.owner = 0;
-        assert_eq!(SpawnInfo::from_record(&rec).spawn_category, SpawnCategory::Npc);
+        assert_eq!(
+            SpawnInfo::from_record(&rec).spawn_category,
+            SpawnCategory::Npc
+        );
     }
 
     #[test]
@@ -441,7 +492,10 @@ mod tests {
         rec.spawn_type = 1;
         rec.owner = 100;
         rec.class = 1;
-        assert_eq!(SpawnInfo::from_record(&rec).spawn_category, SpawnCategory::Pet);
+        assert_eq!(
+            SpawnInfo::from_record(&rec).spawn_category,
+            SpawnCategory::Pet
+        );
     }
 
     #[test]
@@ -450,7 +504,10 @@ mod tests {
         rec.spawn_type = 1;
         rec.owner = 100;
         rec.class = 71;
-        assert_eq!(SpawnInfo::from_record(&rec).spawn_category, SpawnCategory::Merc);
+        assert_eq!(
+            SpawnInfo::from_record(&rec).spawn_category,
+            SpawnCategory::Merc
+        );
     }
 
     // ── filter flags ─────────────────────────────────────────────────────────

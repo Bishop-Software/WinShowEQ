@@ -28,6 +28,7 @@ pub struct ScanResult {
     pub reload: bool,
     pub has_address_mismatch: bool,
     pub output: String,
+    pub primary: PrimaryOffsets,
 }
 
 /// Which PrimaryOffsets field a primary scan entry corresponds to.
@@ -51,6 +52,17 @@ impl OffsetKind {
             OffsetKind::Target => o.target,
             OffsetKind::Ground => o.ground,
             OffsetKind::World => o.world,
+        }
+    }
+
+    fn set(self, o: &mut PrimaryOffsets, val: u64) {
+        match self {
+            OffsetKind::ZoneName => o.zone_name = val,
+            OffsetKind::SpawnList => o.spawn_list = val,
+            OffsetKind::SelfAddr => o.self_addr = val,
+            OffsetKind::Target => o.target = val,
+            OffsetKind::Ground => o.ground = val,
+            OffsetKind::World => o.world = val,
         }
     }
 }
@@ -107,44 +119,7 @@ static PRIMARY_SCANS: &[PrimaryPatternEntry] = &[
     },
 ];
 
-/// Mirrors kSecondaryScans in EQGameScanner.cpp::ScanSecondary.
 static SECONDARY_SCANS: &[SecondaryPatternEntry] = &[
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoNextOffset",
-        output_label: "NextOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoPrevOffset",
-        output_label: "PrevOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoLastnameOffset",
-        output_label: "LastnameOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoXOffset",
-        output_label: "XOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoYOffset",
-        output_label: "YOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoZOffset",
-        output_label: "ZOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoSpeedOffset",
-        output_label: "SpeedOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoHeadingOffset",
-        output_label: "HeadingOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoNameOffset",
-        output_label: "NameOffset",
-    },
     SecondaryPatternEntry {
         ini_section: "SpawnInfoTypeOffset",
         output_label: "TypeOffset",
@@ -152,14 +127,6 @@ static SECONDARY_SCANS: &[SecondaryPatternEntry] = &[
     SecondaryPatternEntry {
         ini_section: "SpawnInfoSpawnIDOffset",
         output_label: "SpawnIDOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoOwnerIDOffset",
-        output_label: "OwnerIDOffset",
-    },
-    SecondaryPatternEntry {
-        ini_section: "SpawnInfoHideOffset",
-        output_label: "HideOffset",
     },
     SecondaryPatternEntry {
         ini_section: "SpawnInfoLevelOffset",
@@ -475,7 +442,7 @@ impl EqGameScanner {
         write_out: bool,
         reload: &mut bool,
         has_mismatch: &mut bool,
-    ) -> String {
+    ) -> (String, u64) {
         let start = ir.read_pattern_int(entry.ini_section, "Start");
         let pattern = ir.read_pattern_bytes(entry.ini_section, "Pattern");
         let mask_str = ir.read_pattern_string(entry.ini_section, "Mask");
@@ -503,7 +470,10 @@ impl EqGameScanner {
             " # Not Found\r\n"
         };
 
-        format!("{}=0x{:x}{}", entry.output_label, match_addr, suffix)
+        (
+            format!("{}=0x{:x}{}", entry.output_label, match_addr, suffix),
+            match_addr,
+        )
     }
 
     fn run_secondary_scan(
@@ -525,28 +495,26 @@ impl EqGameScanner {
             base_addr,
         );
 
-        let status = if match_val != 0 {
-            if write_out {
+        let suffix = if match_val != 0 {
+            let current = ir.read_integer_entry("SpawnInfo Offsets", entry.output_label, false);
+            if match_val == current {
+                " # Match\r\n"
+            } else if write_out {
                 let value_str = format!("0x{:x}", match_val);
-                if ir.write_string_entry("SpawnInfo Offsets", entry.output_label, &value_str, false) {
-                    "Written to ini file"
+                if ir.write_string_entry("SpawnInfo Offsets", entry.output_label, &value_str, false)
+                {
+                    " # Written to ini file\r\n"
                 } else {
-                    "Found - Write failed"
+                    " # Found - Write failed\r\n"
                 }
             } else {
-                "Found"
+                " # Found\r\n"
             }
         } else {
-            "Not Found"
+            " # Not Found\r\n"
         };
 
-        format!(
-            "{}:\r\n| Match Found @ {}\r\n| Offset -> 0x{:x}\r\n| {}\r\n\r\n",
-            entry.output_label,
-            if match_val != 0 { "TRUE" } else { "FALSE" },
-            match_val,
-            status,
-        )
+        format!("{}=0x{:x}{}", entry.output_label, match_val, suffix)
     }
 
     /// Run the primary (pointer address) scan against the exe.
@@ -561,6 +529,7 @@ impl EqGameScanner {
             reload: false,
             has_address_mismatch: false,
             output: String::new(),
+            primary: PrimaryOffsets::default(),
         };
 
         if !self.executable_exists() {
@@ -573,15 +542,17 @@ impl EqGameScanner {
         if let Some(pe) = self.parse_pe_headers() {
             let patch_date = unix_to_date(pe.time_date_stamp as u64);
             let client_hash = self.compute_client_hash().unwrap_or_default();
-            let build_string = self.scan_build_string(&pe).map(|raw| {
-                // Binary stores the short form "Release Client #NNN)\n" (newline before null).
-                // Trim trailing whitespace then ')' before appending time/date from the PE
-                // TimeDateStamp (UTC — may differ from local build-machine time by timezone).
-                let base = raw.trim_end().trim_end_matches(')');
-                let (time_str, date_str) =
-                    unix_to_compile_time_date(pe.time_date_stamp as u64);
-                format!("{} {} {}", base, time_str, date_str)
-            }).unwrap_or_default();
+            let build_string = self
+                .scan_build_string(&pe)
+                .map(|raw| {
+                    // Binary stores the short form "Release Client #NNN)\n" (newline before null).
+                    // Trim trailing whitespace then ')' before appending time/date from the PE
+                    // TimeDateStamp (UTC — may differ from local build-machine time by timezone).
+                    let base = raw.trim_end().trim_end_matches(')');
+                    let (time_str, date_str) = unix_to_compile_time_date(pe.time_date_stamp as u64);
+                    format!("{} {} {}", base, time_str, date_str)
+                })
+                .unwrap_or_default();
 
             if write_out {
                 ir.write_string_entry("File Info", "PatchDate", &patch_date, false);
@@ -606,7 +577,7 @@ impl EqGameScanner {
         let _ = write!(out, "[Port]\r\nPort={}\r\n\r\n[Memory Offsets]\r\n", port);
 
         for entry in PRIMARY_SCANS {
-            let line = self.run_primary_scan(
+            let (line, addr) = self.run_primary_scan(
                 ir,
                 current_offsets,
                 entry,
@@ -615,6 +586,9 @@ impl EqGameScanner {
                 &mut result.has_address_mismatch,
             );
             out.push_str(&line);
+            if addr != 0 {
+                entry.kind.set(&mut result.primary, addr);
+            }
         }
 
         result.output = out;
@@ -665,7 +639,10 @@ impl EqGameScanner {
                     .unwrap_or(data.len());
                 let s = String::from_utf8_lossy(&data[pos..end]).into_owned();
                 if !s.contains('%')
-                    && best.as_ref().map(|b: &String| s.len() > b.len()).unwrap_or(true)
+                    && best
+                        .as_ref()
+                        .map(|b: &String| s.len() > b.len())
+                        .unwrap_or(true)
                 {
                     best = Some(s);
                 }
@@ -679,7 +656,12 @@ impl EqGameScanner {
     /// When `write_out` is true, found values are written to `[SpawnInfo Offsets]`
     /// in `myseqserver.ini`.
     /// Mirrors EQGameScanner::ScanSecondary in EQGameScanner.cpp.
-    pub fn scan_secondary(&self, ir: &IniReader, fallback_char_info: u64, write_out: bool) -> String {
+    pub fn scan_secondary(
+        &self,
+        ir: &IniReader,
+        fallback_char_info: u64,
+        write_out: bool,
+    ) -> String {
         if !self.executable_exists() {
             return "Error: Could not locate the specified executable file.".to_string();
         }
@@ -689,10 +671,14 @@ impl EqGameScanner {
             let pattern = ir.read_pattern_bytes("CharInfo", "Pattern");
             let mask = ir.read_pattern_string("CharInfo", "Mask");
             let found = self.find_eq_pointer_offset(start, SCAN_WINDOW, &pattern, mask.as_bytes());
-            if found != 0 { found } else { fallback_char_info }
+            if found != 0 {
+                found
+            } else {
+                fallback_char_info
+            }
         };
 
-        let mut out = String::from("SpawnInfo Offsets\r\n");
+        let mut out = String::from("[SpawnInfo Offsets]\r\n");
         for entry in SECONDARY_SCANS {
             out.push_str(&self.run_secondary_scan(ir, entry, char_info_base, write_out));
         }
@@ -746,15 +732,18 @@ fn pacific_utc_offset_hours(utc_secs: u64) -> i64 {
     let nov_sun1 = nth_weekday_of_month(year, 11, 0, 1);
     let dst_start = civil_to_days(year, 3, mar_sun2) as u64 * 86400 + 10 * 3600;
     let dst_end = civil_to_days(year, 11, nov_sun1) as u64 * 86400 + 9 * 3600;
-    if utc_secs >= dst_start && utc_secs < dst_end { -7 } else { -8 }
+    if utc_secs >= dst_start && utc_secs < dst_end {
+        -7
+    } else {
+        -8
+    }
 }
 
 /// Convert a UTC Unix timestamp to ("HH:MM:SS", "Mon DD YYYY") in Pacific time,
 /// matching the format of C's __TIME__ / __DATE__ macros used in EQ build strings.
 fn unix_to_compile_time_date(utc_secs: u64) -> (String, String) {
     const MONTHS: [&str; 12] = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
     let local_secs = (utc_secs as i64 + pacific_utc_offset_hours(utc_secs) * 3600) as u64;
     let tod = local_secs % 86400;

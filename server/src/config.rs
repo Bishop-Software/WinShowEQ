@@ -157,7 +157,11 @@ impl IniReader {
     }
 
     pub fn read_string_entry(&self, section: &str, entry: &str, config: bool) -> String {
-        let file = if config { &self.config_filename } else { &self.filename };
+        let file = if config {
+            &self.config_filename
+        } else {
+            &self.filename
+        };
         self.read_string_entry_from(file, section, entry)
     }
 
