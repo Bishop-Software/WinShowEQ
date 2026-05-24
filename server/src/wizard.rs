@@ -34,6 +34,7 @@ pub enum WizardPhase {
     Idle,
     ScanningExe,
     Attaching,
+    EnterName,  // user enters character name for exact-match discovery
     Static,     // name, lastname, next, prev from first struct read
     StandStill, // establish stable float baseline
     Walking,    // detect position/speed/heading candidates
@@ -43,6 +44,7 @@ pub enum WizardPhase {
     WaitPet,    // user summons pet → detect OwnerIDOffset
     WaitItem,   // user drops item → detect GroundItem offsets
     Complete,
+    Cancelled,
     Failed,
 }
 
@@ -52,6 +54,9 @@ impl WizardPhase {
             Self::Idle => "Click 'Start Wizard' to begin.",
             Self::ScanningExe => "Scanning eqgame.exe — please wait...",
             Self::Attaching => "Attaching to eqgame.exe — please wait...",
+            Self::EnterName => {
+                "Enter your character name below, then click 'Confirm Name' (or Skip to use heuristic)."
+            }
             Self::Static => "Reading spawn struct...",
             Self::StandStill => "Stand completely still for a moment...",
             Self::Walking => "Walk around continuously for a few seconds...",
@@ -61,6 +66,7 @@ impl WizardPhase {
             Self::WaitPet => "Summon a pet or hire a mercenary, then click 'I have a pet'.",
             Self::WaitItem => "Drop any item on the ground, then click 'Item dropped'.",
             Self::Complete => "Discovery complete. Review results and click 'Write to INI'.",
+            Self::Cancelled => "Cancelled.",
             Self::Failed => "Wizard failed — see log for details.",
         }
     }
@@ -97,6 +103,7 @@ pub struct WizardResults {
     pub item_y: Option<usize>,
     pub item_z: Option<usize>,
     pub item_name: Option<usize>,
+    pub name_confirmed: bool,
 }
 
 pub struct WizardShared {
@@ -111,6 +118,9 @@ pub struct WizardShared {
     pub spawn_id_offset: usize,
     // filled after Static phase
     pub player_spawn_id: u32,
+    // entered by user during EnterName phase
+    pub char_name: String,
+    pub char_last_name: String,
 }
 
 impl Default for WizardShared {
@@ -125,6 +135,8 @@ impl Default for WizardShared {
             ground_addr: 0,
             spawn_id_offset: 0,
             player_spawn_id: 0,
+            char_name: String::new(),
+            char_last_name: String::new(),
         }
     }
 }
@@ -137,6 +149,7 @@ pub fn start_wizard(
     patterns_ini_path: String,
     exe_path: String,
     shared: Arc<Mutex<WizardShared>>,
+    skip_scan: bool,
 ) {
     std::thread::spawn(move || {
         run_wizard(
@@ -145,6 +158,7 @@ pub fn start_wizard(
             patterns_ini_path,
             exe_path,
             shared,
+            skip_scan,
         );
     });
 }
@@ -175,15 +189,20 @@ pub fn write_wizard_results(
     };
 
     // Only write fields discovered by specific, low-false-positive methods:
-    //   XOffset/YOffset/ZOffset — consecutive 4-byte float cluster during movement
-    //   HeadingOffset          — float in [0,512] changing only during turning
-    //   HideOffset             — single byte flipping 0→1 after casting invisibility
-    //   OwnerIDOffset          — u32 matching the player's known spawn ID
+    //   NameOffset/LastNameOffset  — exact match on user-provided character name
+    //   XOffset/YOffset/ZOffset    — consecutive 4-byte float cluster during movement
+    //   HeadingOffset              — float in [0,512] changing only during turning
+    //   HideOffset                 — single byte flipping 0→1 after casting invisibility
+    //   OwnerIDOffset              — u32 matching the player's known spawn ID
     //
     // Excluded (heuristics too error-prone; verify manually from the log above):
-    //   NameOffset/LastNameOffset — ASCII text scan picks wrong string too often
+    //   NameOffset/LastNameOffset — when name not confirmed by user (heuristic only)
     //   SpeedOffset               — "drops near 0 when stopped" matches multiple floats
     //   NextOffset/PrevOffset     — pointer scan picks wrong heap pointer too often
+    if results.name_confirmed {
+        write_spawn("NameOffset", results.name);
+        write_spawn("LastNameOffset", results.last_name);
+    }
     write_spawn("XOffset", results.x);
     write_spawn("YOffset", results.y);
     write_spawn("ZOffset", results.z);
@@ -238,6 +257,7 @@ fn run_wizard(
     patterns_ini_path: String,
     exe_path: String,
     shared: Arc<Mutex<WizardShared>>,
+    skip_scan: bool,
 ) {
     macro_rules! log {
         ($msg:expr) => {
@@ -256,8 +276,10 @@ fn run_wizard(
     }
     macro_rules! check_cancel {
         () => {
-            if let Ok(s) = shared.lock() {
+            if let Ok(mut s) = shared.lock() {
                 if s.command == WizardCommand::Cancel {
+                    s.command = WizardCommand::None;
+                    s.phase = WizardPhase::Cancelled;
                     return;
                 }
             }
@@ -276,10 +298,7 @@ fn run_wizard(
         }};
     }
 
-    // ── Phase 1: scan the exe file ───────────────────────────────────────────
-    set_phase!(WizardPhase::ScanningExe);
-    log!("Scanning {}...", exe_path);
-
+    // ── Phase 1: scan the exe file (skipped when launched from combined run) ──
     let mut ir = IniReader::new();
     ir.open_config_file(&config_ini_path);
     ir.open_patterns_file(&patterns_ini_path);
@@ -289,34 +308,34 @@ fn run_wizard(
         .map(|m| m.offsets)
         .unwrap_or_default();
 
-    let scanner = EqGameScanner::new(&exe_path);
-    if !scanner.executable_exists() {
-        log!("Error: exe not found — {}", exe_path);
-        set_phase!(WizardPhase::Failed);
-        return;
-    }
+    if !skip_scan {
+        set_phase!(WizardPhase::ScanningExe);
+        log!("Scanning {}...", exe_path);
 
-    // Scan without writing — wizard startup must not silently modify the ini.
-    // The user explicitly controls writes via "Write to INI" at the end.
-    let scan_result = scanner.scan_executable(&ir, &current_offsets, false);
-    for line in scan_result.output.lines() {
-        let t = line.trim();
-        if !t.is_empty() {
-            log!("{}", t);
+        let scanner = EqGameScanner::new(&exe_path);
+        if !scanner.executable_exists() {
+            log!("Error: exe not found — {}", exe_path);
+            set_phase!(WizardPhase::Failed);
+            return;
+        }
+
+        let scan_result = scanner.scan_executable(&ir, &current_offsets, false);
+        for line in scan_result.output.lines() {
+            let t = line.trim();
+            if !t.is_empty() {
+                log!("{}", t);
+            }
+        }
+
+        let secondary = scanner.scan_secondary(&ir, current_offsets.self_addr, false);
+        for line in secondary.lines() {
+            let t = line.trim();
+            if !t.is_empty() {
+                log!("{}", t);
+            }
         }
     }
 
-    let secondary = scanner.scan_secondary(&ir, current_offsets.self_addr, false);
-    for line in secondary.lines() {
-        let t = line.trim();
-        if !t.is_empty() {
-            log!("{}", t);
-        }
-    }
-
-    // Use the addresses already in the ini (current_offsets).  The scan above
-    // is informational only; if new addresses were found they will be written
-    // when the user clicks "Write to INI" at the end of the wizard.
     let char_info_addr = current_offsets.self_addr;
     let spawn_header_addr = current_offsets.spawn_list;
     let ground_addr = current_offsets.ground;
@@ -377,6 +396,25 @@ fn run_wizard(
     };
     log!("pSelf = 0x{:X}", pself);
 
+    // ── Phase 2b: enter character name ──────────────────────────────────────
+    set_phase!(WizardPhase::EnterName);
+    log!(
+        "Enter your character name and optionally your surname, then click 'Confirm Name' (or Skip to use heuristic)."
+    );
+
+    loop {
+        check_cancel!();
+        std::thread::sleep(Duration::from_millis(200));
+        match take_command!() {
+            WizardCommand::ActionDone | WizardCommand::SkipStep => break,
+            WizardCommand::Cancel => {
+                set_phase!(WizardPhase::Cancelled);
+                return;
+            }
+            _ => {}
+        }
+    }
+
     // ── Phase 3: static discovery ────────────────────────────────────────────
     set_phase!(WizardPhase::Static);
 
@@ -389,36 +427,71 @@ fn run_wizard(
         }
     };
 
-    // Name / Lastname
-    let name_candidates = find_name_candidates(&buf);
-    match name_candidates.len() {
-        0 => log!("Name/Lastname — not found (is player logged in and named?)"),
-        1 => {
-            if let Ok(mut s) = shared.lock() {
-                s.results.name = Some(name_candidates[0].0);
+    // Name / Lastname — exact match on user-provided names, else heuristic
+    let (char_name, char_last_name) = shared
+        .lock()
+        .map(|s| (s.char_name.clone(), s.char_last_name.clone()))
+        .unwrap_or_default();
+
+    if !char_name.is_empty() {
+        match find_name_by_value(&buf, &char_name) {
+            Some(off) => {
+                log!("Name → 0x{:x} (\"{}\")", off, char_name);
+                if let Ok(mut s) = shared.lock() {
+                    s.results.name = Some(off);
+                    s.results.name_confirmed = true;
+                }
             }
-            log!(
-                "Name → 0x{:x} (\"{}\")",
-                name_candidates[0].0,
-                name_candidates[0].1
-            );
-            log!("Lastname — not found");
+            None => log!(
+                "Name — \"{}\" not found in struct (is player logged in?)",
+                char_name
+            ),
         }
-        _ => {
-            if let Ok(mut s) = shared.lock() {
-                s.results.name = Some(name_candidates[0].0);
-                s.results.last_name = Some(name_candidates[1].0);
+        if !char_last_name.is_empty() {
+            match find_name_by_value(&buf, &char_last_name) {
+                Some(off) => {
+                    log!("Lastname → 0x{:x} (\"{}\")", off, char_last_name);
+                    if let Ok(mut s) = shared.lock() {
+                        s.results.last_name = Some(off);
+                    }
+                }
+                None => log!("Lastname — \"{}\" not found in struct", char_last_name),
             }
-            log!(
-                "Name → 0x{:x} (\"{}\")",
-                name_candidates[0].0,
-                name_candidates[0].1
-            );
-            log!(
-                "Lastname → 0x{:x} (\"{}\")",
-                name_candidates[1].0,
-                name_candidates[1].1
-            );
+        } else {
+            log!("Lastname — skipped (no surname entered)");
+        }
+    } else {
+        // No name provided — fall back to heuristic
+        let name_candidates = find_name_candidates(&buf);
+        match name_candidates.len() {
+            0 => log!("Name/Lastname — not found (is player logged in and named?)"),
+            1 => {
+                if let Ok(mut s) = shared.lock() {
+                    s.results.name = Some(name_candidates[0].0);
+                }
+                log!(
+                    "Name → 0x{:x} (\"{}\")",
+                    name_candidates[0].0,
+                    name_candidates[0].1
+                );
+                log!("Lastname — not found");
+            }
+            _ => {
+                if let Ok(mut s) = shared.lock() {
+                    s.results.name = Some(name_candidates[0].0);
+                    s.results.last_name = Some(name_candidates[1].0);
+                }
+                log!(
+                    "Name → 0x{:x} (\"{}\")",
+                    name_candidates[0].0,
+                    name_candidates[0].1
+                );
+                log!(
+                    "Lastname → 0x{:x} (\"{}\")",
+                    name_candidates[1].0,
+                    name_candidates[1].1
+                );
+            }
         }
     }
 
@@ -465,6 +538,10 @@ fn run_wizard(
             WizardCommand::SkipStep => {
                 still_skipped = true;
                 break;
+            }
+            WizardCommand::Cancel => {
+                set_phase!(WizardPhase::Cancelled);
+                return;
             }
             _ => {}
         }
@@ -517,6 +594,10 @@ fn run_wizard(
                 walk_skipped = true;
                 break;
             }
+            WizardCommand::Cancel => {
+                set_phase!(WizardPhase::Cancelled);
+                return;
+            }
             _ => {}
         }
     }
@@ -545,10 +626,7 @@ fn run_wizard(
             }
         }
         movement_union.sort();
-        log!("Movement candidates ({}):", movement_union.len());
-        for off in &movement_union {
-            log!("  0x{:x}", off);
-        }
+        log!("Movement candidates: {}", movement_union.len());
     } else {
         log!("Walking — skipped.");
     }
@@ -567,6 +645,10 @@ fn run_wizard(
             WizardCommand::SkipStep => {
                 stop_skipped = true;
                 break;
+            }
+            WizardCommand::Cancel => {
+                set_phase!(WizardPhase::Cancelled);
+                return;
             }
             _ => {}
         }
@@ -626,6 +708,10 @@ fn run_wizard(
             WizardCommand::SkipStep => {
                 turn_skipped = true;
                 break;
+            }
+            WizardCommand::Cancel => {
+                set_phase!(WizardPhase::Cancelled);
+                return;
             }
             _ => {}
         }
@@ -756,6 +842,10 @@ fn run_wizard(
                 log!("Hide — skipped");
                 break;
             }
+            WizardCommand::Cancel => {
+                set_phase!(WizardPhase::Cancelled);
+                return;
+            }
             _ => {}
         }
     }
@@ -813,6 +903,10 @@ fn run_wizard(
             WizardCommand::SkipStep => {
                 log!("Owner — skipped");
                 break;
+            }
+            WizardCommand::Cancel => {
+                set_phase!(WizardPhase::Cancelled);
+                return;
             }
             _ => {}
         }
@@ -888,6 +982,10 @@ fn run_wizard(
                 log!("GroundItem — skipped");
                 break;
             }
+            WizardCommand::Cancel => {
+                set_phase!(WizardPhase::Cancelled);
+                return;
+            }
             _ => {}
         }
     }
@@ -951,6 +1049,16 @@ fn find_name_candidates(buf: &[u8]) -> Vec<(usize, String)> {
 
 fn is_name_char(b: u8) -> bool {
     b.is_ascii_alphabetic() || b == b'\'' || b == b' ' || b == b'-'
+}
+
+/// Scan buf for an exact null-terminated match of `name`. Returns the byte offset if found.
+fn find_name_by_value(buf: &[u8], name: &str) -> Option<usize> {
+    if name.is_empty() {
+        return None;
+    }
+    let needle = name.as_bytes();
+    buf.windows(needle.len() + 1)
+        .position(|w| w[..needle.len()] == *needle && w[needle.len()] == 0)
 }
 
 /// Scan the first POINTER_SCAN_RANGE bytes of buf for 8-byte values that look like
