@@ -637,12 +637,12 @@ impl WinShowEQApp {
                                             |ui: &mut egui::Ui, ok: bool| {
                                                 if ok {
                                                     ui.label(
-                                                        RichText::new("✓")
+                                                        RichText::new("OK")
                                                             .color(Color32::GREEN),
                                                     );
                                                 } else {
                                                     ui.label(
-                                                        RichText::new("✗").color(Color32::RED),
+                                                        RichText::new("FAIL").color(Color32::RED),
                                                     );
                                                 }
                                             };
@@ -661,13 +661,13 @@ impl WinShowEQApp {
                                                     match vr.name_ok {
                                                         Some(true) => {
                                                             ui.label(
-                                                                RichText::new("✓")
+                                                                RichText::new("OK")
                                                                     .color(Color32::GREEN),
                                                             );
                                                         }
                                                         Some(false) => {
                                                             ui.label(
-                                                                RichText::new("✗")
+                                                                RichText::new("FAIL")
                                                                     .color(Color32::RED),
                                                             )
                                                             .on_hover_text(
@@ -698,7 +698,7 @@ impl WinShowEQApp {
 
                                                     ui.label("X / Y / Z");
                                                     ui.label(format!(
-                                                        "{:.1} / {:.1} / {:.1}",
+                                                        "{:.2} / {:.2} / {:.2}",
                                                         vr.x, vr.y, vr.z
                                                     ));
                                                     status_icon(ui, vr.pos_ok);

@@ -1001,6 +1001,7 @@ fn run_wizard(
                 } else if spawn_header_addr == 0 {
                     log!("Owner — cannot search: SpawnHeaderAddr not found by scan");
                 } else {
+                    log!("Owner search — player SpawnID = {}", player_spawn_id);
                     let pself_buf = get_pself(&mem, char_info_addr)
                         .and_then(|ps| mem.read_bytes(ps, STRUCT_SIZE).ok());
                     match find_owner_offset(
@@ -1011,7 +1012,8 @@ fn run_wizard(
                         prev_off,
                         pself_buf.as_deref(),
                     ) {
-                        Some(off) => {
+                        Some((off, diag)) => {
+                            log!("Owner candidates: {}", diag);
                             log!("Owner → 0x{:x}", off);
                             if let Ok(mut s) = shared.lock() {
                                 s.results.owner = Some(off);
@@ -1265,22 +1267,32 @@ fn find_consecutive_cluster(offsets: &[usize], count: usize, step: usize) -> Vec
     Vec::new()
 }
 
-/// Walk the spawn list and find the offset in a non-player spawn where a u32
-/// equals `player_spawn_id`. Verifies the same offset is 0 in the player's own struct.
+/// Walk the spawn list and find the offset used to store the owner/master entity ID.
+///
+/// Strategy: don't search for a specific value. Instead, find offsets that are:
+///   - 0 in the player's own struct (player is not owned by anyone)
+///   - 0 in the vast majority of spawns (NPCs/PCs have no owner)
+///   - non-zero in a small number of spawns (just the pet/merc)
+///   - non-zero value looks like a valid entity ID (1..=0xFFFF)
+///
+/// This works even when OwnerIDOffset stores an entity ID rather than a spawn ID,
+/// so the player's spawn_id cannot be used as a search value.
 fn find_owner_offset(
     mem: &MemReader,
     spawn_header_canonical: u64,
-    player_spawn_id: u32,
+    _player_spawn_id: u32, // used only at call site for logging
     next_off: usize,
     prev_off: usize,
     player_buf: Option<&[u8]>,
-) -> Option<usize> {
+) -> Option<(usize, String)> {
+    let pb = player_buf?;
+
     let header_ptr = mem.read_raw_pointer(spawn_header_canonical).ok()?;
     if header_ptr == 0 {
         return None;
     }
 
-    // Walk backward to head; skip unreadable nodes rather than aborting.
+    // Walk backward to head.
     let mut ptr = header_ptr;
     for _ in 0..2000 {
         let buf = match mem.read_bytes(ptr, STRUCT_SIZE) {
@@ -1294,43 +1306,89 @@ fn find_owner_offset(
         ptr = prev;
     }
 
-    // Walk forward looking for player_spawn_id in a non-player spawn
+    // Per-offset accumulators across all visited spawns.
+    let slots = STRUCT_SIZE / 4;
+    let mut zero_counts = vec![0u32; slots];
+    let mut nonzero_counts = vec![0u32; slots];
+    let mut sample_nonzero = vec![0u32; slots]; // one representative non-zero value
+    let mut total_spawns = 0u32;
+
     let mut visited = 0u32;
     loop {
         if ptr == 0 || visited > 2000 {
             break;
         }
         visited += 1;
+        total_spawns += 1;
         let buf = match mem.read_bytes(ptr, STRUCT_SIZE) {
             Ok(b) => b,
-            Err(_) => {
-                // Skip unreadable node; try to advance via next pointer if possible.
-                break;
-            }
+            Err(_) => break,
         };
-
-        // Scan for player_spawn_id as a u32 at any 4-byte-aligned offset
         for off in (0..STRUCT_SIZE.saturating_sub(4)).step_by(4) {
-            if read_u32_at(&buf, off) == player_spawn_id {
-                // Verify the same offset is 0 in the player's own struct (player's owner = 0).
-                // If player_buf is unavailable, reject the match rather than accepting blindly.
-                let player_is_zero = player_buf
-                    .and_then(|pb| pb.get(off..off + 4))
-                    .map(|b| read_u32_at(b, 0) == 0)
-                    .unwrap_or(false);
-                if player_is_zero {
-                    return Some(off);
-                }
+            let val = read_u32_at(&buf, off);
+            let slot = off / 4;
+            if val == 0 {
+                zero_counts[slot] += 1;
+            } else {
+                nonzero_counts[slot] += 1;
+                sample_nonzero[slot] = val;
             }
         }
-
         let next = read_u64_at(&buf, next_off);
         if next == 0 || next == ptr {
             break;
         }
         ptr = next;
     }
-    None
+
+    if total_spawns == 0 {
+        return None;
+    }
+
+    // Allow up to ~5 % of spawns to be non-zero (handles zones with multiple pets).
+    let nonzero_threshold = (total_spawns / 20).max(2);
+
+    // Build candidates: offsets where player==0, few non-zero spawns, value looks like an ID.
+    let mut candidates: Vec<(usize, u32, u32)> = (0..slots)
+        .filter_map(|slot| {
+            let off = slot * 4;
+            // Skip the pointer/header region at the start of the struct.
+            if off < 0x80 {
+                return None;
+            }
+            let nz = nonzero_counts[slot];
+            if nz == 0 || nz > nonzero_threshold {
+                return None;
+            }
+            // Player's own struct must be 0 here.
+            if pb.get(off..off + 4).map(|b| read_u32_at(b, 0)).unwrap_or(1) != 0 {
+                return None;
+            }
+            // Non-zero value must look like a valid entity ID, not a pointer or float.
+            let sample = sample_nonzero[slot];
+            if sample == 0 || sample > 0xFFFF {
+                return None;
+            }
+            Some((off, zero_counts[slot], nz))
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        return None;
+    }
+
+    // Rank: highest zero_count first (most spawns have 0 = most "owner-like").
+    // Break ties by lowest nonzero_count, then lowest offset.
+    candidates.sort_by(|a, b| b.1.cmp(&a.1).then(a.2.cmp(&b.2)).then(a.0.cmp(&b.0)));
+
+    let diag = candidates
+        .iter()
+        .take(5)
+        .map(|(off, z, nz)| format!("0x{:x} (zeros={}/{}, owned={})", off, z, total_spawns, nz))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    Some((candidates[0].0, diag))
 }
 
 /// Read the ground item struct and identify field offsets.
@@ -1452,7 +1510,15 @@ fn read_verify_readings(
     shared: &Arc<Mutex<WizardShared>>,
     results: &WizardResults,
 ) -> VerifyReadings {
-    let (char_info_addr, spawn_header_addr, char_name, zone_canonical, level_off, next_off) = {
+    let (
+        char_info_addr,
+        spawn_header_addr,
+        char_name,
+        zone_canonical,
+        level_off,
+        next_off,
+        prev_off,
+    ) = {
         let s = shared.lock().unwrap();
         let level_off = s
             .scan_secondary
@@ -1466,6 +1532,12 @@ fn read_verify_readings(
             .find(|(k, _)| k == "NextOffset")
             .map(|(_, v)| *v as usize)
             .unwrap_or(0x8);
+        let prev_off = s
+            .scan_secondary
+            .iter()
+            .find(|(k, _)| k == "PrevOffset")
+            .map(|(_, v)| *v as usize)
+            .unwrap_or(0x10);
         (
             s.char_info_addr,
             s.spawn_header_addr,
@@ -1473,6 +1545,7 @@ fn read_verify_readings(
             s.scan_primary.zone_name,
             level_off,
             next_off,
+            prev_off,
         )
     };
 
@@ -1539,19 +1612,35 @@ fn read_verify_readings(
         r.level_ok = (1..=120).contains(&r.level);
     }
 
-    // Spawn count — walk forward from spawn header pointer, cap at 500
+    // Spawn count — walk backward to head, then count forward; cap each at 2000.
+    // read_raw_pointer returns the current/last-inserted node, not the head.
     if spawn_header_addr != 0
         && let Ok(header_ptr) = mem.read_raw_pointer(spawn_header_addr)
         && header_ptr != 0
     {
+        let node_buf_size = next_off.max(prev_off) + 8;
+
+        // Seek head (where prev == 0)
         let mut ptr = header_ptr;
+        for _ in 0..2000 {
+            let Ok(node) = mem.read_bytes(ptr, node_buf_size) else {
+                break;
+            };
+            let prev = read_u64_at(&node, prev_off);
+            if prev == 0 || prev == ptr {
+                break;
+            }
+            ptr = prev;
+        }
+
+        // Count forward from head
         let mut count = 0usize;
-        for _ in 0..500 {
+        for _ in 0..2000 {
             if ptr == 0 {
                 break;
             }
             count += 1;
-            let Ok(node) = mem.read_bytes(ptr, next_off + 8) else {
+            let Ok(node) = mem.read_bytes(ptr, node_buf_size) else {
                 break;
             };
             let next = read_u64_at(&node, next_off);
