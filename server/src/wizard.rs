@@ -290,19 +290,19 @@ pub fn write_wizard_results(
     };
 
     // [SpawnInfo Offsets] — wizard-discovered fields (only reliable methods):
-    //   NameOffset/LastNameOffset  — exact match on user-provided character name
+    //   NameOffset/LastnameOffset  — exact match on user-provided character name
     //   XOffset/YOffset/ZOffset    — consecutive 4-byte float cluster during movement
     //   HeadingOffset              — float in [0,512] changing only during turning
     //   HideOffset                 — single byte flipping 0→1 after casting invisibility
     //   OwnerIDOffset              — u32 matching the player's known spawn ID
     //
     // Excluded (heuristics too error-prone):
-    //   NameOffset/LastNameOffset — when name not confirmed by user (heuristic only)
+    //   NameOffset/LastnameOffset — when name not confirmed by user (heuristic only)
     //   SpeedOffset               — "drops near 0 when stopped" matches multiple floats
     //   NextOffset/PrevOffset     — pointer scan picks wrong heap pointer too often
     if results.name_confirmed {
         write_spawn("NameOffset", results.name);
-        write_spawn("LastNameOffset", results.last_name);
+        write_spawn("LastnameOffset", results.last_name);
     }
     write_spawn("XOffset", results.x);
     write_spawn("YOffset", results.y);

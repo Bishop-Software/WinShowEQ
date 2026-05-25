@@ -528,7 +528,7 @@ impl WinShowEQApp {
                                                             ui.end_row();
                                                         };
                                                     row("NameOffset", wizard_results.name);
-                                                    row("LastNameOffset", wizard_results.last_name);
+                                                    row("LastnameOffset", wizard_results.last_name);
                                                     row("NextOffset", wizard_results.next);
                                                     row("PrevOffset", wizard_results.prev);
                                                     row("XOffset", wizard_results.x);

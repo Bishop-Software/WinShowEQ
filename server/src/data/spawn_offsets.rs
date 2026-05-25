@@ -35,7 +35,7 @@ impl SpawnOffsets {
         let race8 = ir.read_integer_entry("SpawnInfo Offsets", "EightBitRace", false) != 0;
 
         let name = o("NameOffset");
-        let last_name = o("LastNameOffset");
+        let last_name = o("LastnameOffset");
         let x = o("XOffset");
         let y = o("YOffset");
         let z = o("ZOffset");
@@ -91,7 +91,7 @@ impl SpawnOffsets {
     pub fn named_values(&self) -> Vec<(&'static str, usize)> {
         vec![
             ("NameOffset", self.name),
-            ("LastNameOffset", self.last_name),
+            ("LastnameOffset", self.last_name),
             ("SpawnIDOffset", self.id),
             ("OwnerIDOffset", self.owner),
             ("LevelOffset", self.level),
