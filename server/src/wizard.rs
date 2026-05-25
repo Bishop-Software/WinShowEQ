@@ -43,6 +43,7 @@ pub enum WizardPhase {
     WaitInvis,  // user casts invis → detect HideOffset byte flip
     WaitPet,    // user summons pet → detect OwnerIDOffset
     WaitItem,   // user drops item → detect GroundItem offsets
+    Verify,     // live memory readback — user confirms before writing to INI
     Complete,
     Cancelled,
     Failed,
@@ -65,11 +66,32 @@ impl WizardPhase {
             Self::WaitInvis => "Cast invisibility, then click 'I cast invis'.",
             Self::WaitPet => "Summon a pet or hire a mercenary, then click 'I have a pet'.",
             Self::WaitItem => "Drop any item on the ground, then click 'Item dropped'.",
+            Self::Verify => {
+                "Confirm the values below look correct, then click 'Accept & Write to INI'."
+            }
             Self::Complete => "Discovery complete. Review results and click 'Write to INI'.",
             Self::Cancelled => "Cancelled.",
             Self::Failed => "Wizard failed — see log for details.",
         }
     }
+}
+
+/// Live readings taken during WizardPhase::Verify.
+#[derive(Clone, Default)]
+pub struct VerifyReadings {
+    pub name: String,
+    pub name_ok: Option<bool>, // None = char_name was skipped (no exact-match basis)
+    pub zone: String,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub pos_ok: bool, // all three within ±15_000.0
+    pub heading: f32,
+    pub heading_ok: bool, // 0.0..=512.0
+    pub level: u8,
+    pub level_ok: bool, // 1..=120
+    pub spawn_count: usize,
+    pub spawn_count_ok: bool, // >= 1
 }
 
 #[derive(Clone, PartialEq)]
@@ -125,6 +147,8 @@ pub struct WizardShared {
     pub scan_primary: PrimaryOffsets,
     pub scan_secondary: Vec<(String, u64)>,
     pub scan_file_info: Vec<(String, String)>,
+    // populated during Verify phase
+    pub verify: Option<VerifyReadings>,
 }
 
 impl Default for WizardShared {
@@ -144,6 +168,7 @@ impl Default for WizardShared {
             scan_primary: PrimaryOffsets::default(),
             scan_secondary: Vec::new(),
             scan_file_info: Vec::new(),
+            verify: None,
         }
     }
 }
@@ -265,19 +290,19 @@ pub fn write_wizard_results(
     };
 
     // [SpawnInfo Offsets] — wizard-discovered fields (only reliable methods):
-    //   NameOffset/LastNameOffset  — exact match on user-provided character name
+    //   NameOffset/LastnameOffset  — exact match on user-provided character name
     //   XOffset/YOffset/ZOffset    — consecutive 4-byte float cluster during movement
     //   HeadingOffset              — float in [0,512] changing only during turning
     //   HideOffset                 — single byte flipping 0→1 after casting invisibility
     //   OwnerIDOffset              — u32 matching the player's known spawn ID
     //
     // Excluded (heuristics too error-prone):
-    //   NameOffset/LastNameOffset — when name not confirmed by user (heuristic only)
+    //   NameOffset/LastnameOffset — when name not confirmed by user (heuristic only)
     //   SpeedOffset               — "drops near 0 when stopped" matches multiple floats
     //   NextOffset/PrevOffset     — pointer scan picks wrong heap pointer too often
     if results.name_confirmed {
         write_spawn("NameOffset", results.name);
-        write_spawn("LastNameOffset", results.last_name);
+        write_spawn("LastnameOffset", results.last_name);
     }
     write_spawn("XOffset", results.x);
     write_spawn("YOffset", results.y);
@@ -976,6 +1001,7 @@ fn run_wizard(
                 } else if spawn_header_addr == 0 {
                     log!("Owner — cannot search: SpawnHeaderAddr not found by scan");
                 } else {
+                    log!("Owner search — player SpawnID = {}", player_spawn_id);
                     let pself_buf = get_pself(&mem, char_info_addr)
                         .and_then(|ps| mem.read_bytes(ps, STRUCT_SIZE).ok());
                     match find_owner_offset(
@@ -986,7 +1012,8 @@ fn run_wizard(
                         prev_off,
                         pself_buf.as_deref(),
                     ) {
-                        Some(off) => {
+                        Some((off, diag)) => {
+                            log!("Owner candidates: {}", diag);
                             log!("Owner → 0x{:x}", off);
                             if let Ok(mut s) = shared.lock() {
                                 s.results.owner = Some(off);
@@ -1081,6 +1108,29 @@ fn run_wizard(
                 log!("GroundItem — skipped");
                 break;
             }
+            WizardCommand::Cancel => {
+                set_phase!(WizardPhase::Cancelled);
+                return;
+            }
+            _ => {}
+        }
+    }
+
+    // ── Phase 11: verify — live readback before user commits to INI ─────────
+    set_phase!(WizardPhase::Verify);
+    log!("Verify: reading live values — confirm they look correct before writing.");
+
+    let results_snapshot = shared.lock().map(|s| s.results.clone()).unwrap_or_default();
+
+    loop {
+        check_cancel!();
+        let readings = read_verify_readings(&mem, &shared, &results_snapshot);
+        if let Ok(mut s) = shared.lock() {
+            s.verify = Some(readings);
+        }
+        std::thread::sleep(Duration::from_millis(500));
+        match take_command!() {
+            WizardCommand::ActionDone => break, // user clicked Accept & Write to INI
             WizardCommand::Cancel => {
                 set_phase!(WizardPhase::Cancelled);
                 return;
@@ -1217,22 +1267,32 @@ fn find_consecutive_cluster(offsets: &[usize], count: usize, step: usize) -> Vec
     Vec::new()
 }
 
-/// Walk the spawn list and find the offset in a non-player spawn where a u32
-/// equals `player_spawn_id`. Verifies the same offset is 0 in the player's own struct.
+/// Walk the spawn list and find the offset used to store the owner/master entity ID.
+///
+/// Strategy: don't search for a specific value. Instead, find offsets that are:
+///   - 0 in the player's own struct (player is not owned by anyone)
+///   - 0 in the vast majority of spawns (NPCs/PCs have no owner)
+///   - non-zero in a small number of spawns (just the pet/merc)
+///   - non-zero value looks like a valid entity ID (1..=0xFFFF)
+///
+/// This works even when OwnerIDOffset stores an entity ID rather than a spawn ID,
+/// so the player's spawn_id cannot be used as a search value.
 fn find_owner_offset(
     mem: &MemReader,
     spawn_header_canonical: u64,
-    player_spawn_id: u32,
+    _player_spawn_id: u32, // used only at call site for logging
     next_off: usize,
     prev_off: usize,
     player_buf: Option<&[u8]>,
-) -> Option<usize> {
+) -> Option<(usize, String)> {
+    let pb = player_buf?;
+
     let header_ptr = mem.read_raw_pointer(spawn_header_canonical).ok()?;
     if header_ptr == 0 {
         return None;
     }
 
-    // Walk backward to head; skip unreadable nodes rather than aborting.
+    // Walk backward to head.
     let mut ptr = header_ptr;
     for _ in 0..2000 {
         let buf = match mem.read_bytes(ptr, STRUCT_SIZE) {
@@ -1246,43 +1306,89 @@ fn find_owner_offset(
         ptr = prev;
     }
 
-    // Walk forward looking for player_spawn_id in a non-player spawn
+    // Per-offset accumulators across all visited spawns.
+    let slots = STRUCT_SIZE / 4;
+    let mut zero_counts = vec![0u32; slots];
+    let mut nonzero_counts = vec![0u32; slots];
+    let mut sample_nonzero = vec![0u32; slots]; // one representative non-zero value
+    let mut total_spawns = 0u32;
+
     let mut visited = 0u32;
     loop {
         if ptr == 0 || visited > 2000 {
             break;
         }
         visited += 1;
+        total_spawns += 1;
         let buf = match mem.read_bytes(ptr, STRUCT_SIZE) {
             Ok(b) => b,
-            Err(_) => {
-                // Skip unreadable node; try to advance via next pointer if possible.
-                break;
-            }
+            Err(_) => break,
         };
-
-        // Scan for player_spawn_id as a u32 at any 4-byte-aligned offset
         for off in (0..STRUCT_SIZE.saturating_sub(4)).step_by(4) {
-            if read_u32_at(&buf, off) == player_spawn_id {
-                // Verify the same offset is 0 in the player's own struct (player's owner = 0).
-                // If player_buf is unavailable, reject the match rather than accepting blindly.
-                let player_is_zero = player_buf
-                    .and_then(|pb| pb.get(off..off + 4))
-                    .map(|b| read_u32_at(b, 0) == 0)
-                    .unwrap_or(false);
-                if player_is_zero {
-                    return Some(off);
-                }
+            let val = read_u32_at(&buf, off);
+            let slot = off / 4;
+            if val == 0 {
+                zero_counts[slot] += 1;
+            } else {
+                nonzero_counts[slot] += 1;
+                sample_nonzero[slot] = val;
             }
         }
-
         let next = read_u64_at(&buf, next_off);
         if next == 0 || next == ptr {
             break;
         }
         ptr = next;
     }
-    None
+
+    if total_spawns == 0 {
+        return None;
+    }
+
+    // Allow up to ~5 % of spawns to be non-zero (handles zones with multiple pets).
+    let nonzero_threshold = (total_spawns / 20).max(2);
+
+    // Build candidates: offsets where player==0, few non-zero spawns, value looks like an ID.
+    let mut candidates: Vec<(usize, u32, u32)> = (0..slots)
+        .filter_map(|slot| {
+            let off = slot * 4;
+            // Skip the pointer/header region at the start of the struct.
+            if off < 0x80 {
+                return None;
+            }
+            let nz = nonzero_counts[slot];
+            if nz == 0 || nz > nonzero_threshold {
+                return None;
+            }
+            // Player's own struct must be 0 here.
+            if pb.get(off..off + 4).map(|b| read_u32_at(b, 0)).unwrap_or(1) != 0 {
+                return None;
+            }
+            // Non-zero value must look like a valid entity ID, not a pointer or float.
+            let sample = sample_nonzero[slot];
+            if sample == 0 || sample > 0xFFFF {
+                return None;
+            }
+            Some((off, zero_counts[slot], nz))
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        return None;
+    }
+
+    // Rank: highest zero_count first (most spawns have 0 = most "owner-like").
+    // Break ties by lowest nonzero_count, then lowest offset.
+    candidates.sort_by(|a, b| b.1.cmp(&a.1).then(a.2.cmp(&b.2)).then(a.0.cmp(&b.0)));
+
+    let diag = candidates
+        .iter()
+        .take(5)
+        .map(|(off, z, nz)| format!("0x{:x} (zeros={}/{}, owned={})", off, z, total_spawns, nz))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    Some((candidates[0].0, diag))
 }
 
 /// Read the ground item struct and identify field offsets.
@@ -1392,4 +1498,160 @@ fn find_item_position_offsets(
             candidates.get(2).copied(),
         )
     }
+}
+
+// ── Verify phase helper ───────────────────────────────────────────────────────
+
+/// Read live memory using the just-discovered offsets and return a snapshot for
+/// the Verify phase UI. Never panics — missing or unreadable fields are left at
+/// their Default values so the GUI can show partial results gracefully.
+fn read_verify_readings(
+    mem: &MemReader,
+    shared: &Arc<Mutex<WizardShared>>,
+    results: &WizardResults,
+) -> VerifyReadings {
+    let (
+        char_info_addr,
+        spawn_header_addr,
+        char_name,
+        zone_canonical,
+        level_off,
+        next_off,
+        prev_off,
+    ) = {
+        let s = shared.lock().unwrap();
+        let level_off = s
+            .scan_secondary
+            .iter()
+            .find(|(k, _)| k == "LevelOffset")
+            .map(|(_, v)| *v as usize)
+            .unwrap_or(0);
+        let next_off = s
+            .scan_secondary
+            .iter()
+            .find(|(k, _)| k == "NextOffset")
+            .map(|(_, v)| *v as usize)
+            .unwrap_or(0x8);
+        let prev_off = s
+            .scan_secondary
+            .iter()
+            .find(|(k, _)| k == "PrevOffset")
+            .map(|(_, v)| *v as usize)
+            .unwrap_or(0x10);
+        (
+            s.char_info_addr,
+            s.spawn_header_addr,
+            s.char_name.clone(),
+            s.scan_primary.zone_name,
+            level_off,
+            next_off,
+            prev_off,
+        )
+    };
+
+    let mut r = VerifyReadings::default();
+
+    // pSelf
+    let pself = match mem.read_raw_pointer(char_info_addr) {
+        Ok(p) if p != 0 => p,
+        _ => return r,
+    };
+
+    let buf = match mem.read_bytes(pself, STRUCT_SIZE) {
+        Ok(b) => b,
+        Err(_) => return r,
+    };
+
+    // Name
+    if let Some(name_off) = results.name {
+        r.name = mem
+            .read_string(pself + name_off as u64, 64)
+            .unwrap_or_default();
+        r.name_ok = if !char_name.is_empty() {
+            Some(r.name == char_name)
+        } else {
+            None
+        };
+    }
+
+    // Zone — canonical address remapped to actual points directly to the string
+    if zone_canonical != 0 {
+        r.zone = mem
+            .read_string(mem.canonical_to_actual(zone_canonical), 64)
+            .unwrap_or_default();
+    }
+
+    // Position
+    if let (Some(xo), Some(yo), Some(zo)) = (results.x, results.y, results.z)
+        && xo + 4 <= buf.len()
+        && yo + 4 <= buf.len()
+        && zo + 4 <= buf.len()
+    {
+        r.x = read_f32_at(&buf, xo);
+        r.y = read_f32_at(&buf, yo);
+        r.z = read_f32_at(&buf, zo);
+        r.pos_ok = r.x.is_finite()
+            && r.y.is_finite()
+            && r.z.is_finite()
+            && r.x.abs() <= 15_000.0
+            && r.y.abs() <= 15_000.0
+            && r.z.abs() <= 15_000.0;
+    }
+
+    // Heading
+    if let Some(ho) = results.heading
+        && ho + 4 <= buf.len()
+    {
+        r.heading = read_f32_at(&buf, ho);
+        r.heading_ok = (0.0..=512.0).contains(&r.heading);
+    }
+
+    // Level (byte field; offset comes from secondary scan, not wizard results)
+    if level_off > 0 && level_off < buf.len() {
+        r.level = buf[level_off];
+        r.level_ok = (1..=120).contains(&r.level);
+    }
+
+    // Spawn count — walk backward to head, then count forward; cap each at 2000.
+    // read_raw_pointer returns the current/last-inserted node, not the head.
+    if spawn_header_addr != 0
+        && let Ok(header_ptr) = mem.read_raw_pointer(spawn_header_addr)
+        && header_ptr != 0
+    {
+        let node_buf_size = next_off.max(prev_off) + 8;
+
+        // Seek head (where prev == 0)
+        let mut ptr = header_ptr;
+        for _ in 0..2000 {
+            let Ok(node) = mem.read_bytes(ptr, node_buf_size) else {
+                break;
+            };
+            let prev = read_u64_at(&node, prev_off);
+            if prev == 0 || prev == ptr {
+                break;
+            }
+            ptr = prev;
+        }
+
+        // Count forward from head
+        let mut count = 0usize;
+        for _ in 0..2000 {
+            if ptr == 0 {
+                break;
+            }
+            count += 1;
+            let Ok(node) = mem.read_bytes(ptr, node_buf_size) else {
+                break;
+            };
+            let next = read_u64_at(&node, next_off);
+            if next == 0 || next == ptr {
+                break;
+            }
+            ptr = next;
+        }
+        r.spawn_count = count;
+        r.spawn_count_ok = count >= 1;
+    }
+
+    r
 }

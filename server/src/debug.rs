@@ -298,7 +298,7 @@ impl DebugLoop {
         );
         println!("    NameOffset -> {}", parse_string_bytes(&rec.name));
         println!(
-            "    LastNameOffset -> {}",
+            "    LastnameOffset -> {}",
             parse_string_bytes(&rec.last_name)
         );
         println!("    SpawnIDOffset -> {}", id);

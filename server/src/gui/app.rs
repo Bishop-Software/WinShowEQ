@@ -11,7 +11,9 @@ use super::GuiState;
 use crate::config::{IniReader, PrimaryOffsets};
 use crate::scanner::EqGameScanner;
 use crate::session::SessionState;
-use crate::wizard::{WizardCommand, WizardPhase, WizardShared, start_wizard, write_wizard_results};
+use crate::wizard::{
+    VerifyReadings, WizardCommand, WizardPhase, WizardShared, start_wizard, write_wizard_results,
+};
 
 const WINDOW_PADDING: i8 = 10;
 const SIDE_BY_SIDE_MIN_WIDTH: f32 = 560.0;
@@ -30,6 +32,7 @@ struct OffsetFinderState {
     wizard_write_result: String,
     name_input: String,
     last_name_input: String,
+    verify_readings: Option<VerifyReadings>,
 }
 
 impl Default for OffsetFinderState {
@@ -46,6 +49,7 @@ impl Default for OffsetFinderState {
             wizard_write_result: String::new(),
             name_input: String::new(),
             last_name_input: String::new(),
+            verify_readings: None,
         }
     }
 }
@@ -307,7 +311,12 @@ impl WinShowEQApp {
 
         let (wizard_phase, wizard_log, wizard_results) = {
             match self.offset_finder.wizard_shared.lock() {
-                Ok(s) => (s.phase.clone(), s.log.clone(), s.results.clone()),
+                Ok(s) => {
+                    if s.phase == WizardPhase::Verify {
+                        self.offset_finder.verify_readings = s.verify.clone();
+                    }
+                    (s.phase.clone(), s.log.clone(), s.results.clone())
+                }
                 Err(_) => (WizardPhase::Idle, vec![], Default::default()),
             }
         };
@@ -321,6 +330,7 @@ impl WinShowEQApp {
         }
         let wizard_running = self.offset_finder.wizard_running;
         let wizard_write_result = self.offset_finder.wizard_write_result.clone();
+        let verify_readings = self.offset_finder.verify_readings.clone();
 
         let is_running = scanning || wizard_running;
 
@@ -340,6 +350,7 @@ impl WinShowEQApp {
         let mut wizard_cmd: Option<WizardCommand> = None;
         let mut do_write_ini = false;
         let mut do_confirm_name = false;
+        let mut do_rerun = false;
 
         ctx.show_viewport_immediate(
             egui::ViewportId::from_hash_of("offset_finder"),
@@ -517,7 +528,7 @@ impl WinShowEQApp {
                                                             ui.end_row();
                                                         };
                                                     row("NameOffset", wizard_results.name);
-                                                    row("LastNameOffset", wizard_results.last_name);
+                                                    row("LastnameOffset", wizard_results.last_name);
                                                     row("NextOffset", wizard_results.next);
                                                     row("PrevOffset", wizard_results.prev);
                                                     row("XOffset", wizard_results.x);
@@ -621,6 +632,112 @@ impl WinShowEQApp {
                                         }
                                     }
 
+                                    if matches!(wizard_phase, WizardPhase::Verify) {
+                                        let status_icon =
+                                            |ui: &mut egui::Ui, ok: bool| {
+                                                if ok {
+                                                    ui.label(
+                                                        RichText::new("OK")
+                                                            .color(Color32::GREEN),
+                                                    );
+                                                } else {
+                                                    ui.label(
+                                                        RichText::new("FAIL").color(Color32::RED),
+                                                    );
+                                                }
+                                            };
+                                        if let Some(ref vr) = verify_readings {
+                                            egui::Grid::new("verify_grid")
+                                                .num_columns(3)
+                                                .spacing([8.0, 2.0])
+                                                .show(ui, |ui| {
+                                                    ui.label(RichText::new("Field").strong());
+                                                    ui.label(RichText::new("Value").strong());
+                                                    ui.label(RichText::new("Status").strong());
+                                                    ui.end_row();
+
+                                                    ui.label("Player Name");
+                                                    ui.label(&vr.name);
+                                                    match vr.name_ok {
+                                                        Some(true) => {
+                                                            ui.label(
+                                                                RichText::new("OK")
+                                                                    .color(Color32::GREEN),
+                                                            );
+                                                        }
+                                                        Some(false) => {
+                                                            ui.label(
+                                                                RichText::new("FAIL")
+                                                                    .color(Color32::RED),
+                                                            )
+                                                            .on_hover_text(
+                                                                "Name mismatch — NameOffset may be wrong",
+                                                            );
+                                                        }
+                                                        None => {
+                                                            ui.label(
+                                                                RichText::new("?")
+                                                                    .color(Color32::YELLOW),
+                                                            )
+                                                            .on_hover_text(
+                                                                "Name not checked (EnterName was skipped)",
+                                                            );
+                                                        }
+                                                    }
+                                                    ui.end_row();
+
+                                                    ui.label("Zone");
+                                                    ui.label(&vr.zone);
+                                                    ui.label(
+                                                        RichText::new("?").color(Color32::YELLOW),
+                                                    )
+                                                    .on_hover_text(
+                                                        "Confirm the zone name looks correct",
+                                                    );
+                                                    ui.end_row();
+
+                                                    ui.label("X / Y / Z");
+                                                    ui.label(format!(
+                                                        "{:.2} / {:.2} / {:.2}",
+                                                        vr.x, vr.y, vr.z
+                                                    ));
+                                                    status_icon(ui, vr.pos_ok);
+                                                    ui.end_row();
+
+                                                    ui.label("Heading");
+                                                    ui.label(format!("{:.1}", vr.heading));
+                                                    status_icon(ui, vr.heading_ok);
+                                                    ui.end_row();
+
+                                                    ui.label("Level");
+                                                    ui.label(vr.level.to_string());
+                                                    status_icon(ui, vr.level_ok);
+                                                    ui.end_row();
+
+                                                    ui.label("Spawn Count");
+                                                    ui.label(vr.spawn_count.to_string());
+                                                    status_icon(ui, vr.spawn_count_ok);
+                                                    ui.end_row();
+                                                });
+                                        } else {
+                                            ui.label("Reading memory…");
+                                        }
+                                        ui.add_space(4.0);
+                                        ui.horizontal(|ui| {
+                                            if ui.button("Accept & Write to INI").clicked() {
+                                                wizard_cmd = Some(WizardCommand::ActionDone);
+                                                do_write_ini = true;
+                                            }
+                                            if ui.button("Re-run Wizard").clicked() {
+                                                do_rerun = true;
+                                            }
+                                            if ui.button("Cancel").clicked() {
+                                                wizard_cmd = Some(WizardCommand::Cancel);
+                                            }
+                                        });
+                                        ui.add_space(4.0);
+                                    }
+
                                     if matches!(wizard_phase, WizardPhase::Complete) {
                                         ui.horizontal(|ui| {
                                             if ui.button("Write to INI").clicked() {
@@ -683,6 +800,11 @@ impl WinShowEQApp {
         if do_start {
             self.save_exe_path();
             self.start_combined_run();
+        }
+
+        if do_rerun {
+            let saved_path = self.offset_finder.exe_path.clone();
+            self.offset_finder = OffsetFinderState::with_exe_path(saved_path);
         }
 
         if let Some(cmd) = wizard_cmd
