@@ -289,7 +289,8 @@ pub fn write_wizard_results(
         }
     };
 
-    // [SpawnInfo Offsets] — wizard-discovered fields (only reliable methods):
+    // [SpawnInfo Offsets] — wizard-discovered fields:
+    //   NextOffset/PrevOffset      — doubly-linked list invariant (spawn.next.prev == spawn)
     //   NameOffset/LastnameOffset  — exact match on user-provided character name
     //   XOffset/YOffset/ZOffset    — consecutive 4-byte float cluster during movement
     //   HeadingOffset              — float in [0,512] changing only during turning
@@ -298,8 +299,8 @@ pub fn write_wizard_results(
     //
     // Excluded (heuristics too error-prone):
     //   NameOffset/LastnameOffset — when name not confirmed by user (heuristic only)
-    //   SpeedOffset               — "drops near 0 when stopped" matches multiple floats
-    //   NextOffset/PrevOffset     — pointer scan picks wrong heap pointer too often
+    write_spawn("NextOffset", results.next);
+    write_spawn("PrevOffset", results.prev);
     if results.name_confirmed {
         write_spawn("NameOffset", results.name);
         write_spawn("LastnameOffset", results.last_name);
@@ -307,6 +308,7 @@ pub fn write_wizard_results(
     write_spawn("XOffset", results.x);
     write_spawn("YOffset", results.y);
     write_spawn("ZOffset", results.z);
+    write_spawn("SpeedOffset", results.speed);
     write_spawn("HeadingOffset", results.heading);
     write_spawn("HideOffset", results.hidden);
     write_spawn("OwnerIDOffset", results.owner);
@@ -619,23 +621,17 @@ fn run_wizard(
         }
     }
 
-    // Next / Prev pointers
-    let ptrs = find_pointer_candidates(&buf, pself);
-    match ptrs.len() {
-        0 => log!("Next/Prev — not found"),
-        1 => {
+    // Next / Prev — validated via doubly-linked list invariant:
+    // spawn.next.prev == spawn_addr
+    match find_next_prev_offsets(&mem, pself) {
+        Ok((next_off, prev_off)) => {
+            log!("Next → 0x{:x}  Prev → 0x{:x}", next_off, prev_off);
             if let Ok(mut s) = shared.lock() {
-                s.results.next = Some(ptrs[0]);
+                s.results.next = Some(next_off);
+                s.results.prev = Some(prev_off);
             }
-            log!("One pointer @ 0x{:x} — need two for Next/Prev", ptrs[0]);
         }
-        _ => {
-            if let Ok(mut s) = shared.lock() {
-                s.results.next = Some(ptrs[0]);
-                s.results.prev = Some(ptrs[1]);
-            }
-            log!("Next → 0x{:x}  Prev → 0x{:x}", ptrs[0], ptrs[1]);
-        }
+        Err(diag) => log!("Next/Prev — not found: {}", diag),
     }
 
     // Player SpawnID (needed later for OwnerIDOffset discovery)
@@ -727,6 +723,7 @@ fn run_wizard(
     }
 
     let mut movement_union: Vec<usize> = Vec::new();
+    let mut last_walking_buf: Vec<u8> = Vec::new();
     if !walk_skipped {
         log!(
             "Collecting movement data for {}ms...",
@@ -748,6 +745,7 @@ fn run_wizard(
                     movement_union.push(off);
                 }
             }
+            last_walking_buf = curr;
         }
         movement_union.sort();
         log!("Movement candidates: {}", movement_union.len());
@@ -789,34 +787,11 @@ fn run_wizard(
         return;
     };
 
-    if !stop_skipped {
-        let mut speed_candidates: Vec<usize> = movement_union
-            .iter()
-            .filter(|&&off| {
-                let v = read_f32_at(&stopped_buf, off);
-                v.is_finite() && v.abs() < 0.1
-            })
-            .copied()
-            .collect();
-        speed_candidates.sort_by(|&a, &b| {
-            read_f32_at(&stopped_buf, a)
-                .abs()
-                .partial_cmp(&read_f32_at(&stopped_buf, b).abs())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        let speed_offset = speed_candidates.first().copied();
-        if let Some(off) = speed_offset {
-            log!("Speed → 0x{:x}", off);
-            if let Ok(mut s) = shared.lock() {
-                s.results.speed = Some(off);
-            }
-            movement_union.retain(|&o| o != off);
-        } else {
-            log!("Speed — not found among movement candidates");
-        }
-    } else {
+    if stop_skipped {
         log!("Stopped — skipped.");
     }
+    // Speed detection is deferred until after X/Y/Z and Heading are known
+    // so we can exclude those offsets from the candidate set.
     check_cancel!();
 
     // ── Phase 7: turn → find heading ─────────────────────────────────────────
@@ -892,15 +867,22 @@ fn run_wizard(
     }
 
     // Remaining movement_union candidates → X, Y, Z.
-    // They should be consecutive 4-byte-aligned offsets.
-    let pos = find_consecutive_cluster(&movement_union, 3, 4);
-    let (x_off, y_off, z_off) = if pos.len() >= 3 {
-        (pos[0], pos[1], pos[2])
-    } else if movement_union.len() >= 3 {
-        (movement_union[0], movement_union[1], movement_union[2])
+    // Z often does not change on flat terrain and may be absent from movement_union,
+    // causing a 3-cluster search to skip X/Y/Z and land on a later spurious cluster.
+    // Find the earliest consecutive pair (X, Y) and infer Z = Y + 4.
+    let pair = find_consecutive_cluster(&movement_union, 2, 4);
+    let (x_off, y_off, z_off) = if pair.len() >= 2 {
+        let inferred_z = pair[1] + 4;
+        if !movement_union.contains(&inferred_z) {
+            log!(
+                "Z not in movement candidates (flat terrain?); inferring Z = 0x{:x}",
+                inferred_z
+            );
+        }
+        (pair[0], pair[1], inferred_z)
     } else {
         log!(
-            "Position — only {} candidates remain (need 3)",
+            "Position — only {} movement candidates, no consecutive pair found",
             movement_union.len()
         );
         if let Some(&a) = movement_union.first() {
@@ -920,6 +902,66 @@ fn run_wizard(
             if z_off != 0 {
                 s.results.z = Some(z_off);
             }
+        }
+    }
+    // ── Speed detection (deferred): now that X/Y/Z and Heading are known ────────
+    if !stop_skipped {
+        let (known, heading_off_opt): (std::collections::HashSet<usize>, Option<usize>) = {
+            let s = shared.lock().ok();
+            let heading = s.as_ref().and_then(|s| s.results.heading);
+            let known = [
+                s.as_ref().and_then(|s| s.results.x),
+                s.as_ref().and_then(|s| s.results.y),
+                s.as_ref().and_then(|s| s.results.z),
+                heading,
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            (known, heading)
+        };
+
+        // Primary: SpeedOffset is structurally always at HeadingOffset - 4 in EQ's spawn struct.
+        // Verify it with the stopped snapshot to confirm it really does drop to ~0.
+        let structural = heading_off_opt
+            .and_then(|h| h.checked_sub(4))
+            .filter(|&off| read_f32_at(&stopped_buf, off).abs() < 0.1);
+
+        let speed_off = if let Some(off) = structural {
+            log!("Speed → 0x{:x} (structural: heading - 4)", off);
+            Some(off)
+        } else {
+            // Fallback: find movement_union candidates that dropped to ~0 when stopped,
+            // were clearly nonzero while walking, and aren't a known offset.
+            let mut candidates: Vec<usize> = movement_union
+                .iter()
+                .filter(|&&off| {
+                    !known.contains(&off)
+                        && read_f32_at(&stopped_buf, off).abs() < 0.1
+                        && (last_walking_buf.is_empty()
+                            || read_f32_at(&last_walking_buf, off).abs() > 0.5)
+                })
+                .copied()
+                .collect();
+            candidates.sort_by(|&a, &b| {
+                read_f32_at(&last_walking_buf, b)
+                    .abs()
+                    .partial_cmp(&read_f32_at(&last_walking_buf, a).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            if let Some(&off) = candidates.first() {
+                log!("Speed → 0x{:x} (heuristic fallback)", off);
+                Some(off)
+            } else {
+                log!("Speed — not found");
+                None
+            }
+        };
+
+        if let Some(off) = speed_off
+            && let Ok(mut s) = shared.lock()
+        {
+            s.results.speed = Some(off);
         }
     }
     check_cancel!();
@@ -1043,27 +1085,6 @@ fn run_wizard(
     set_phase!(WizardPhase::WaitItem);
     log!("Drop any item on the ground, then click 'Item dropped' (or Skip).");
 
-    // Current player position (for cross-referencing item coordinates)
-    let player_pos: Option<(f32, f32, f32)> = {
-        let s = shared.lock().ok();
-        let xo = s.as_ref().and_then(|s| s.results.x).unwrap_or(0);
-        let yo = s.as_ref().and_then(|s| s.results.y).unwrap_or(0);
-        let zo = s.as_ref().and_then(|s| s.results.z).unwrap_or(0);
-        if xo > 0 {
-            get_pself(&mem, char_info_addr)
-                .and_then(|ps| mem.read_bytes(ps, STRUCT_SIZE).ok())
-                .map(|buf| {
-                    (
-                        read_f32_at(&buf, xo),
-                        read_f32_at(&buf, yo),
-                        read_f32_at(&buf, zo),
-                    )
-                })
-        } else {
-            None
-        }
-    };
-
     loop {
         check_cancel!();
         std::thread::sleep(Duration::from_millis(200));
@@ -1072,7 +1093,7 @@ fn run_wizard(
                 if ground_addr == 0 {
                     log!("GroundItem — ItemsAddr not found by scan");
                 } else {
-                    match discover_item_offsets(&mem, ground_addr, player_pos) {
+                    match discover_item_offsets(&mem, ground_addr) {
                         Some(r) => {
                             log!("GroundItem.Name  → 0x{:x}", r.item_name.unwrap_or(0));
                             log!(
@@ -1212,17 +1233,107 @@ fn find_name_by_value(buf: &[u8], name: &str) -> Option<usize> {
 
 /// Scan the first POINTER_SCAN_RANGE bytes of buf for 8-byte values that look like
 /// heap pointers in the same memory region as pself (same top 3 bytes, non-zero, != pself).
-fn find_pointer_candidates(buf: &[u8], pself: u64) -> Vec<usize> {
-    const POINTER_SCAN_RANGE: usize = 0x80;
-    let self_region = pself >> 40;
-    let mut results = Vec::new();
-    for off in (0..POINTER_SCAN_RANGE.min(buf.len().saturating_sub(8))).step_by(8) {
-        let val = read_u64_at(buf, off);
-        if val != 0 && val != pself && (val >> 40) == self_region {
-            results.push(off);
+/// Discover NextOffset and PrevOffset using the doubly-linked list invariant:
+/// `spawn.next.prev == spawn_addr`. Uses pSelf (a known spawn struct address)
+/// rather than the spawn list head, which may be a manager/header struct.
+/// Returns Ok on success or Err with a diagnostic message.
+fn find_next_prev_offsets(mem: &MemReader, pself: u64) -> Result<(usize, usize), String> {
+    let spawn_addr = pself;
+    if spawn_addr == 0 {
+        return Err("pself is null".to_string());
+    }
+
+    let buf = mem
+        .read_bytes(spawn_addr, 0x80)
+        .map_err(|e| format!("read_bytes(pself=0x{:x}) failed: {}", spawn_addr, e))?;
+
+    let spawn_region = spawn_addr >> 40;
+
+    // Collect 8-byte-aligned offsets whose values look like pointers into the
+    // same allocation region (same upper bytes). Self-referential pointers are
+    // allowed: in a single-element list next == prev == spawn_addr, and the
+    // invariant spawn.next.prev == spawn_addr still holds.
+    let candidates: Vec<usize> = (0..0x80usize.min(buf.len().saturating_sub(8)))
+        .step_by(8)
+        .filter(|&off| {
+            let v = read_u64_at(&buf, off);
+            v != 0 && (v >> 40) == spawn_region
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        // Dump what we actually found so the caller can diagnose region mismatches
+        let found: Vec<String> = (0..0x80usize.min(buf.len().saturating_sub(8)))
+            .step_by(8)
+            .filter_map(|off| {
+                let v = read_u64_at(&buf, off);
+                if v != 0 {
+                    Some(format!(
+                        "  [0x{:x}] = 0x{:x} (region 0x{:x})",
+                        off,
+                        v,
+                        v >> 40
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        return Err(format!(
+            "no pointer candidates at spawn_addr=0x{:x} (region=0x{:x}); non-zero 8B slots:\n{}",
+            spawn_addr,
+            spawn_region,
+            if found.is_empty() {
+                "  (none)".to_string()
+            } else {
+                found.join("\n")
+            }
+        ));
+    }
+
+    // For each candidate next_off: follow the pointer into the next struct and
+    // check if candidate prev_off there points back to spawn_addr.
+    let mut diag: Vec<String> = Vec::new();
+    for &next_off in &candidates {
+        let next_ptr = read_u64_at(&buf, next_off);
+        match mem.read_bytes(next_ptr, 0x80) {
+            Err(e) => {
+                diag.push(format!(
+                    "  next_off=0x{:x} ptr=0x{:x} read_bytes FAILED: {}",
+                    next_off, next_ptr, e
+                ));
+            }
+            Ok(next_buf) => {
+                // Search ALL 8-byte-aligned offsets in the target struct for the back-pointer,
+                // not just pself's candidates — pself.prev may be 0 (head of list) and therefore
+                // absent from candidates, which would miss the correct prev_off entirely.
+                for prev_off in (0..0x80usize.min(next_buf.len().saturating_sub(8))).step_by(8) {
+                    if prev_off == next_off {
+                        continue;
+                    }
+                    if read_u64_at(&next_buf, prev_off) == spawn_addr {
+                        // Enforce smaller offset = NextOffset (EQ layout: Next=0x8 < Prev=0x10).
+                        let (n, p) = if next_off < prev_off {
+                            (next_off, prev_off)
+                        } else {
+                            (prev_off, next_off)
+                        };
+                        return Ok((n, p));
+                    }
+                }
+            }
         }
     }
-    results
+
+    Err(format!(
+        "invariant not satisfied for spawn_addr=0x{:x}; candidates: {:?}\ndetail:\n{}",
+        spawn_addr,
+        candidates
+            .iter()
+            .map(|&o| format!("0x{:x}=0x{:x}", o, read_u64_at(&buf, o)))
+            .collect::<Vec<_>>(),
+        diag.join("\n")
+    ))
 }
 
 /// Return all 4-byte-aligned offsets in buf where the f32 value changed between
@@ -1392,11 +1503,7 @@ fn find_owner_offset(
 }
 
 /// Read the ground item struct and identify field offsets.
-fn discover_item_offsets(
-    mem: &MemReader,
-    ground_addr_canonical: u64,
-    player_pos: Option<(f32, f32, f32)>,
-) -> Option<WizardResults> {
+fn discover_item_offsets(mem: &MemReader, ground_addr_canonical: u64) -> Option<WizardResults> {
     // Resolve item struct pointer (mirrors server_logic ground item logic)
     let base_ptr = mem.read_raw_pointer(ground_addr_canonical).ok()?;
     if base_ptr == 0 {
@@ -1432,12 +1539,13 @@ fn discover_item_offsets(
     let item_id = Some(0x10usize); // stable across builds in practice
     let item_drop_id = Some(0x18usize);
 
-    // X/Y/Z: floats near player position
-    let (item_x, item_y, item_z) = if let Some((px, py, pz)) = player_pos {
-        find_item_position_offsets(&buf, px, py, pz)
-    } else {
-        (None, None, None)
-    };
+    // X/Y/Z: derive from name offset using the fixed intra-struct relationship.
+    // EQ's GroundItem struct has X/Y/Z at name_off + 0x54/0x58/0x5c (e.g. 0x38
+    // + 0x54 = 0x8c). Float-matching heuristics fail because adjacent fields
+    // can coincidentally score better than the true cluster.
+    let item_x = Some(name_off + 0x54);
+    let item_y = Some(name_off + 0x58);
+    let item_z = Some(name_off + 0x5c);
 
     Some(WizardResults {
         item_name: Some(name_off),
@@ -1463,41 +1571,6 @@ fn find_item_name_offset(buf: &[u8]) -> Option<usize> {
         }
     }
     None
-}
-
-fn find_item_position_offsets(
-    buf: &[u8],
-    px: f32,
-    py: f32,
-    pz: f32,
-) -> (Option<usize>, Option<usize>, Option<usize>) {
-    // Items are dropped near the player; search for floats within 50 units
-    let candidates: Vec<usize> = (0..buf.len().saturating_sub(4))
-        .step_by(4)
-        .filter(|&off| {
-            let v = read_f32_at(buf, off);
-            v.is_finite()
-                && ((v - px).abs() < 50.0 || (v - py).abs() < 50.0 || (v - pz).abs() < 50.0)
-        })
-        .collect();
-
-    // Look for 3 consecutive float offsets
-    let cluster = find_consecutive_cluster(&candidates, 3, 4);
-    if cluster.len() >= 3 {
-        (Some(cluster[0]), Some(cluster[1]), Some(cluster[2]))
-    } else if candidates.len() >= 3 {
-        (
-            Some(candidates[0]),
-            Some(candidates[1]),
-            Some(candidates[2]),
-        )
-    } else {
-        (
-            candidates.first().copied(),
-            candidates.get(1).copied(),
-            candidates.get(2).copied(),
-        )
-    }
 }
 
 // ── Verify phase helper ───────────────────────────────────────────────────────

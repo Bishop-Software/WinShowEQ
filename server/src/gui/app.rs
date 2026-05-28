@@ -805,6 +805,8 @@ impl WinShowEQApp {
         if do_rerun {
             let saved_path = self.offset_finder.exe_path.clone();
             self.offset_finder = OffsetFinderState::with_exe_path(saved_path);
+            self.offset_finder.open = true;
+            self.start_combined_run();
         }
 
         if let Some(cmd) = wizard_cmd
