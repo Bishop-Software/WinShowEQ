@@ -958,10 +958,10 @@ fn run_wizard(
             }
         };
 
-        if let Some(off) = speed_off {
-            if let Ok(mut s) = shared.lock() {
-                s.results.speed = Some(off);
-            }
+        if let Some(off) = speed_off
+            && let Ok(mut s) = shared.lock()
+        {
+            s.results.speed = Some(off);
         }
     }
     check_cancel!();
