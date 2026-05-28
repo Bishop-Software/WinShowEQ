@@ -905,46 +905,63 @@ fn run_wizard(
         }
     }
     // ── Speed detection (deferred): now that X/Y/Z and Heading are known ────────
-    // Filter movement_union to floats that dropped to ~0 when stopped, excluding
-    // X/Y/Z/Heading offsets so only genuine speed candidates remain.
     if !stop_skipped {
-        let known: std::collections::HashSet<usize> = {
+        let (known, heading_off_opt): (std::collections::HashSet<usize>, Option<usize>) = {
             let s = shared.lock().ok();
-            [
+            let heading = s.as_ref().and_then(|s| s.results.heading);
+            let known = [
                 s.as_ref().and_then(|s| s.results.x),
                 s.as_ref().and_then(|s| s.results.y),
                 s.as_ref().and_then(|s| s.results.z),
-                s.as_ref().and_then(|s| s.results.heading),
+                heading,
             ]
             .into_iter()
             .flatten()
-            .collect()
-        };
-        let mut speed_candidates: Vec<usize> = movement_union
-            .iter()
-            .filter(|&&off| {
-                !known.contains(&off)
-                    && read_f32_at(&stopped_buf, off).abs() < 0.1
-                    && (last_walking_buf.is_empty()
-                        || read_f32_at(&last_walking_buf, off).abs() > 0.5)
-            })
-            .copied()
             .collect();
-        // Sort by walking value descending — actual run speed has the highest value
-        // while moving, so it wins over adjacent struct fields that are also near 0 when stopped.
-        speed_candidates.sort_by(|&a, &b| {
-            read_f32_at(&last_walking_buf, b)
-                .abs()
-                .partial_cmp(&read_f32_at(&last_walking_buf, a).abs())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        if let Some(&off) = speed_candidates.first() {
-            log!("Speed → 0x{:x}", off);
+            (known, heading)
+        };
+
+        // Primary: SpeedOffset is structurally always at HeadingOffset - 4 in EQ's spawn struct.
+        // Verify it with the stopped snapshot to confirm it really does drop to ~0.
+        let structural = heading_off_opt
+            .and_then(|h| h.checked_sub(4))
+            .filter(|&off| read_f32_at(&stopped_buf, off).abs() < 0.1);
+
+        let speed_off = if let Some(off) = structural {
+            log!("Speed → 0x{:x} (structural: heading - 4)", off);
+            Some(off)
+        } else {
+            // Fallback: find movement_union candidates that dropped to ~0 when stopped,
+            // were clearly nonzero while walking, and aren't a known offset.
+            let mut candidates: Vec<usize> = movement_union
+                .iter()
+                .filter(|&&off| {
+                    !known.contains(&off)
+                        && read_f32_at(&stopped_buf, off).abs() < 0.1
+                        && (last_walking_buf.is_empty()
+                            || read_f32_at(&last_walking_buf, off).abs() > 0.5)
+                })
+                .copied()
+                .collect();
+            candidates.sort_by(|&a, &b| {
+                read_f32_at(&last_walking_buf, b)
+                    .abs()
+                    .partial_cmp(&read_f32_at(&last_walking_buf, a).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            if let Some(&off) = candidates.first() {
+                log!("Speed → 0x{:x} (heuristic fallback)", off);
+                Some(off)
+            } else {
+                log!("Speed — not found");
+                None
+            }
+        };
+
+        if let Some(off) = speed_off {
             if let Ok(mut s) = shared.lock() {
                 s.results.speed = Some(off);
             }
-        } else {
-            log!("Speed — not found (no candidates after excluding X/Y/Z/Heading)");
         }
     }
     check_cancel!();
