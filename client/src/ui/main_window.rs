@@ -848,6 +848,12 @@ impl eframe::App for MainApp {
                     self.options.trails_enabled = data.trails_enabled;
                     ui.close();
                 }
+                if ui
+                    .checkbox(&mut self.config.map_overlay.show_grid, "Show Grid")
+                    .clicked()
+                {
+                    self.save_config();
+                }
                 ui.separator();
                 ui.menu_button("Show", |ui| {
                     if ui
@@ -988,6 +994,16 @@ impl eframe::App for MainApp {
                 let mut data = self.data.lock().unwrap();
                 data.trails_enabled = !data.trails_enabled;
                 self.options.trails_enabled = data.trails_enabled;
+            }
+            let grid_img = egui::Image::new(egui::include_image!("../../assets/grid.png"))
+                .fit_to_exact_size(egui::vec2(24.0, 24.0));
+            if ui
+                .add(egui::Button::image(grid_img).selected(self.config.map_overlay.show_grid))
+                .on_hover_text("Show Grid")
+                .clicked()
+            {
+                self.config.map_overlay.show_grid = !self.config.map_overlay.show_grid;
+                self.save_config();
             }
             let tool_img = egui::Image::new(egui::include_image!("../../assets/tool.png"))
                 .fit_to_exact_size(egui::vec2(24.0, 24.0));

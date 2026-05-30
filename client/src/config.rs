@@ -19,6 +19,7 @@ pub struct MapOverlaySettings {
     pub show_layer1: bool,
     pub show_layer2: bool,
     pub show_layer3: bool,
+    pub show_grid: bool,
 }
 
 impl Default for MapOverlaySettings {
@@ -35,6 +36,7 @@ impl Default for MapOverlaySettings {
             show_layer1: true,
             show_layer2: true,
             show_layer3: true,
+            show_grid: false,
         }
     }
 }
@@ -243,6 +245,11 @@ impl ClientConfig {
             "ShowLayer3={}",
             if self.map_overlay.show_layer3 { 1 } else { 0 }
         )?;
+        writeln!(
+            f,
+            "ShowGrid={}",
+            if self.map_overlay.show_grid { 1 } else { 0 }
+        )?;
         Ok(())
     }
 
@@ -381,6 +388,9 @@ impl ClientConfig {
             }
             if let Some(v) = overlay.get("showlayer3") {
                 cfg.map_overlay.show_layer3 = v != "0";
+            }
+            if let Some(v) = overlay.get("showgrid") {
+                cfg.map_overlay.show_grid = v == "1";
             }
         }
 
