@@ -135,6 +135,9 @@ impl<'a> MapCon<'a> {
             pan: state.pan,
         };
 
+        if overlay.show_grid {
+            draw_grid(&ctx);
+        }
         draw_map_lines(&ctx, &data.map, overlay);
         draw_labels(&ctx, &data.map, overlay);
         draw_mob_trails(&ctx, data, filtered_ids);
@@ -239,6 +242,74 @@ fn layer_visible(layer: u8, overlay: &MapOverlaySettings) -> bool {
         2 => overlay.show_layer2,
         3 => overlay.show_layer3,
         _ => true, // base layer always shown
+    }
+}
+
+fn draw_grid(ctx: &DrawCtx) {
+    let w = ctx.rect.width();
+    let h = ctx.rect.height();
+
+    // Auto-select interval so ~4–8 lines are visible across the width.
+    let interval = [250.0_f32, 500.0, 1000.0, 2000.0, 5000.0]
+        .iter()
+        .copied()
+        .find(|&i| w / (i * ctx.zoom) < 8.0)
+        .unwrap_or(5000.0);
+
+    // Visible EQ coordinate range (map space == EQ space with sign flip; DrawCtx works in map space).
+    let eq_left = ctx.focus.0 - (w / 2.0 + ctx.pan.x) / ctx.zoom;
+    let eq_right = ctx.focus.0 + (w / 2.0 - ctx.pan.x) / ctx.zoom;
+    let eq_bottom = ctx.focus.1 - (h / 2.0 - ctx.pan.y) / ctx.zoom;
+    let eq_top = ctx.focus.1 + (h / 2.0 + ctx.pan.y) / ctx.zoom;
+
+    let grid_color = Color32::from_rgba_premultiplied(128, 128, 128, 48);
+    let label_color = Color32::from_rgba_premultiplied(180, 180, 180, 160);
+    let font = FontId::proportional(10.0);
+
+    // Minimum pixel spacing between labels before we suppress them.
+    let label_px_threshold = 40.0_f32;
+    let show_labels = interval * ctx.zoom >= label_px_threshold;
+
+    // Vertical lines (constant map-X / EQ north-south coordinate).
+    let first_x = (eq_left / interval).ceil() * interval;
+    let mut gx = first_x;
+    while gx <= eq_right {
+        let screen = ctx.to_screen(gx, 0.0);
+        let top = Pos2::new(screen.x, ctx.rect.min.y);
+        let bot = Pos2::new(screen.x, ctx.rect.max.y);
+        ctx.painter
+            .line_segment([top, bot], Stroke::new(1.0, grid_color));
+        if show_labels {
+            ctx.painter.text(
+                Pos2::new(screen.x + 2.0, ctx.rect.min.y + 2.0),
+                egui::Align2::LEFT_TOP,
+                format!("{:.0}", gx),
+                font.clone(),
+                label_color,
+            );
+        }
+        gx += interval;
+    }
+
+    // Horizontal lines (constant map-Y / EQ east-west coordinate).
+    let first_y = (eq_bottom / interval).ceil() * interval;
+    let mut gy = first_y;
+    while gy <= eq_top {
+        let screen = ctx.to_screen(0.0, gy);
+        let left = Pos2::new(ctx.rect.min.x, screen.y);
+        let right = Pos2::new(ctx.rect.max.x, screen.y);
+        ctx.painter
+            .line_segment([left, right], Stroke::new(1.0, grid_color));
+        if show_labels {
+            ctx.painter.text(
+                Pos2::new(ctx.rect.min.x + 2.0, screen.y - 2.0),
+                egui::Align2::LEFT_BOTTOM,
+                format!("{:.0}", gy),
+                font.clone(),
+                label_color,
+            );
+        }
+        gy += interval;
     }
 }
 
