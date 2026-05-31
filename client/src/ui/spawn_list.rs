@@ -292,8 +292,9 @@ pub fn show(
                         .set(bg_slot, egui::Shape::rect_filled(row_rect, 0.0, bg));
                 }
 
-                // Capture name/pos before the closure borrows s
+                // Capture name/pos/category before the closure borrows s
                 let spawn_name = s.name.clone();
+                let spawn_category = s.spawn_category;
                 let (sx, sy, sz) = (s.x, s.y, s.z);
                 let spawn_id = s.id;
 
@@ -312,16 +313,18 @@ pub fn show(
                     pending_select = Some(spawn_id);
                 }
                 row_resp.context_menu(|ui| {
-                    if ui.button("Add Timer…").clicked() {
-                        action = Some(SpawnAction::AddTimer {
-                            name: spawn_name.clone(),
-                            x: sx,
-                            y: sy,
-                            z: sz,
-                        });
-                        ui.close();
+                    if spawn_category != SpawnCategory::Corpse {
+                        if ui.button("Add Timer…").clicked() {
+                            action = Some(SpawnAction::AddTimer {
+                                name: spawn_name.clone(),
+                                x: sx,
+                                y: sy,
+                                z: sz,
+                            });
+                            ui.close();
+                        }
+                        ui.separator();
                     }
-                    ui.separator();
                     if ui.button("Add to Hunt").clicked() {
                         action = Some(SpawnAction::AddToFilter {
                             name: spawn_name.clone(),
