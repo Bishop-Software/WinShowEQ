@@ -51,8 +51,10 @@ pub struct AppData {
     pub ground_list_column_widths: Vec<f32>,
     /// Spawn IDs currently highlighted by the search dialog.
     pub marked_ids: HashSet<u32>,
-    /// Single spawn selected by clicking a row in the spawn list.
+    /// Single spawn selected by clicking a row in the spawn list or a dot on the map canvas.
     pub selected_id: Option<u32>,
+    /// When true, the spawn list should scroll to reveal `selected_id` on the next frame.
+    pub scroll_to_selected: bool,
     /// Auto-learning respawn timer engine.
     pub observer: SpawnObserver,
     /// NPC spawn IDs seen in the current tick (scratch space for observer diff).
@@ -122,6 +124,7 @@ impl Default for AppData {
             ],
             marked_ids: HashSet::new(),
             selected_id: None,
+            scroll_to_selected: false,
             observer: SpawnObserver::default(),
             curr_tick_npc_ids: HashSet::new(),
             curr_tick_all_ids: HashSet::new(),

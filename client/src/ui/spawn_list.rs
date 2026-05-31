@@ -58,6 +58,12 @@ pub fn show(
     let player_pos = data.player_pos();
     let current_selected = data.selected_id; // Copy before spawns borrows data
     let current_target = data.target_id;
+    // Copy before spawns borrows data; used inside the scroll closure without touching data.
+    let scroll_to_id: Option<u32> = if data.scroll_to_selected {
+        data.selected_id
+    } else {
+        None
+    };
 
     let mut spawns: Vec<_> = data.spawns.iter().collect();
 
@@ -298,6 +304,11 @@ pub fn show(
                 let (sx, sy, sz) = (s.x, s.y, s.z);
                 let spawn_id = s.id;
 
+                // Scroll to this row when selection was set from the map canvas.
+                if scroll_to_id == Some(s.id) {
+                    ui.scroll_to_rect(row_rect, Some(egui::Align::Center));
+                }
+
                 // ui.interact() gives the rect a click sense so context_menu fires on right-click
                 let row_resp = ui.interact(row_rect, ui.id().with(s.id), egui::Sense::click());
 
@@ -367,6 +378,9 @@ pub fn show(
         });
 
     drop(spawns);
+    if scroll_to_id.is_some() {
+        data.scroll_to_selected = false;
+    }
     if let Some(id) = pending_select {
         if data.selected_id == Some(id) {
             data.selected_id = None; // click same row again to deselect

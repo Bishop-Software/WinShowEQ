@@ -866,6 +866,15 @@ impl eframe::App for MainApp {
                     ui.close();
                 }
                 ui.separator();
+                if ui
+                    .checkbox(
+                        &mut self.config.map_overlay.show_timer_dots,
+                        "Show Timer Dots",
+                    )
+                    .clicked()
+                {
+                    self.save_config();
+                }
                 let mut trails_on = self.data.lock().unwrap().trails_enabled;
                 if ui.checkbox(&mut trails_on, "Mob Trails  T").clicked() {
                     let mut data = self.data.lock().unwrap();
@@ -1107,6 +1116,27 @@ impl eframe::App for MainApp {
                     self.add_note.open = true;
                     self.add_note.text.clear();
                     self.add_note.override_pos = Some((eq_x, eq_y, eq_z));
+                }
+                MapAction::AddToFilter { name, category } => {
+                    self.handle_spawn_action(crate::ui::spawn_list::SpawnAction::AddToFilter {
+                        name,
+                        category,
+                    });
+                }
+                MapAction::SelectSpawn { id } => {
+                    let mut data = self.data.lock().unwrap();
+                    match id {
+                        Some(spawn_id) if data.selected_id == Some(spawn_id) => {
+                            data.selected_id = None; // toggle off
+                        }
+                        Some(spawn_id) => {
+                            data.selected_id = Some(spawn_id);
+                            data.scroll_to_selected = true;
+                        }
+                        None => {
+                            data.selected_id = None;
+                        }
+                    }
                 }
             }
         }

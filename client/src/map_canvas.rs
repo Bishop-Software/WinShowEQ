@@ -5,20 +5,29 @@ use egui::{Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 use crate::config::{FollowMode, MapOverlaySettings};
 use crate::data::AppData;
 use crate::data::spawns::{ConColor, SpawnCategory, SpawnInfo, con_color};
+use crate::filters::FilterCategory;
 use crate::game_data::GameData;
 use crate::map_reader::MapData;
 
 const SPAWN_RADIUS: f32 = 4.0;
+const HOVER_RADIUS: f32 = 8.0;
 const SELF_RADIUS: f32 = 6.0;
 const GROUND_RADIUS: f32 = 4.0;
 pub(crate) const ZOOM_STEP: f32 = 1.12;
 pub(crate) const ZOOM_MIN: f32 = 0.04;
 pub(crate) const ZOOM_MAX: f32 = 20.0;
 
-/// Action produced by the map canvas context menu, to be handled by the caller.
+/// Action produced by the map canvas, to be handled by the caller.
 pub enum MapAction {
     /// User chose "Add Map Note here" — EQ-space coordinates of the right-click point.
     AddNoteAt { eq_x: f32, eq_y: f32 },
+    /// User left-clicked on or near a spawn dot. `None` means empty space (clear selection).
+    SelectSpawn { id: Option<u32> },
+    /// User chose a filter action from the map canvas right-click context menu.
+    AddToFilter {
+        name: String,
+        category: FilterCategory,
+    },
 }
 
 /// Persistent camera state for the map canvas.
@@ -93,6 +102,8 @@ impl<'a> MapCon<'a> {
             state.pan.y = (wy - focus.1) * state.zoom;
         }
 
+        let mut action: Option<MapAction> = None;
+
         // Shift+left-click → set bearing target; plain click or ESC → clear it.
         let (shift_held, esc_pressed) =
             ui.input(|i| (i.modifiers.shift, i.key_pressed(egui::Key::Escape)));
@@ -109,6 +120,34 @@ impl<'a> MapCon<'a> {
                 }
             } else {
                 state.bearing_target = None;
+                // Hit-test spawns — find the nearest dot within click radius.
+                let hit_id = response.interact_pointer_pos().map(|screen_pos| {
+                    let focus = focus_world(data);
+                    let pan = state.pan;
+                    let zoom = state.zoom;
+                    let center = response.rect.center();
+                    let to_screen = |wx: f32, wy: f32| {
+                        Pos2::new(
+                            center.x + (wx - focus.0) * zoom + pan.x,
+                            center.y - (wy - focus.1) * zoom + pan.y,
+                        )
+                    };
+                    let mut best_dist = HOVER_RADIUS;
+                    let mut best_id: Option<u32> = None;
+                    for spawn in data.spawns.iter() {
+                        let (mx, my) = eq_to_map(spawn.x, spawn.y);
+                        let sp = to_screen(mx, my);
+                        let d = screen_pos.distance(sp);
+                        if d < best_dist {
+                            best_dist = d;
+                            best_id = Some(spawn.id);
+                        }
+                    }
+                    best_id // None = empty space, Some(id) = hit spawn
+                });
+                if let Some(id) = hit_id {
+                    action = Some(MapAction::SelectSpawn { id });
+                }
             }
         }
 
@@ -158,6 +197,9 @@ impl<'a> MapCon<'a> {
         draw_mob_trails(&ctx, data, filtered_ids);
         draw_ground_items(&ctx, data, z_filter);
         draw_spawns(&ctx, data, z_filter, overlay, filtered_ids);
+        if overlay.show_timer_dots {
+            draw_timer_dots(&ctx, data);
+        }
         draw_self(&ctx, data);
         draw_annotations(&ctx, data);
         if let Some(target) = state.bearing_target {
@@ -167,12 +209,68 @@ impl<'a> MapCon<'a> {
         draw_follow_indicator(&ctx, overlay);
 
         if let Some(hover_pos) = response.hover_pos() {
-            draw_hover_tooltip(ui, &ctx, data, hover_pos, z_filter);
+            draw_hover_tooltip(ui, &ctx, data, hover_pos, z_filter, overlay);
         }
 
         // Context menu (shown on right-click, persists until dismissed).
-        let mut action: Option<MapAction> = None;
         response.context_menu(|ui| {
+            // Hit-test: find the nearest spawn within HOVER_RADIUS screen pixels of the
+            // right-click point, using map-space distance to avoid needing a DrawCtx here.
+            let nearby: Option<String> = state.context_menu_pos.and_then(|(wx, wy)| {
+                let threshold = HOVER_RADIUS / state.zoom.max(0.001);
+                let mut best_dist = threshold;
+                let mut best_name: Option<String> = None;
+                for spawn in data.spawns.iter() {
+                    let (mx, my) = eq_to_map(spawn.x, spawn.y);
+                    let d = ((mx - wx) * (mx - wx) + (my - wy) * (my - wy)).sqrt();
+                    if d < best_dist {
+                        best_dist = d;
+                        best_name = Some(
+                            spawn
+                                .name
+                                .trim_end_matches(|c: char| c.is_ascii_digit())
+                                .trim_end()
+                                .to_string(),
+                        );
+                    }
+                }
+                best_name
+            });
+
+            if let Some(ref name) = nearby {
+                ui.label(egui::RichText::new(name).strong());
+                ui.separator();
+                if ui.button("Add to Hunt").clicked() {
+                    action = Some(MapAction::AddToFilter {
+                        name: name.clone(),
+                        category: FilterCategory::Hunt,
+                    });
+                    ui.close();
+                }
+                if ui.button("Add to Caution").clicked() {
+                    action = Some(MapAction::AddToFilter {
+                        name: name.clone(),
+                        category: FilterCategory::Caution,
+                    });
+                    ui.close();
+                }
+                if ui.button("Add to Danger").clicked() {
+                    action = Some(MapAction::AddToFilter {
+                        name: name.clone(),
+                        category: FilterCategory::Danger,
+                    });
+                    ui.close();
+                }
+                if ui.button("Add to Rare").clicked() {
+                    action = Some(MapAction::AddToFilter {
+                        name: name.clone(),
+                        category: FilterCategory::Rare,
+                    });
+                    ui.close();
+                }
+                ui.separator();
+            }
+
             if let Some((wx, wy)) = state.context_menu_pos {
                 if ui.button("Add Map Note here…").clicked() {
                     action = Some(MapAction::AddNoteAt {
@@ -326,6 +424,28 @@ fn draw_grid(ctx: &DrawCtx) {
             );
         }
         gy += interval;
+    }
+}
+
+fn draw_timer_dots(ctx: &DrawCtx, data: &AppData) {
+    for timer in data.timers.iter() {
+        let (mx, my) = eq_to_map(timer.x, timer.y);
+        let pos = ctx.to_screen(mx, my);
+        if !ctx.is_visible(pos) {
+            continue;
+        }
+        let secs = timer.secs_remaining();
+        let color = if secs <= 0 {
+            Color32::WHITE
+        } else if secs <= 30 {
+            Color32::from_rgb(255, 60, 60)
+        } else if secs <= 120 {
+            Color32::from_rgb(255, 210, 0)
+        } else {
+            Color32::from_rgb(0, 220, 220)
+        };
+        ctx.painter
+            .circle_stroke(pos, SPAWN_RADIUS + 4.0, Stroke::new(2.0, color));
     }
 }
 
@@ -663,6 +783,7 @@ fn draw_follow_indicator(ctx: &DrawCtx, overlay: &MapOverlaySettings) {
 enum HoverHit<'a> {
     Spawn(&'a SpawnInfo),
     Ground(&'a crate::data::ground::GroundItem),
+    Timer(&'a crate::data::timers::SpawnTimer),
 }
 
 fn draw_hover_tooltip(
@@ -671,8 +792,8 @@ fn draw_hover_tooltip(
     data: &AppData,
     hover_pos: Pos2,
     z_filter: Option<(f32, f32)>,
+    overlay: &MapOverlaySettings,
 ) {
-    const HOVER_RADIUS: f32 = 8.0;
     let mut best_dist = f32::MAX;
     let mut hit: Option<HoverHit<'_>> = None;
 
@@ -705,6 +826,21 @@ fn draw_hover_tooltip(
         if dist <= HOVER_RADIUS && dist < best_dist {
             best_dist = dist;
             hit = Some(HoverHit::Ground(item));
+        }
+    }
+
+    if overlay.show_timer_dots {
+        for timer in data.timers.iter() {
+            let (mx, my) = eq_to_map(timer.x, timer.y);
+            let screen_pos = ctx.to_screen(mx, my);
+            if !ctx.is_visible(screen_pos) {
+                continue;
+            }
+            let dist = hover_pos.distance(screen_pos);
+            if dist <= HOVER_RADIUS && dist < best_dist {
+                best_dist = dist;
+                hit = Some(HoverHit::Timer(timer));
+            }
         }
     }
 
@@ -745,6 +881,14 @@ fn draw_hover_tooltip(
                 HoverHit::Ground(g) => {
                     ui.label(&g.name);
                     ui.label(format!("Dist: {}", player_dist(g.x, g.y)));
+                }
+                HoverHit::Timer(t) => {
+                    ui.label(egui::RichText::new(&t.name).strong());
+                    if t.is_spawned() {
+                        ui.label("Ready — check spawn point");
+                    } else {
+                        ui.label(format!("Respawn in: {}", t.countdown_str()));
+                    }
                 }
             }
         },

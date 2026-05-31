@@ -47,6 +47,7 @@ pub struct MapOverlaySettings {
     pub show_layer2: bool,
     pub show_layer3: bool,
     pub show_grid: bool,
+    pub show_timer_dots: bool,
     pub follow_mode: FollowMode,
 }
 
@@ -65,6 +66,7 @@ impl Default for MapOverlaySettings {
             show_layer2: true,
             show_layer3: true,
             show_grid: false,
+            show_timer_dots: true,
             follow_mode: FollowMode::None,
         }
     }
@@ -279,6 +281,15 @@ impl ClientConfig {
             "ShowGrid={}",
             if self.map_overlay.show_grid { 1 } else { 0 }
         )?;
+        writeln!(
+            f,
+            "ShowTimerDots={}",
+            if self.map_overlay.show_timer_dots {
+                1
+            } else {
+                0
+            }
+        )?;
         writeln!(f, "FollowMode={}", self.map_overlay.follow_mode.as_str())?;
         Ok(())
     }
@@ -421,6 +432,9 @@ impl ClientConfig {
             }
             if let Some(v) = overlay.get("showgrid") {
                 cfg.map_overlay.show_grid = v == "1";
+            }
+            if let Some(v) = overlay.get("showtimerdots") {
+                cfg.map_overlay.show_timer_dots = v != "0";
             }
             if let Some(v) = overlay.get("followmode") {
                 cfg.map_overlay.follow_mode = FollowMode::from_str(v);
