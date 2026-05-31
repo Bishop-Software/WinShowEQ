@@ -259,7 +259,10 @@ pub struct SpawnObservation {
 /// auto-promotes learned timers into a `TimerStore`.
 #[derive(Debug, Default)]
 pub struct SpawnObserver {
-    prev_tick_ids: HashSet<u32>,
+    /// NPC ID → name recorded on the previous tick while the spawn was alive.
+    /// Using a saved name avoids reading a corpse name from the store when an NPC
+    /// transitions to Corpse in the same tick it disappears from the NPC ID set.
+    prev_tick_npcs: HashMap<u32, String>,
     pending_kills: HashMap<String, PendingKill>,
     pub observations: HashMap<String, SpawnObservation>,
 }
@@ -268,7 +271,7 @@ impl SpawnObserver {
     /// Called when a zone change packet arrives — resets in-flight state.
     /// `observations` is replaced by the caller after loading the new zone file.
     pub fn on_zone_change(&mut self) {
-        self.prev_tick_ids.clear();
+        self.prev_tick_npcs.clear();
         self.pending_kills.clear();
     }
 
@@ -286,7 +289,10 @@ impl SpawnObserver {
         timers: &mut TimerStore,
     ) -> (bool, Vec<String>) {
         if zone.is_empty() || is_void_zone(zone) {
-            self.prev_tick_ids = curr_ids.clone();
+            self.prev_tick_npcs = curr_ids
+                .iter()
+                .filter_map(|&id| spawns.get(id).map(|s| (id, s.name.clone())))
+                .collect();
             return (false, Vec::new());
         }
 
@@ -296,7 +302,7 @@ impl SpawnObserver {
 
         // Detect respawns: IDs new this tick that appear at a pending kill location.
         for &id in curr_ids {
-            if self.prev_tick_ids.contains(&id) {
+            if self.prev_tick_npcs.contains_key(&id) {
                 continue;
             }
             if let Some(spawn) = spawns.get(id) {
@@ -365,41 +371,46 @@ impl SpawnObserver {
         }
 
         // Detect kills: IDs present last tick but absent this tick.
-        // Note: do NOT re-check spawn_category here. An NPC kill causes the spawn to
-        // transition to spawn_type=2 (Corpse) in the same tick, so spawns.get() may
-        // return a Corpse even though the ID was an NPC in prev_tick_ids.
-        for &id in &self.prev_tick_ids {
+        // We iterate prev_tick_npcs (id → name) rather than just an ID set so that we
+        // use the name captured while the NPC was alive. By the time this runs, the spawn
+        // may have transitioned to spawn_type=2 (Corpse) in the store and carries a
+        // corpse name — reading the name from the store here would record the wrong value.
+        for (&id, prev_name) in &self.prev_tick_npcs {
             if curr_ids.contains(&id) {
                 continue;
             }
-            if let Some(spawn) = spawns.get(id) {
-                if is_excluded_spawn(&spawn.name, spawn.race, spawn.owner_id) {
-                    continue;
-                }
-                // Use spawn_x/spawn_y (first-seen position = spawn point) rather than
-                // current position, so kills on pulled mobs still match the respawn location.
-                let key = loc_key(spawn.spawn_x, spawn.spawn_y);
-                log.push(format!("[Timer] Kill detected: {} @ {}", spawn.name, key,));
-                self.pending_kills.insert(
-                    key,
-                    PendingKill {
-                        name: spawn.name.clone(),
-                        x: spawn.spawn_x,
-                        y: spawn.spawn_y,
-                        z: spawn.z,
-                        killed_at: now,
-                    },
-                );
+            let Some(spawn) = spawns.get(id) else {
+                continue;
+            };
+            if is_excluded_spawn(prev_name, spawn.race, spawn.owner_id) {
+                continue;
             }
+            // Use spawn_x/spawn_y (first-seen position = spawn point) rather than
+            // current position, so kills on pulled mobs still match the respawn location.
+            let key = loc_key(spawn.spawn_x, spawn.spawn_y);
+            log.push(format!("[Timer] Kill detected: {} @ {}", prev_name, key));
+            self.pending_kills.insert(
+                key,
+                PendingKill {
+                    name: prev_name.clone(),
+                    x: spawn.spawn_x,
+                    y: spawn.spawn_y,
+                    z: spawn.z,
+                    killed_at: now,
+                },
+            );
         }
 
-        self.prev_tick_ids = curr_ids.clone();
+        self.prev_tick_npcs = curr_ids
+            .iter()
+            .filter_map(|&id| spawns.get(id).map(|s| (id, s.name.clone())))
+            .collect();
         (promoted, log)
     }
 
     /// Fully reset observer state for the current zone (called by Clear All Timers).
     pub fn reset_zone(&mut self) {
-        self.prev_tick_ids.clear();
+        self.prev_tick_npcs.clear();
         self.pending_kills.clear();
         self.observations.clear();
     }
@@ -837,7 +848,7 @@ mod tests {
         observer.on_zone_change();
 
         assert!(observer.pending_kills.is_empty());
-        assert!(observer.prev_tick_ids.is_empty());
+        assert!(observer.prev_tick_npcs.is_empty());
         assert!(
             !observer.observations.is_empty(),
             "observations survive zone change"
@@ -874,7 +885,7 @@ mod tests {
 
         assert!(observer.observations.is_empty());
         assert!(observer.pending_kills.is_empty());
-        assert!(observer.prev_tick_ids.is_empty());
+        assert!(observer.prev_tick_npcs.is_empty());
     }
 
     // --- Observation persistence ---

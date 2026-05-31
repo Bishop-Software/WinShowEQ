@@ -78,9 +78,6 @@ branding/previews/
 settings.local.json
 target_sqlite.db
 
-# --- Ignore cocoindex runtime artifacts ---
-.cocoindex_code/
-
 # Claude files that are not source code or metadata
 CLAUDE.md
 .claude/
