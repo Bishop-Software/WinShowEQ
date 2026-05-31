@@ -2,6 +2,33 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+/// How the map viewport auto-tracks a position each frame.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum FollowMode {
+    #[default]
+    None,
+    Player,
+    Target,
+}
+
+impl FollowMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            FollowMode::None => "none",
+            FollowMode::Player => "player",
+            FollowMode::Target => "target",
+        }
+    }
+
+    fn from_str(s: &str) -> Self {
+        match s {
+            "player" => FollowMode::Player,
+            "target" => FollowMode::Target,
+            _ => FollowMode::None,
+        }
+    }
+}
+
 /// Map overlay visibility and label toggles.
 #[derive(Debug, Clone)]
 pub struct MapOverlaySettings {
@@ -20,6 +47,7 @@ pub struct MapOverlaySettings {
     pub show_layer2: bool,
     pub show_layer3: bool,
     pub show_grid: bool,
+    pub follow_mode: FollowMode,
 }
 
 impl Default for MapOverlaySettings {
@@ -37,6 +65,7 @@ impl Default for MapOverlaySettings {
             show_layer2: true,
             show_layer3: true,
             show_grid: false,
+            follow_mode: FollowMode::None,
         }
     }
 }
@@ -250,6 +279,7 @@ impl ClientConfig {
             "ShowGrid={}",
             if self.map_overlay.show_grid { 1 } else { 0 }
         )?;
+        writeln!(f, "FollowMode={}", self.map_overlay.follow_mode.as_str())?;
         Ok(())
     }
 
@@ -391,6 +421,9 @@ impl ClientConfig {
             }
             if let Some(v) = overlay.get("showgrid") {
                 cfg.map_overlay.show_grid = v == "1";
+            }
+            if let Some(v) = overlay.get("followmode") {
+                cfg.map_overlay.follow_mode = FollowMode::from_str(v);
             }
         }
 

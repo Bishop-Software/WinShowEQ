@@ -577,7 +577,13 @@ impl eframe::App for MainApp {
                 .clamp(crate::map_canvas::ZOOM_MIN, crate::map_canvas::ZOOM_MAX);
         }
         if center_player {
-            self.map_pane.state.pan = egui::Vec2::ZERO;
+            if self.config.map_overlay.follow_mode != crate::config::FollowMode::None {
+                // Disable follow mode; map stays at current position
+                self.config.map_overlay.follow_mode = crate::config::FollowMode::None;
+                self.save_config();
+            } else {
+                self.map_pane.state.pan = egui::Vec2::ZERO;
+            }
         }
         if f5 {
             self.toggle_panel(Tab::Spawns);
@@ -828,6 +834,25 @@ impl eframe::App for MainApp {
                     self.map_pane.state.pan = egui::Vec2::ZERO;
                     ui.close();
                 }
+                ui.menu_button("Follow", |ui| {
+                    use crate::config::FollowMode;
+                    let cur = self.config.map_overlay.follow_mode.clone();
+                    if ui.radio(cur == FollowMode::None, "None").clicked() {
+                        self.config.map_overlay.follow_mode = FollowMode::None;
+                        self.save_config();
+                        ui.close();
+                    }
+                    if ui.radio(cur == FollowMode::Player, "Player").clicked() {
+                        self.config.map_overlay.follow_mode = FollowMode::Player;
+                        self.save_config();
+                        ui.close();
+                    }
+                    if ui.radio(cur == FollowMode::Target, "Target").clicked() {
+                        self.config.map_overlay.follow_mode = FollowMode::Target;
+                        self.save_config();
+                        ui.close();
+                    }
+                });
                 if ui.button("Zoom In  +").clicked() {
                     self.map_pane.state.zoom = (self.map_pane.state.zoom
                         * crate::map_canvas::ZOOM_STEP)

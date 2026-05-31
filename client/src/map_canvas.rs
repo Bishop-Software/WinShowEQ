@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use egui::{Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 
-use crate::config::MapOverlaySettings;
+use crate::config::{FollowMode, MapOverlaySettings};
 use crate::data::AppData;
 use crate::data::spawns::{ConColor, SpawnCategory, SpawnInfo, con_color};
 use crate::game_data::GameData;
@@ -123,9 +123,24 @@ impl<'a> MapCon<'a> {
             state.context_menu_pos = Some((wx, wy));
         }
 
+        // Apply follow mode: override pan and compute focus point.
+        let focus = match overlay.follow_mode {
+            FollowMode::None => focus_world(data),
+            FollowMode::Player => {
+                state.pan = Vec2::ZERO;
+                focus_world(data)
+            }
+            FollowMode::Target => {
+                state.pan = Vec2::ZERO;
+                data.target_id
+                    .and_then(|tid| data.spawns.get(tid))
+                    .map(|t| eq_to_map(t.x, t.y))
+                    .unwrap_or_else(|| focus_world(data))
+            }
+        };
+
         painter.rect_filled(response.rect, 0.0, Color32::BLACK);
 
-        let focus = focus_world(data);
         let ctx = DrawCtx {
             painter: &painter,
             rect: response.rect,
@@ -149,6 +164,7 @@ impl<'a> MapCon<'a> {
             draw_bearing_line(&ctx, data, target);
         }
         draw_hud(&ctx, ui, data);
+        draw_follow_indicator(&ctx, overlay);
 
         if let Some(hover_pos) = response.hover_pos() {
             draw_hover_tooltip(ui, &ctx, data, hover_pos, z_filter);
@@ -626,6 +642,22 @@ fn draw_hud(ctx: &DrawCtx, _ui: &mut Ui, data: &AppData) {
             Color32::from_rgb(150, 220, 150),
         );
     }
+}
+
+fn draw_follow_indicator(ctx: &DrawCtx, overlay: &MapOverlaySettings) {
+    let label = match overlay.follow_mode {
+        FollowMode::None => return,
+        FollowMode::Player => "Following: Player",
+        FollowMode::Target => "Following: Target",
+    };
+    let pos = Pos2::new(ctx.rect.min.x + 6.0, ctx.rect.max.y - 6.0);
+    ctx.painter.text(
+        pos,
+        egui::Align2::LEFT_BOTTOM,
+        label,
+        FontId::proportional(12.0),
+        Color32::from_rgba_premultiplied(180, 220, 255, 200),
+    );
 }
 
 enum HoverHit<'a> {
