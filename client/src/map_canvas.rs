@@ -23,6 +23,8 @@ pub enum MapAction {
     AddNoteAt { eq_x: f32, eq_y: f32 },
     /// User left-clicked on or near a spawn dot. `None` means empty space (clear selection).
     SelectSpawn { id: Option<u32> },
+    /// User left-clicked on or near a timer crosshair (no live spawn there).
+    SelectTimer { spawn_loc: String },
     /// User chose a filter action from the map canvas right-click context menu.
     AddToFilter {
         name: String,
@@ -120,8 +122,7 @@ impl<'a> MapCon<'a> {
                 }
             } else {
                 state.bearing_target = None;
-                // Hit-test spawns — find the nearest dot within click radius.
-                let hit_id = response.interact_pointer_pos().map(|screen_pos| {
+                if let Some(screen_pos) = response.interact_pointer_pos() {
                     let focus = focus_world(data);
                     let pan = state.pan;
                     let zoom = state.zoom;
@@ -132,21 +133,44 @@ impl<'a> MapCon<'a> {
                             center.y - (wy - focus.1) * zoom + pan.y,
                         )
                     };
+
+                    // 1. Hit-test live spawn dots
                     let mut best_dist = HOVER_RADIUS;
-                    let mut best_id: Option<u32> = None;
+                    let mut best_spawn: Option<u32> = None;
                     for spawn in data.spawns.iter() {
                         let (mx, my) = eq_to_map(spawn.x, spawn.y);
-                        let sp = to_screen(mx, my);
-                        let d = screen_pos.distance(sp);
+                        let d = screen_pos.distance(to_screen(mx, my));
                         if d < best_dist {
                             best_dist = d;
-                            best_id = Some(spawn.id);
+                            best_spawn = Some(spawn.id);
                         }
                     }
-                    best_id // None = empty space, Some(id) = hit spawn
-                });
-                if let Some(id) = hit_id {
-                    action = Some(MapAction::SelectSpawn { id });
+
+                    if let Some(id) = best_spawn {
+                        action = Some(MapAction::SelectSpawn { id: Some(id) });
+                    } else if overlay.show_timer_dots {
+                        // 2. Hit-test timer crosshairs (auto-timers only)
+                        let mut best_dist = HOVER_RADIUS;
+                        let mut best_timer: Option<String> = None;
+                        for timer in data.timers.iter() {
+                            if !timer.is_auto || z_filtered(timer.z, z_filter) {
+                                continue;
+                            }
+                            let (mx, my) = eq_to_map(timer.x, timer.y);
+                            let d = screen_pos.distance(to_screen(mx, my));
+                            if d < best_dist {
+                                best_dist = d;
+                                best_timer = Some(timer.spawn_loc.clone());
+                            }
+                        }
+                        action = Some(if let Some(loc) = best_timer {
+                            MapAction::SelectTimer { spawn_loc: loc }
+                        } else {
+                            MapAction::SelectSpawn { id: None } // empty space
+                        });
+                    } else {
+                        action = Some(MapAction::SelectSpawn { id: None }); // empty space
+                    }
                 }
             }
         }
@@ -198,7 +222,7 @@ impl<'a> MapCon<'a> {
         draw_ground_items(&ctx, data, z_filter);
         draw_spawns(&ctx, data, z_filter, overlay, filtered_ids);
         if overlay.show_timer_dots {
-            draw_timer_dots(&ctx, data);
+            draw_timer_dots(&ctx, data, z_filter);
         }
         draw_self(&ctx, data);
         draw_annotations(&ctx, data);
@@ -427,25 +451,79 @@ fn draw_grid(ctx: &DrawCtx) {
     }
 }
 
-fn draw_timer_dots(ctx: &DrawCtx, data: &AppData) {
+fn draw_timer_dots(ctx: &DrawCtx, data: &AppData, z_filter: Option<(f32, f32)>) {
+    let ltgray = Color32::from_rgb(160, 160, 160);
+    let red = Color32::from_rgb(255, 60, 60);
+    let orange = Color32::from_rgb(255, 140, 0);
+    let yellow = Color32::from_rgb(255, 210, 0);
+    let arm = SPAWN_RADIUS;
+
+    // Flash state for < 30s: toggle every 500 ms using wall clock
+    let flash = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| (d.as_millis() / 500) % 2 == 0)
+        .unwrap_or(true);
+
     for timer in data.timers.iter() {
+        // Only auto-learned timers (confirmed at least two respawn cycles)
+        if !timer.is_auto {
+            continue;
+        }
+        if z_filtered(timer.z, z_filter) {
+            continue;
+        }
         let (mx, my) = eq_to_map(timer.x, timer.y);
         let pos = ctx.to_screen(mx, my);
         if !ctx.is_visible(pos) {
             continue;
         }
         let secs = timer.secs_remaining();
+
+        // Match C# color bands
         let color = if secs <= 0 {
-            Color32::WHITE
-        } else if secs <= 30 {
-            Color32::from_rgb(255, 60, 60)
-        } else if secs <= 120 {
-            Color32::from_rgb(255, 210, 0)
+            ltgray // spawned — already up
+        } else if secs < 30 {
+            if flash { red } else { continue } // flashing red
+        } else if secs < 60 {
+            red
+        } else if secs < 90 {
+            orange
+        } else if secs < 120 {
+            yellow
         } else {
-            Color32::from_rgb(0, 220, 220)
+            ltgray // > 2 min remaining
         };
-        ctx.painter
-            .circle_stroke(pos, SPAWN_RADIUS + 4.0, Stroke::new(2.0, color));
+
+        // Crosshair (+)
+        let stroke = Stroke::new(2.0, color);
+        ctx.painter.line_segment(
+            [Pos2::new(pos.x - arm, pos.y), Pos2::new(pos.x + arm, pos.y)],
+            stroke,
+        );
+        ctx.painter.line_segment(
+            [Pos2::new(pos.x, pos.y - arm), Pos2::new(pos.x, pos.y + arm)],
+            stroke,
+        );
+
+        // Countdown text next to the crosshair when within 2 minutes
+        if secs > 0 && secs < 120 {
+            ctx.painter.text(
+                Pos2::new(pos.x + arm + 2.0, pos.y),
+                egui::Align2::LEFT_CENTER,
+                secs.to_string(),
+                FontId::proportional(10.0),
+                color,
+            );
+        }
+
+        // Gold ring around the selected timer crosshair
+        if data.selected_timer_loc.as_deref() == Some(timer.spawn_loc.as_str()) {
+            ctx.painter.circle_stroke(
+                pos,
+                SPAWN_RADIUS + 4.0,
+                Stroke::new(2.0, Color32::from_rgb(255, 200, 0)),
+            );
+        }
     }
 }
 

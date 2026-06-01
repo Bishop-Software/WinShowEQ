@@ -28,7 +28,7 @@ use crate::ui::options::OptionsDialog;
 use crate::ui::search_dialog::SearchDialog;
 use crate::ui::spawn_filter::{SpawnFilterUI, build_filter_entries};
 use crate::ui::spawn_list::{self, SpawnAction};
-use crate::ui::timer_list;
+use crate::ui::timer_list::{self, TimerAction};
 
 const TICK_REQUEST: i32 = IPT_ZONE | IPT_SELF | IPT_TARGET | IPT_SPAWNS | IPT_GROUND | IPT_WORLD;
 const TICK_DELAY_MS: u64 = 250;
@@ -423,13 +423,18 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
             }
             Tab::Timers => {
                 let mut data = self.data.lock().unwrap();
-                if timer_list::show(
+                match timer_list::show(
                     ui,
                     &mut data,
                     self.timer_sort_column,
                     self.timer_sort_ascending,
                 ) {
-                    *self.pending_clear_timers = true;
+                    Some(TimerAction::ClearAll) => *self.pending_clear_timers = true,
+                    Some(TimerAction::CenterMap { x, y }) => {
+                        let (mx, my) = crate::map_canvas::eq_to_map_pub(x, y);
+                        self.map_pane.state.pending_center = Some((mx, my));
+                    }
+                    None => {}
                 }
             }
             Tab::Ground => {
@@ -1132,10 +1137,22 @@ impl eframe::App for MainApp {
                         Some(spawn_id) => {
                             data.selected_id = Some(spawn_id);
                             data.scroll_to_selected = true;
+                            data.selected_timer_loc = None;
                         }
                         None => {
                             data.selected_id = None;
+                            data.selected_timer_loc = None;
                         }
+                    }
+                }
+                MapAction::SelectTimer { spawn_loc } => {
+                    let mut data = self.data.lock().unwrap();
+                    if data.selected_timer_loc.as_deref() == Some(&spawn_loc) {
+                        data.selected_timer_loc = None; // toggle off
+                    } else {
+                        data.selected_id = None;
+                        data.selected_timer_loc = Some(spawn_loc);
+                        data.scroll_to_selected_timer = true;
                     }
                 }
             }

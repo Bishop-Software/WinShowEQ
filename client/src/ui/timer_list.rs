@@ -3,6 +3,11 @@ use egui::Ui;
 
 use crate::data::AppData;
 
+pub enum TimerAction {
+    ClearAll,
+    CenterMap { x: f32, y: f32 },
+}
+
 const HEADERS: &[&str] = &[
     "Name",
     "Remain",
@@ -21,13 +26,12 @@ fn format_timestamp(dt: chrono::DateTime<chrono::Utc>) -> String {
     local.format("%-I:%M %p %-m/%-d/%Y").to_string()
 }
 
-/// Returns true if "Clear all timers" was requested (caller must delete the obs file).
 pub fn show(
     ui: &mut Ui,
     data: &mut AppData,
     sort_column: &mut Option<usize>,
     sort_ascending: &mut bool,
-) -> bool {
+) -> Option<TimerAction> {
     let row_h = ui.text_style_height(&egui::TextStyle::Body) + 4.0;
     let mut col_widths = data.timer_list_column_widths.clone();
 
@@ -95,8 +99,17 @@ pub fn show(
     data.timer_list_column_widths = col_widths.clone();
     ui.separator();
 
+    let current_selected = data.selected_timer_loc.clone();
+    let scroll_to_loc: Option<String> = if data.scroll_to_selected_timer {
+        data.selected_timer_loc.clone()
+    } else {
+        None
+    };
+
     let mut remove_idx: Option<usize> = None;
     let mut clear_all = false;
+    let mut timer_action: Option<TimerAction> = None;
+    let mut pending_select: Option<Option<String>> = None; // Some(None) = deselect
 
     let mut timers_with_idx: Vec<_> = data.timers.iter().enumerate().collect();
     if let Some(col) = sort_column {
@@ -134,7 +147,8 @@ pub fn show(
         .id_salt("timer_scroll")
         .auto_shrink([false; 2])
         .show(ui, |ui| {
-            for (i, t) in timers_with_idx {
+            for (i, t) in &timers_with_idx {
+                let i = *i;
                 let countdown = t.countdown_str();
                 let color = if t.is_spawned() {
                     egui::Color32::from_rgb(255, 80, 80)
@@ -164,8 +178,12 @@ pub fn show(
                         String::new()
                     },
                     t.spawn_time.map(format_timestamp).unwrap_or_default(),
-                    format_timestamp(t.killed_at),
+                    t.killed_at.map(format_timestamp).unwrap_or_default(),
                 ];
+
+                let is_selected = current_selected.as_deref() == Some(t.spawn_loc.as_str());
+
+                let bg_slot = ui.painter().add(egui::Shape::Noop);
 
                 let row_rect = ui
                     .horizontal(|ui| {
@@ -175,15 +193,31 @@ pub fn show(
                             } else {
                                 ui.visuals().text_color()
                             };
-                            let (_, cell_rect) =
-                                ui.allocate_space(egui::vec2(col_widths[col_idx], row_h));
-                            ui.painter().with_clip_rect(cell_rect).text(
-                                egui::pos2(cell_rect.min.x + 4.0, cell_rect.center().y),
-                                egui::Align2::LEFT_CENTER,
-                                text,
-                                egui::FontId::default(),
-                                cell_color,
-                            );
+                            // Name cell: show all_names tooltip on hover
+                            if col_idx == 0 && !t.all_names.is_empty() {
+                                let resp = ui.allocate_response(
+                                    egui::vec2(col_widths[col_idx], row_h),
+                                    egui::Sense::hover(),
+                                );
+                                ui.painter().with_clip_rect(resp.rect).text(
+                                    egui::pos2(resp.rect.min.x + 4.0, resp.rect.center().y),
+                                    egui::Align2::LEFT_CENTER,
+                                    text,
+                                    egui::FontId::default(),
+                                    cell_color,
+                                );
+                                resp.on_hover_text(t.all_names.join("\n"));
+                            } else {
+                                let (_, cell_rect) =
+                                    ui.allocate_space(egui::vec2(col_widths[col_idx], row_h));
+                                ui.painter().with_clip_rect(cell_rect).text(
+                                    egui::pos2(cell_rect.min.x + 4.0, cell_rect.center().y),
+                                    egui::Align2::LEFT_CENTER,
+                                    text,
+                                    egui::FontId::default(),
+                                    cell_color,
+                                );
+                            }
                             if col_idx < cells.len() - 1 {
                                 ui.allocate_space(egui::vec2(4.0, row_h));
                             }
@@ -192,11 +226,40 @@ pub fn show(
                     .response
                     .rect;
 
+                // Row highlight: cyan for selected
+                if is_selected {
+                    ui.painter().set(
+                        bg_slot,
+                        egui::Shape::rect_filled(
+                            row_rect,
+                            0.0,
+                            egui::Color32::from_rgba_unmultiplied(0, 200, 200, 40),
+                        ),
+                    );
+                }
+
+                // Scroll to this row when selection was set from the map canvas
+                if scroll_to_loc.as_deref() == Some(t.spawn_loc.as_str()) {
+                    ui.scroll_to_rect(row_rect, Some(egui::Align::Center));
+                }
+
                 let row_resp = ui.interact(
                     row_rect,
                     ui.id().with("timer").with(i),
                     egui::Sense::click(),
                 );
+
+                if row_resp.double_clicked_by(egui::PointerButton::Primary) {
+                    timer_action = Some(TimerAction::CenterMap { x: t.x, y: t.y });
+                } else if row_resp.clicked_by(egui::PointerButton::Primary) {
+                    if is_selected {
+                        pending_select = Some(None); // toggle off
+                    } else {
+                        pending_select = Some(Some(t.spawn_loc.clone()));
+                        timer_action = Some(TimerAction::CenterMap { x: t.x, y: t.y });
+                    }
+                }
+
                 row_resp.context_menu(|ui| {
                     if ui.button("Remove timer").clicked() {
                         remove_idx = Some(i);
@@ -210,12 +273,26 @@ pub fn show(
             }
         });
 
+    drop(timers_with_idx);
+
+    if scroll_to_loc.is_some() {
+        data.scroll_to_selected_timer = false;
+    }
+    if let Some(loc_opt) = pending_select {
+        data.selected_timer_loc = loc_opt;
+    }
+
     if clear_all {
         data.timers.clear_all();
         data.observer.reset_zone();
-        return true;
+        data.selected_timer_loc = None;
+        return Some(TimerAction::ClearAll);
     } else if let Some(idx) = remove_idx {
+        if data.selected_timer_loc.is_some() {
+            data.selected_timer_loc = None;
+        }
         data.timers.remove(idx);
     }
-    false
+
+    timer_action
 }
