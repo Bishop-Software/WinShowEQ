@@ -70,6 +70,8 @@ pub struct SpawnTimer {
     pub spawn_time: Option<DateTime<Utc>>,
     /// Zone name where this timer was learned.
     pub zone: String,
+    /// Sticky timers survive zone changes and are not cleared until "Clear All" is used.
+    pub sticky: bool,
 }
 
 impl SpawnTimer {
@@ -87,6 +89,7 @@ impl SpawnTimer {
             spawn_count: 0,
             spawn_time: None,
             zone: String::new(),
+            sticky: false,
         }
     }
 
@@ -166,6 +169,11 @@ impl TimerStore {
         self.timers.clear();
     }
 
+    /// Remove all non-sticky timers (called on zone change).
+    pub fn clear_non_sticky(&mut self) {
+        self.timers.retain(|t| t.sticky);
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &SpawnTimer> {
         self.timers.iter()
     }
@@ -232,7 +240,7 @@ impl TimerStore {
             let all_names = t.all_names.join(",");
             writeln!(
                 f,
-                "{};{};{};{};{};{};{};{};{};{};{}",
+                "{};{};{};{};{};{};{};{};{};{};{};{}",
                 t.spawn_loc,
                 t.spawn_count,
                 t.respawn_secs,
@@ -244,6 +252,7 @@ impl TimerStore {
                 t.x,
                 t.y,
                 t.z,
+                t.sticky as u8,
             )?;
         }
         Ok(())
@@ -261,7 +270,7 @@ fn timer_path(zone: &str, dir: &str) -> std::path::PathBuf {
 /// - field[0] has comma AND field[3] is not an i64  → C# MySEQ format (migrate)
 /// - field[0] has no comma                          → old Rust format (migrate)
 fn parse_line(line: &str, zone: &str) -> Option<(SpawnTimer, bool)> {
-    let parts: Vec<&str> = line.splitn(12, ';').collect();
+    let parts: Vec<&str> = line.splitn(13, ';').collect();
     if parts.is_empty() {
         return None;
     }
@@ -298,6 +307,11 @@ fn parse_new_format(parts: &[&str], zone: &str) -> Option<SpawnTimer> {
     let x: f32 = parts[8].parse().ok()?;
     let y: f32 = parts[9].parse().ok()?;
     let z: f32 = parts[10].parse().ok()?;
+    let sticky = parts
+        .get(11)
+        .and_then(|s| s.trim().parse::<u8>().ok())
+        .map(|v| v != 0)
+        .unwrap_or(false);
 
     let killed_at = (kill_time_unix > 0)
         .then(|| DateTime::from_timestamp(kill_time_unix, 0))
@@ -320,6 +334,7 @@ fn parse_new_format(parts: &[&str], zone: &str) -> Option<SpawnTimer> {
         spawn_count,
         spawn_time,
         zone: zone.to_owned(),
+        sticky,
     })
 }
 
@@ -357,6 +372,7 @@ fn parse_cs_format(parts: &[&str], zone: &str) -> Option<SpawnTimer> {
         spawn_count,
         spawn_time,
         zone: zone.to_owned(),
+        sticky: false,
     })
 }
 
@@ -401,6 +417,7 @@ fn parse_old_format(parts: &[&str], zone: &str) -> Option<SpawnTimer> {
         spawn_count,
         spawn_time,
         zone: zone.to_owned(),
+        sticky: false,
     })
 }
 
@@ -559,6 +576,12 @@ impl SpawnObserver {
                             // Prefer a named/boss mob (starts uppercase or '#') as display name
                             let display_name = best_display_name(&all_names, &kill.name).to_owned();
 
+                            let existing_sticky = timers
+                                .timers
+                                .iter()
+                                .find(|t| t.spawn_loc == key)
+                                .map(|t| t.sticky)
+                                .unwrap_or(false);
                             timers.add(SpawnTimer {
                                 name: display_name,
                                 spawn_loc: key,
@@ -572,6 +595,7 @@ impl SpawnObserver {
                                 spawn_count: obs.spawn_count,
                                 spawn_time: Some(now),
                                 zone: zone.to_owned(),
+                                sticky: existing_sticky,
                             });
                             log.push(format!(
                                 "[Timer] Auto-timer promoted: {} — avg {}s over {} cycles",
