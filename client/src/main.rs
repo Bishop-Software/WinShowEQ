@@ -61,7 +61,12 @@ fn main() -> eframe::Result {
     )
 }
 
-fn relaunch_if_known_name(_known_stem: &str) {
+fn relaunch_if_known_name(known_stem: &str) {
+    // Debug builds don't need the self-copy trick; skip it so the icon shows correctly in IDEs.
+    if cfg!(debug_assertions) {
+        return;
+    }
+
     let exe = match std::env::current_exe() {
         Ok(p) => p,
         Err(_) => return,
@@ -69,6 +74,12 @@ fn relaunch_if_known_name(_known_stem: &str) {
 
     // Already running as a .bin copy — proceed normally.
     if exe.extension().and_then(|e| e.to_str()) == Some("bin") {
+        return;
+    }
+
+    // Not the installed binary name — skip the relaunch.
+    let stem = exe.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+    if !stem.eq_ignore_ascii_case(known_stem) {
         return;
     }
 

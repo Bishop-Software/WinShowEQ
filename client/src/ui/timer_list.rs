@@ -150,7 +150,9 @@ pub fn show(
             for (i, t) in &timers_with_idx {
                 let i = *i;
                 let countdown = t.countdown_str();
-                let color = if t.is_spawned() {
+                let color = if t.is_alive() {
+                    egui::Color32::from_rgb(80, 200, 80)
+                } else if t.is_spawned() {
                     egui::Color32::from_rgb(255, 80, 80)
                 } else if t.secs_remaining() < 60 {
                     egui::Color32::from_rgb(255, 210, 0)

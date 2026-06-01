@@ -108,10 +108,18 @@ impl SpawnTimer {
         self.secs_remaining() <= 0
     }
 
+    /// True when the mob is known to be alive (spawned but not yet killed).
+    pub fn is_alive(&self) -> bool {
+        self.killed_at.is_none()
+    }
+
     pub fn countdown_str(&self) -> String {
+        if self.killed_at.is_none() {
+            return "ALIVE".to_owned();
+        }
         let secs = self.secs_remaining();
         if secs <= 0 {
-            return "SPAWNED".to_owned();
+            return "UNKNOWN".to_owned();
         }
         let h = secs / 3600;
         let m = (secs % 3600) / 60;
@@ -558,7 +566,7 @@ impl SpawnObserver {
                                 x: kill.x,
                                 y: kill.y,
                                 z: kill.z,
-                                killed_at: Some(now),
+                                killed_at: None, // mob just spawned; countdown starts on kill
                                 respawn_secs: avg,
                                 is_auto: true,
                                 spawn_count: obs.spawn_count,
@@ -1339,14 +1347,14 @@ mod tests {
     fn countdown_str_shows_spawned_when_expired() {
         let mut t = SpawnTimer::new("Boss", 0.0, 0.0, 0.0, 0);
         t.killed_at = Some(Utc::now() - Duration::seconds(60));
-        assert_eq!(t.countdown_str(), "SPAWNED");
+        assert_eq!(t.countdown_str(), "UNKNOWN");
     }
 
     #[test]
-    fn countdown_str_shows_spawned_when_no_kill_time() {
+    fn countdown_str_shows_alive_when_no_kill_time() {
         let mut t = SpawnTimer::new("Boss", 0.0, 0.0, 0.0, 1800);
         t.killed_at = None;
-        assert_eq!(t.countdown_str(), "SPAWNED");
+        assert_eq!(t.countdown_str(), "ALIVE");
     }
 
     #[test]
