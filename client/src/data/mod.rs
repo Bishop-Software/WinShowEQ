@@ -55,6 +55,10 @@ pub struct AppData {
     pub selected_id: Option<u32>,
     /// When true, the spawn list should scroll to reveal `selected_id` on the next frame.
     pub scroll_to_selected: bool,
+    /// Timer selected by clicking a row in the timer list or a crosshair on the map canvas.
+    pub selected_timer_loc: Option<String>,
+    /// When true, the timer list should scroll to reveal `selected_timer_loc` on the next frame.
+    pub scroll_to_selected_timer: bool,
     /// Auto-learning respawn timer engine.
     pub observer: SpawnObserver,
     /// NPC spawn IDs seen in the current tick (scratch space for observer diff).
@@ -125,6 +129,8 @@ impl Default for AppData {
             marked_ids: HashSet::new(),
             selected_id: None,
             scroll_to_selected: false,
+            selected_timer_loc: None,
+            scroll_to_selected_timer: false,
             observer: SpawnObserver::default(),
             curr_tick_npc_ids: HashSet::new(),
             curr_tick_all_ids: HashSet::new(),
@@ -219,6 +225,8 @@ pub fn apply_packet(data: &mut AppData, packet: Packet) -> Option<String> {
             data.curr_tick_npc_ids.clear();
             data.curr_tick_all_ids.clear();
             data.spawns_dirty = true;
+            data.selected_id = None;
+            data.selected_timer_loc = None;
             data.observer.on_zone_change();
             data.alert_engine.on_zone_change();
             if !data.filter_dir.is_empty() {
