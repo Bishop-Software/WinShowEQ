@@ -260,6 +260,7 @@ impl MainApp {
     }
 
     fn handle_zone_change(&mut self, new_zone: String) {
+        let mut sticky_carry: Vec<SpawnTimer> = Vec::new();
         if !self.prev_zone.is_empty() {
             let data = self.data.lock().unwrap();
             let _ = data.timers.save(&self.prev_zone, &self.config.timer_dir);
@@ -271,8 +272,12 @@ impl MainApp {
                 &self.prev_zone,
                 &self.config.timer_dir,
             );
+            sticky_carry = data.timers.iter().filter(|t| t.sticky).cloned().collect();
         }
-        let new_timers = TimerStore::load(&new_zone, &self.config.timer_dir);
+        let mut new_timers = TimerStore::load(&new_zone, &self.config.timer_dir);
+        for t in sticky_carry {
+            new_timers.add(t);
+        }
         let new_annotations = AnnotationStore::load(&new_zone, &self.config.annotations_dir);
         let new_obs = SpawnObserver::load(&new_zone, &self.config.timer_dir);
         // Zone names from EQ are lowercase short names; map files use the same convention.
@@ -433,6 +438,12 @@ impl<'a> TabViewer for WinSeqTabViewer<'a> {
                     Some(TimerAction::CenterMap { x, y }) => {
                         let (mx, my) = crate::map_canvas::eq_to_map_pub(x, y);
                         self.map_pane.state.pending_center = Some((mx, my));
+                    }
+                    Some(TimerAction::ToggleSticky(idx)) => {
+                        if let Some(t) = data.timers.timers.get_mut(idx) {
+                            t.sticky = !t.sticky;
+                            data.timers_dirty = true;
+                        }
                     }
                     None => {}
                 }

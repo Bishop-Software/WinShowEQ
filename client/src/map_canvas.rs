@@ -962,8 +962,10 @@ fn draw_hover_tooltip(
                 }
                 HoverHit::Timer(t) => {
                     ui.label(egui::RichText::new(&t.name).strong());
-                    if t.is_spawned() {
-                        ui.label("Ready — check spawn point");
+                    if t.is_alive() {
+                        ui.label("Alive — timer starts on kill");
+                    } else if t.is_spawned() {
+                        ui.label("Unknown — check spawn point");
                     } else {
                         ui.label(format!("Respawn in: {}", t.countdown_str()));
                     }

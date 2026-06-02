@@ -70,6 +70,8 @@ pub struct SpawnTimer {
     pub spawn_time: Option<DateTime<Utc>>,
     /// Zone name where this timer was learned.
     pub zone: String,
+    /// Sticky timers survive zone changes and are not cleared until "Clear All" is used.
+    pub sticky: bool,
 }
 
 impl SpawnTimer {
@@ -87,6 +89,7 @@ impl SpawnTimer {
             spawn_count: 0,
             spawn_time: None,
             zone: String::new(),
+            sticky: false,
         }
     }
 
@@ -108,10 +111,18 @@ impl SpawnTimer {
         self.secs_remaining() <= 0
     }
 
+    /// True when the mob is known to be alive (spawned but not yet killed).
+    pub fn is_alive(&self) -> bool {
+        self.killed_at.is_none()
+    }
+
     pub fn countdown_str(&self) -> String {
+        if self.killed_at.is_none() {
+            return "ALIVE".to_owned();
+        }
         let secs = self.secs_remaining();
         if secs <= 0 {
-            return "SPAWNED".to_owned();
+            return "UNKNOWN".to_owned();
         }
         let h = secs / 3600;
         let m = (secs % 3600) / 60;
@@ -224,7 +235,7 @@ impl TimerStore {
             let all_names = t.all_names.join(",");
             writeln!(
                 f,
-                "{};{};{};{};{};{};{};{};{};{};{}",
+                "{};{};{};{};{};{};{};{};{};{};{};{}",
                 t.spawn_loc,
                 t.spawn_count,
                 t.respawn_secs,
@@ -236,6 +247,7 @@ impl TimerStore {
                 t.x,
                 t.y,
                 t.z,
+                t.sticky as u8,
             )?;
         }
         Ok(())
@@ -253,7 +265,7 @@ fn timer_path(zone: &str, dir: &str) -> std::path::PathBuf {
 /// - field[0] has comma AND field[3] is not an i64  → C# MySEQ format (migrate)
 /// - field[0] has no comma                          → old Rust format (migrate)
 fn parse_line(line: &str, zone: &str) -> Option<(SpawnTimer, bool)> {
-    let parts: Vec<&str> = line.splitn(12, ';').collect();
+    let parts: Vec<&str> = line.splitn(13, ';').collect();
     if parts.is_empty() {
         return None;
     }
@@ -290,6 +302,11 @@ fn parse_new_format(parts: &[&str], zone: &str) -> Option<SpawnTimer> {
     let x: f32 = parts[8].parse().ok()?;
     let y: f32 = parts[9].parse().ok()?;
     let z: f32 = parts[10].parse().ok()?;
+    let sticky = parts
+        .get(11)
+        .and_then(|s| s.trim().parse::<u8>().ok())
+        .map(|v| v != 0)
+        .unwrap_or(false);
 
     let killed_at = (kill_time_unix > 0)
         .then(|| DateTime::from_timestamp(kill_time_unix, 0))
@@ -312,6 +329,7 @@ fn parse_new_format(parts: &[&str], zone: &str) -> Option<SpawnTimer> {
         spawn_count,
         spawn_time,
         zone: zone.to_owned(),
+        sticky,
     })
 }
 
@@ -349,6 +367,7 @@ fn parse_cs_format(parts: &[&str], zone: &str) -> Option<SpawnTimer> {
         spawn_count,
         spawn_time,
         zone: zone.to_owned(),
+        sticky: false,
     })
 }
 
@@ -393,6 +412,7 @@ fn parse_old_format(parts: &[&str], zone: &str) -> Option<SpawnTimer> {
         spawn_count,
         spawn_time,
         zone: zone.to_owned(),
+        sticky: false,
     })
 }
 
@@ -551,6 +571,12 @@ impl SpawnObserver {
                             // Prefer a named/boss mob (starts uppercase or '#') as display name
                             let display_name = best_display_name(&all_names, &kill.name).to_owned();
 
+                            let existing_sticky = timers
+                                .timers
+                                .iter()
+                                .find(|t| t.spawn_loc == key)
+                                .map(|t| t.sticky)
+                                .unwrap_or(false);
                             timers.add(SpawnTimer {
                                 name: display_name,
                                 spawn_loc: key,
@@ -558,12 +584,13 @@ impl SpawnObserver {
                                 x: kill.x,
                                 y: kill.y,
                                 z: kill.z,
-                                killed_at: Some(now),
+                                killed_at: None, // mob just spawned; countdown starts on kill
                                 respawn_secs: avg,
                                 is_auto: true,
                                 spawn_count: obs.spawn_count,
                                 spawn_time: Some(now),
                                 zone: zone.to_owned(),
+                                sticky: existing_sticky,
                             });
                             log.push(format!(
                                 "[Timer] Auto-timer promoted: {} — avg {}s over {} cycles",
@@ -1339,14 +1366,14 @@ mod tests {
     fn countdown_str_shows_spawned_when_expired() {
         let mut t = SpawnTimer::new("Boss", 0.0, 0.0, 0.0, 0);
         t.killed_at = Some(Utc::now() - Duration::seconds(60));
-        assert_eq!(t.countdown_str(), "SPAWNED");
+        assert_eq!(t.countdown_str(), "UNKNOWN");
     }
 
     #[test]
-    fn countdown_str_shows_spawned_when_no_kill_time() {
+    fn countdown_str_shows_alive_when_no_kill_time() {
         let mut t = SpawnTimer::new("Boss", 0.0, 0.0, 0.0, 1800);
         t.killed_at = None;
-        assert_eq!(t.countdown_str(), "SPAWNED");
+        assert_eq!(t.countdown_str(), "ALIVE");
     }
 
     #[test]

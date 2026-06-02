@@ -6,6 +6,7 @@ use crate::data::AppData;
 pub enum TimerAction {
     ClearAll,
     CenterMap { x: f32, y: f32 },
+    ToggleSticky(usize),
 }
 
 const HEADERS: &[&str] = &[
@@ -150,7 +151,9 @@ pub fn show(
             for (i, t) in &timers_with_idx {
                 let i = *i;
                 let countdown = t.countdown_str();
-                let color = if t.is_spawned() {
+                let color = if t.is_alive() {
+                    egui::Color32::from_rgb(80, 200, 80)
+                } else if t.is_spawned() {
                     egui::Color32::from_rgb(255, 80, 80)
                 } else if t.secs_remaining() < 60 {
                     egui::Color32::from_rgb(255, 210, 0)
@@ -158,10 +161,11 @@ pub fn show(
                     ui.visuals().text_color()
                 };
 
-                let name_cell = if t.is_auto {
-                    format!("{} [A]", t.name)
-                } else {
-                    t.name.clone()
+                let name_cell = match (t.is_auto, t.sticky) {
+                    (true, true) => format!("{} [A][S]", t.name),
+                    (true, false) => format!("{} [A]", t.name),
+                    (false, true) => format!("{} [S]", t.name),
+                    (false, false) => t.name.clone(),
                 };
 
                 let cells: [String; 10] = [
@@ -261,6 +265,15 @@ pub fn show(
                 }
 
                 row_resp.context_menu(|ui| {
+                    let sticky_label = if t.sticky {
+                        "Remove Sticky"
+                    } else {
+                        "Make Sticky"
+                    };
+                    if ui.button(sticky_label).clicked() {
+                        timer_action = Some(TimerAction::ToggleSticky(i));
+                        ui.close();
+                    }
                     if ui.button("Remove timer").clicked() {
                         remove_idx = Some(i);
                         ui.close();
