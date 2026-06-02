@@ -169,11 +169,6 @@ impl TimerStore {
         self.timers.clear();
     }
 
-    /// Remove all non-sticky timers (called on zone change).
-    pub fn clear_non_sticky(&mut self) {
-        self.timers.retain(|t| t.sticky);
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = &SpawnTimer> {
         self.timers.iter()
     }
