@@ -1038,12 +1038,16 @@ fn run_wizard(
         std::thread::sleep(Duration::from_millis(200));
         match take_command!() {
             WizardCommand::ActionDone => {
-                if player_spawn_id == 0 {
-                    log!("Owner — cannot search: player SpawnID unknown");
-                } else if spawn_header_addr == 0 {
+                if spawn_header_addr == 0 {
                     log!("Owner — cannot search: SpawnHeaderAddr not found by scan");
                 } else {
-                    log!("Owner search — player SpawnID = {}", player_spawn_id);
+                    if player_spawn_id != 0 {
+                        log!("Owner search — player SpawnID = {}", player_spawn_id);
+                    } else {
+                        log!(
+                            "Owner search — player SpawnID unknown, proceeding by spawn-list statistics"
+                        );
+                    }
                     let pself_buf = get_pself(&mem, char_info_addr)
                         .and_then(|ps| mem.read_bytes(ps, STRUCT_SIZE).ok());
                     match find_owner_offset(
